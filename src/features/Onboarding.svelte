@@ -3,7 +3,6 @@
     ArrowRight,
     Check,
     ShieldCheck,
-    FolderSearch,
     Activity,
     Monitor,
     Leaf,
@@ -50,7 +49,7 @@
   <div class="onboard-chrome" data-tauri-drag-region></div>
   <div class="onboard-card">
     <div class="wordmark">
-      <span class="brand-icon"><FolderSearch size={23} /></span>coqui<span
+      <img class="brand-icon" src="/brand/coqui-file-emblem-v1.png" alt="" />coqui<span
         class="wordmark-detail">PC Cleaner</span
       >
     </div>

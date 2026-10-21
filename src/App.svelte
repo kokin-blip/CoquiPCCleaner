@@ -18,7 +18,6 @@
     X,
     LoaderCircle,
     Check,
-    FolderSearch,
   } from '@lucide/svelte';
   import { app, type createAppStore, type Page } from './state';
   import { date } from './format';
@@ -104,7 +103,7 @@
   }}
 />
 {#if $controller.loading}<div class="app-loading">
-    <FolderSearch size={35} />
+    <img class="brand-icon" src="/brand/coqui-file-emblem-v1.png" alt="" />
     <h1>Opening Coqui</h1>
     <p>Loading local preferences and diagnostic history…</p>
     <LoaderCircle class="spin" size={20} />
@@ -129,7 +128,7 @@
     <aside class="sidebar">
       <div class="sidebar-titlebar" data-tauri-drag-region></div>
       <div class="sidebar-brand">
-        <span class="brand-icon"><FolderSearch size={23} /></span>
+        <img class="brand-icon" src="/brand/coqui-file-emblem-v1.png" alt="" />
         <div><strong>coqui</strong><span>PC Cleaner</span></div>
       </div>
       <nav aria-label="Main navigation">

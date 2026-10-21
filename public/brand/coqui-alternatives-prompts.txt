@@ -1,0 +1,28 @@
+Coqui logo alternatives — generated 2026-10-21
+Mode: built-in image_gen, two independent generations, transparent_background=true
+No input/reference images; both designs created from scratch.
+Standalone brand assets; existing logos preserved.
+
+Concept A: coqui-file-emblem-v1.png
+
+Use case: logo-brand
+Asset type: completely new standalone app logo concept for CoquiPCCleaner, a polished macOS file inspection utility.
+Primary request: Design FROM SCRATCH an original, extremely concise geometric logo combining a coqui frog, a folded-corner file/document, and a magnifying glass. Do not reuse any previously generated logo or its character proportions.
+Concept: a clever compact file-frog emblem. The main shape is an upright rounded document with a distinct folded upper-right corner. Two small rounded frog eye lobes emerge from its top edge, and a simple curved smile is cut into the upper document area, making the file itself read as a frog. A chunky circular magnifying glass overlaps the lower-right corner as a purposeful integrated part of the silhouette. The round lens and short diagonal handle must unmistakably communicate search. The file and frog should be one unified geometric symbol, not a big cartoon frog holding props. No full body, no arms, no splayed legs or toes. Two short file lines in the lower document are enough.
+Style: premium flat vector-like brand mark with beautiful rounded geometry, carefully balanced visual weight, smooth clean curves, strong negative spaces and legibility at 32px. Quiet, smart, approachable native macOS utility branding. Eyes are small simple dark circles, not large glossy mascot eyes. The fold must remain clearly visible and the magnifier must not hide the face.
+Colors: mint #68d9c0 as dominant fill, dark forest green #10352c for eyes and defining details, pale mint #e3f2ed sparingly for folded corner or lens. Matches a restrained warm charcoal #211f23 macOS UI. Only use those mint/green colors in the mark.
+Composition: one single centered logo, square canvas, 18 percent generous even outer padding, no tile or border. Strong compact vertical silhouette.
+Background: actual fully transparent alpha, not a painted checkerboard, no backdrop.
+Constraints: deliver one finished logo only. No text, words, letterforms, numbers, watermark, mockup, multiple options, gradients, bevels, 3D, gloss, shadows, decorative sparkles, scenery or photorealism. This is a newly designed symbol rather than an animal illustration.
+
+Concept B: coqui-inspector-profile-v1.png
+
+Use case: logo-brand
+Asset type: completely new standalone frog mascot logo for CoquiPCCleaner, a native macOS file inspection utility.
+Primary request: Design FROM SCRATCH a distinctive side-profile coqui tree frog inspecting a file with a magnifying glass. Create an original character and an asymmetrical, elegant composition rather than a front-facing seated frog.
+Concept: a compact small tree frog in right-facing three-quarter side profile, crouched with one large rounded folded hind leg and a gently arched back. A small pale-mint folded-corner document stands upright in front of it. One simplified rounded forefoot holds a chunky magnifying glass between the frog's eye and the document, clearly suggesting inspection. The other forefoot steadies the document. The frog's head has a short soft snout, one primary small dark almond-shaped eye, a slight contented smile, and a subtle far-side eye bump. Keep the head smaller relative to the body than a big-eyed cartoon mascot. Two or three rounded toe pads give a quiet tree-frog cue. Integrate frog, file and magnifier tightly into one flowing compact silhouette.
+Art direction: refined friendly geometric illustration as a premium software logo, inspired by beautifully simplified mid-century animal marks and restrained rounded macOS iconography. Soft sculptural shapes rendered in completely FLAT solid colors. Broad shapes and very few interior details. Natural graceful frog anatomy simplified boldly. A calm curious personality.
+Color palette: mint #68d9c0 body; deep forest green #10352c defining shapes and accessory outlines; pale mint #e3f2ed document and lens. These colors match an existing charcoal-and-mint macOS UI. Make the document fold and circular magnifier recognizable. No thick black cartoon outline and no shiny eyes.
+Composition: one finished centered logo on a square transparent canvas with about 15 percent clear outer margin. The entire design fits a compact gently diagonal silhouette, frog to the left and inspected file to the right, with feet and handle fully inside the canvas. Keep all three elements readable at small app-icon sizes.
+Background: real fully transparent alpha; no opaque backing tile.
+Constraints: no text, wordmarks, letters, numbers, watermark, background scene, lilypads, cleaning brushes, hats, detective costume, computers, shields, stars, duplicate logos, presentation board, 3D, gradients, texture, shadows, photorealism or familiar licensed frog characters. Do not produce a front-facing symmetrical frog holding a file over its belly. This is an entirely new side-profile brand concept.

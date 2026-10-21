@@ -174,6 +174,8 @@ Mode is Operate. The visual authority remains Figma file Gz7WEiN8Y3Vvivvae0ZPlP;
 - Compact, resizable desktop composition with visible keyboard focus.
 - Text-first evidence, explicit capability states and accessible chart alternatives.
 
+The approved brand mark is `public/brand/coqui-file-emblem-v1.png`: the mint frog-shaped document and magnifying glass. Use its transparent artwork without a tinted container in the sidebar, onboarding and opening state. The same source supplies the browser favicon and generated macOS app icons in `src-tauri/icons/`. Preserve the source artwork and existing wordmark typography.
+
 The implementation reference is `src/tokens.css`, `src/styles.css`, the reusable Svelte components and `src-tauri/tauri.conf.json`. Captured native evidence lives in `.impeccable/review/native-dashboard-dark.png`, `native-dashboard-minimum.png`, `native-storage-minimum.png` and `native-settings-light.png`; the labeled failure fixture is `monitoring-failure.png`. These files record a review point, not permanent machine measurements or blanket runtime acceptance.
 
 Kit reuse follows the established mapping: Music for shell/navigation, shared foundations for controls/settings, Numbers for tables/graphs, Notes for evidence/reports, Mail for finding reading, App Store for application inventory, and iMovie for scan stages/history. Messages, Reminders and Calendar inform later troubleshooting, action queues and maintenance. Original kit content stays intact. Existing ledgers are `docs/figma-foundations.json`, `docs/figma-components.json`, `docs/figma-icons.json`, `docs/figma-screens.json`, `docs/figma-prototype.json` and `docs/figma-handoff.json`.

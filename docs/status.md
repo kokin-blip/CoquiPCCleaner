@@ -66,3 +66,10 @@ The ad hoc signed 0.2.0 release app/archive were rebuilt. Packaged-app validatio
 Figma has a linked structural selection → approval → verification/recovery handoff in the existing Optimization Center page; see `figma-cleanup.json`. Phase 1's ZIP is retained locally under `release/phase-1/`. Nothing has been published or uploaded.
 
 Final review found and resolved a project-ancestry eligibility gap. Checks now include project markers through canonical home, with additional candidate/preview/execution fixtures. The reviewer scored that fix resolved and returned **ship**; the documenter preserved the existing visual system. The final packaged app was relaunched after the fix. This Mac's home-level `package.json` means current cache descendants are conservatively omitted; project-aware support for that case remains a subsequent milestone. No manifest was moved or bypassed. The final native fixture integration test passed again, for **20 frontend + 26 standard Rust + 1 explicit native integration test**.
+
+
+## Approved logo integration — 2026-10-21
+
+Applied the user-selected `public/brand/coqui-file-emblem-v1.png` to the sidebar, onboarding, opening state and browser favicon. Generated the macOS ICNS and PNG sizes from that source with the pinned Tauri CLI (`npm run tauri -- icon public/brand/coqui-file-emblem-v1.png --output /private/tmp/coqui-logo-icons`), then copied the ICNS and macOS PNG sizes to `src-tauri/icons/`. The transparent artwork uses the existing wordmark without a colored container. Other logo concepts remain untouched.
+
+`./scripts/check.sh` passes: zero Svelte errors/warnings, 20 frontend tests, 26 standard Rust tests, formatting and locked native check. Rebuilt the ad hoc signed release app and ZIP, verified the archive/checksum and packaged ICNS, relaunched the native app and visually confirmed the new sidebar mark. No scanner or cleanup behavior changed.
