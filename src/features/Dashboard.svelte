@@ -5,7 +5,6 @@
     HardDrive,
     MemoryStick,
     Cpu,
-    ShieldCheck,
     Search,
     Info,
     ChevronRight,
@@ -72,9 +71,7 @@
     </div>
   </div>
   <div class="device-scan">
-    <ShieldCheck size={22} /><strong>Read-only analysis</strong><span
-      class="muted small">Your files and settings stay yours.</span
-    ><span class="muted small"
+    <span class="muted small"
       >{machine
         ? `Last scan ${date($controller.session?.startedAt ?? null)}`
         : 'No scan recorded yet'}</span

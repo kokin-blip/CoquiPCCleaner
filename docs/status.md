@@ -46,3 +46,7 @@ Visual checks captured the packaged app in dark and light appearance, a roughly 
 - Figma frames are editable structural handoff views with illustrative labels, not pixel-exact captures of every implemented screen or exhaustive variants of every state.
 
 The principal Phase 1 workflow is implemented and locally validated. The items above remain explicit acceptance work before claiming validation across the entire supported hardware/OS range. Later phases retain their original approval, verification and recovery requirements in `phases/`.
+
+## UI refinement — repeated advisories
+
+Removed the persistent shield/read-only notices from the sidebar, content footer and dashboard device summary at the user's request. Contextual onboarding and permission guidance stays in place. Removed unused styles. `scripts/check.sh` passed again (15 frontend tests, 12 Rust tests, zero Svelte errors/warnings); the release app/archive were rebuilt, signature verified, and the relaunched native dashboard visually confirmed without the repeated notices. Capture: `.impeccable/review/native-dashboard-clean.png`.

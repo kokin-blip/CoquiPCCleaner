@@ -145,9 +145,6 @@
           >{/each}
       </nav>
       <div class="sidebar-bottom">
-        <div class="read-only">
-          <ShieldCheck size={16} /><span>Read-only by design</span>
-        </div>
         <div class="sidebar-device">
           <Cpu size={19} />
           <div>
@@ -282,11 +279,6 @@
           />{:else if $controller.page === 'History'}<History
             {controller}
           />{:else}<Settings {controller} />{/if}
-        <footer class="content-footer">
-          <ShieldCheck size={12} /> Local analysis. No files or system settings modified.<span
-            >CoquiPCCleaner 0.1.0</span
-          >
-        </footer>
       </main>
     </div>
   </div>

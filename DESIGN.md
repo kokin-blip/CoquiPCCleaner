@@ -213,7 +213,7 @@ Warning and warning wash are semantic attention colors. Danger is reserved for e
 - **Title:** section heading; use `title`. At the narrower desktop breakpoint, section headings reduce to (15px).
 - **Subtitle:** evidence and card subheadings; use `subtitle`.
 - **Body:** default reading and controls; use `body`.
-- **Label / Caption:** compact labels, timestamps and capability details; use `label` and `caption`. Tables and footer metadata also use observed (10px) text; chart axes use (9px). Do not promote these dense metadata sizes to body copy.
+- **Label / Caption:** compact labels, timestamps and capability details; use `label` and `caption`. Dense metadata also uses observed (10px) text; chart axes use (9px). Do not promote these dense metadata sizes to body copy.
 
 Metric summaries use (25px), reducing to (22px) at the minimum-width breakpoint. Evidence and explanation blocks commonly cap text at (80–95ch), while modal paragraphs cap at (70ch).
 
@@ -295,3 +295,5 @@ Storage tiles reflect inspected allocated bytes, not promised recoverable storag
 - **Don't** invent health scores, fake progress percentages or reassuring values for unavailable collections.
 - **Don't** use color as the only indicator of capability, scan state or selection.
 - **Don't** present future cleanup, security or firmware actions as working Phase 1 controls.
+
+Keep general read-only/privacy explanations in onboarding and Settings. Avoid repeated shield reassurance badges in the workspace, sidebar, footer or device summary.

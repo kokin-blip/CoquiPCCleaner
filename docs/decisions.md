@@ -12,3 +12,4 @@
 - Command Line Tools are selected per build process, avoiding a global Xcode selection change. Apple Silicon release builds succeeded without full Xcode.
 - A failed or unexpectedly ended monitoring stream clears current readings and retains a stopped/retry state; a cached measurement never establishes liveness.
 - Figma deliverables are editable structural handoff views and linked prototypes. Native screenshots and real behavior are authoritative for the implemented result; exhaustive visual/state parity remains documented acceptance work.
+- User requested removing repeated shield advisories from the interface. Sidebar/footer reassurance and the dashboard read-only blurb are removed; contextual permission information remains in onboarding and Settings.
