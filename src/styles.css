@@ -1715,3 +1715,48 @@ tbody tr:last-child td {
     scroll-behavior: auto !important;
   }
 }
+
+.cleanup-intro {
+  max-width: 88ch;
+  margin-bottom: 24px;
+}
+.cleanup-intro p {
+  margin-top: 8px;
+}
+.cleanup-path {
+  min-width: 260px;
+  max-width: 600px;
+  overflow-wrap: anywhere;
+}
+.cleanup-qualification {
+  padding: 12px 18px;
+}
+.cleanup-review-list {
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 16px 0;
+}
+.cleanup-review-item {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.cleanup-review-item strong,
+.cleanup-review-item > span {
+  display: block;
+}
+.cleanup-review-item p {
+  margin-top: 8px;
+}
+.cleanup-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+}
+.cleanup-consent input {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.cleanup-result .inline-wrap {
+  margin-top: 16px;
+}

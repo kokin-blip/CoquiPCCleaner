@@ -1,0 +1,9 @@
+{
+  "fileKey": "Gz7WEiN8Y3Vvivvae0ZPlP",
+  "pageId": "155:87",
+  "originalGuidePreserved": "161:327",
+  "frames": { "selection": "165:64", "approval": "165:168", "verification": "165:270" },
+  "buttons": { "review": "165:166", "approve": "165:266", "keepFiles": "165:268", "return": "165:368" },
+  "flow": "selection → approval → verification; Keep files returns to selection",
+  "qualification": "Editable structural handoff; sample paths/sizes/results are explicitly illustrative. Native packaged app is the runtime reference."
+}

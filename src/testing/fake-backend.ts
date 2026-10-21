@@ -45,6 +45,22 @@ export const session: DiagnosticSession = {
 };
 export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
   return {
+    cleanupFiles: vi.fn(async () => ({
+      files: [],
+      nextOffset: null,
+      unavailableCount: 0,
+    })),
+    previewCleanup: vi.fn(async () => {
+      throw new Error('No fixture plan configured');
+    }),
+    executeCleanup: vi.fn(async () => {
+      throw new Error('No fixture execution configured');
+    }),
+    declineCleanup: vi.fn(async () => {
+      throw new Error('No fixture plan configured');
+    }),
+    cleanupHistory: vi.fn(async () => []),
+    cancelCleanup: vi.fn(async () => {}),
     initialize: vi.fn(async () => structuredClone(settings)),
     save: vi.fn(async () => {}),
     history: vi.fn(async () => []),

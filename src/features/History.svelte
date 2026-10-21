@@ -36,11 +36,16 @@
 <div class="callout">
   <History size={20} />
   <div>
-    <strong>No system changes to recover.</strong>
+    <strong>Cleanup actions have their own record.</strong>
     <p>
-      This read-only release records analysis runs. Recovery controls will
-      appear only for future actions with a supported recovery procedure.
+      Analysis history stays here. Inspect approved changes, verification
+      results and available Trash locations in Optimization.
     </p>
+    <button
+      class="text-button"
+      onclick={() => controller.navigate('Optimization')}
+      >Open Optimization<ChevronRight size={14} /></button
+    >
   </div>
 </div>
 <section class="panel history-panel">

@@ -10,6 +10,8 @@
     'temporarilyUnavailable',
     'failed',
     'interrupted',
+    'unverified',
+    'skipped',
     'attention',
   ].includes(value)}
   class:positive={value === 'supported' || value === 'complete'}

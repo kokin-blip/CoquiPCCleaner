@@ -18,10 +18,10 @@ Understand the machine, diagnose observed problems, explain options, obtain cons
 Workload-aware analysis and safe developer-storage maintenance grounded in real measurements rather than manufactured health scores.
 
 ## Operating Context
-Phase 1 targets Apple Silicon macOS 14+. Standard storage analysis covers the accessible home folder; optional deep analysis expands to accessible internal locations. Monitoring runs only while the app is open. Local direct-download builds require no Developer ID account or notarization.
+Current development is Phase 2, milestone 2.1: cleanup approval and verification on Apple Silicon macOS 14+. Standard storage analysis covers the accessible home folder; optional deep analysis expands to accessible internal locations. Monitoring runs only while the app is open. Local direct-download builds require no Developer ID account or notarization.
 
 ## Capabilities and Constraints
-Phase 1 is read-only: inventory, live CPU/memory monitoring, storage exploration, cache candidates, startup detection, available disk health and platform/security information. Protected and unavailable data must be disclosed. Later actions need separate review and approval. No cloud AI, telemetry, login, or synchronization in Phase 1.
+Phase 1 is read-only: inventory, live CPU/memory monitoring, storage exploration, cache candidates, startup detection, available disk health and platform/security information. Protected and unavailable data must be disclosed. Phase 2.1 adds separately approved native Trash moves for individual eligible user-cache files, persistent action records, verification and manual recovery guidance. Other Phase 2 features remain in the roadmap. No cloud AI, telemetry, login, or synchronization in Phase 1.
 
 ## Brand Commitments
 Native macOS composition using the supplied Apple Music macOS Figma kit and its other application families, adapted to Coqui semantics. Preserve original kit content and add Coqui pages.

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import {
     Activity,
+    BrushCleaning,
     LayoutDashboard,
     Search,
     ScanLine,
@@ -28,6 +29,7 @@
   import Hardware from './features/Hardware.svelte';
   import Performance from './features/Performance.svelte';
   import History from './features/History.svelte';
+  import Optimization from './features/Optimization.svelte';
   import Settings from './features/Settings.svelte';
   import Dialog from './components/Dialog.svelte';
   import Status from './components/Status.svelte';
@@ -41,6 +43,7 @@
     { name: 'System Analysis', icon: ScanLine, group: 'Analysis' },
     { name: 'Hardware', icon: Cpu, group: 'Analysis' },
     { name: 'Storage', icon: HardDrive, group: 'Analysis' },
+    { name: 'Optimization', icon: BrushCleaning, group: 'Analysis' },
     { name: 'Performance', icon: Activity, group: 'Analysis' },
     { name: 'Firmware & Security', icon: ShieldCheck, group: 'Analysis' },
     { name: 'History', icon: HistoryIcon, group: 'Application' },
@@ -209,7 +212,7 @@
         <div class="toolbar-divider"></div>
         <button
           class="toolbar-scan"
-          disabled={$controller.scanning}
+          disabled={$controller.scanning || $controller.cleanupRunning}
           onclick={scan}
           ><ScanLine size={15} />{$controller.scanning
             ? 'Analyzing…'
@@ -259,6 +262,16 @@
             onclick={() => controller.dismiss()}><X size={16} /></button
           >
         </div>{/if}
+      {#if $controller.cleanupRunning}<div class="scan-banner" role="status">
+          <BrushCleaning size={18} /><span>Moving approved files to Trash…</span
+          ><button onclick={() => controller.navigate('Optimization')}
+            >View progress</button
+          ><button
+            onclick={() =>
+              controller.run(() => controller.service.cancelCleanup())}
+            >Stop remaining moves</button
+          >
+        </div>{/if}
       <main class="content" id="main-content" tabindex="-1">
         {#if $controller.page === 'Dashboard'}<Dashboard
             {controller}
@@ -267,6 +280,9 @@
             {controller}
             onScan={scan}
           />{:else if $controller.page === 'Storage'}<Storage
+            {controller}
+            onScan={scan}
+          />{:else if $controller.page === 'Optimization'}<Optimization
             {controller}
             onScan={scan}
           />{:else if $controller.page === 'Hardware'}<Hardware

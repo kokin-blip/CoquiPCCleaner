@@ -8,5 +8,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     LiveMetrics::export_all_to(&path)?;
     StorageQuery::export_all_to(&path)?;
     FileEntry::export_all_to(&path)?;
+    CleanupRequest::export_all_to(&path)?;
+    CleanupApproval::export_all_to(&path)?;
+    CleanupPlan::export_all_to(&path)?;
+    CleanupFilePage::export_all_to(&path)?;
     Ok(())
 }

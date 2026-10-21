@@ -3,12 +3,15 @@ import { backend as nativeBackend, type Backend } from './backend';
 import type { AppSettings } from './bindings/AppSettings';
 import type { DiagnosticSession } from './bindings/DiagnosticSession';
 import type { LiveMetrics } from './bindings/LiveMetrics';
+import type { CleanupPlan } from './bindings/CleanupPlan';
+import type { CleanupApproval } from './bindings/CleanupApproval';
 
 export type Page =
   | 'Dashboard'
   | 'System Analysis'
   | 'Hardware'
   | 'Storage'
+  | 'Optimization'
   | 'Performance'
   | 'Firmware & Security'
   | 'History'
@@ -22,6 +25,8 @@ export interface AppState {
   monitoringStatus: 'off' | 'starting' | 'live' | 'failed';
   monitoringError: string | null;
   scanning: boolean;
+  cleanupRunning: boolean;
+  cleanupPlan: CleanupPlan | null;
   cancelling: boolean;
   error: string | null;
   notice: string | null;
@@ -37,6 +42,8 @@ export function createAppStore(service: Backend = nativeBackend) {
     monitoringStatus: 'off',
     monitoringError: null,
     scanning: false,
+    cleanupRunning: false,
+    cleanupPlan: null,
     cancelling: false,
     error: null,
     notice: null,
@@ -152,6 +159,10 @@ export function createAppStore(service: Backend = nativeBackend) {
   async function scan() {
     const s = get(store);
     if (!s.settings || s.scanning) return;
+    if (s.cleanupRunning) {
+      fail('Wait for cleanup to finish before scanning.');
+      return;
+    }
     store.update((s) => ({
       ...s,
       scanning: true,
@@ -190,10 +201,30 @@ export function createAppStore(service: Backend = nativeBackend) {
       ...s,
       session: null,
       history: [],
+      cleanupPlan: null,
       samples: [],
       notice:
-        'Local diagnostic history and file indexes removed. Your files and preferences were preserved.',
+        'Local diagnostic history, file indexes and cleanup action records removed. Your files and preferences were preserved.',
     }));
+  }
+  async function executeCleanup(approval: CleanupApproval) {
+    if (get(store).cleanupRunning || get(store).scanning)
+      throw new Error('Wait for the active operation to finish.');
+    store.update((s) => ({ ...s, cleanupRunning: true, error: null }));
+    try {
+      const plan = await service.executeCleanup(approval, (cleanupPlan) =>
+        store.update((s) => ({ ...s, cleanupPlan })),
+      );
+      store.update((s) => ({ ...s, cleanupPlan: plan }));
+      return plan;
+    } catch (e) {
+      // The command may have moved a file before a transport failure. Clear
+      // any stale approval and direct the user to the persisted action record.
+      store.update((s) => ({ ...s, cleanupPlan: null }));
+      throw e;
+    } finally {
+      store.update((s) => ({ ...s, cleanupRunning: false }));
+    }
   }
   async function run(action: () => Promise<unknown>) {
     try {
@@ -205,6 +236,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   return {
     ...store,
     initialize,
+    executeCleanup,
     save,
     scan,
     cancel,
@@ -225,6 +257,7 @@ export function createAppStore(service: Backend = nativeBackend) {
         monitoringStatus: 'off',
         monitoringError: null,
       }));
+      await service.cancelCleanup();
       await service.stopMonitoring();
       if (monitoring) await monitoring;
     },

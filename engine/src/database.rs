@@ -9,7 +9,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
     let version: u32 = c.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
-        version <= 1,
+        version <= 2,
         "This diagnostic database was created by a newer version of CoquiPCCleaner."
     );
     if version == 0 {
@@ -23,6 +23,11 @@ pub fn open(path: &Path) -> Result<Connection> {
         CREATE INDEX IF NOT EXISTS file_parent ON files(session_id,parent);
         CREATE INDEX IF NOT EXISTS file_size ON files(session_id,allocated DESC);
         PRAGMA user_version=1; COMMIT;")?;
+    }
+    if version < 2 {
+        c.execute_batch("BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS cleanup_plans(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL, json TEXT NOT NULL);
+        PRAGMA user_version=2; COMMIT;")?;
     }
     Ok(c)
 }
@@ -150,19 +155,24 @@ pub fn recover_interrupted(c: &Connection) -> Result<()> {
         s.finished_at = Some(now());
         save_session(c, &s)?;
     }
+    crate::cleanup::recover_interrupted(c)?;
     Ok(())
 }
 pub fn retain(c: &Connection, days: u32) -> Result<()> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(days.into())).to_rfc3339();
     c.execute(
         "DELETE FROM sessions WHERE started_at < ?1 AND status != 'running'",
-        [cutoff],
+        [&cutoff],
+    )?;
+    c.execute(
+        "DELETE FROM cleanup_plans WHERE created_at < ?1 AND status != 'running'",
+        [&cutoff],
     )?;
     // Keep complete indexes per scope, plus inspectable partial scans until history expiry.
     c.execute("DELETE FROM files WHERE session_id IN (SELECT old.id FROM sessions old WHERE old.status='complete' AND EXISTS(SELECT 1 FROM sessions newer WHERE newer.status='complete' AND newer.scope=old.scope AND newer.started_at>old.started_at))",[])?;
     Ok(())
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM files; DELETE FROM sessions; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }

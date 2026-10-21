@@ -13,3 +13,6 @@
 - A failed or unexpectedly ended monitoring stream clears current readings and retains a stopped/retry state; a cached measurement never establishes liveness.
 - Figma deliverables are editable structural handoff views and linked prototypes. Native screenshots and real behavior are authoritative for the implemented result; exhaustive visual/state parity remains documented acceptance work.
 - User requested removing repeated shield advisories from the interface. Sidebar/footer reassurance and the dashboard read-only blurb are removed; contextual permission information remains in onboarding and Settings.
+
+- User selected cleanup approval and verification as the first Phase 2 milestone. Version 0.2.0 is this bounded milestone, not the whole optimization roadmap. Native Trash moves are limited to explicitly selected eligible individual user-cache files. Scanners remain read-only; execution has its own approval, journal and verification boundary.
+- Recovery in milestone 2.1 means exact available Trash locations and manual Finder guidance. No blanket rollback, capacity-reclaimed or performance-improved claim is made.

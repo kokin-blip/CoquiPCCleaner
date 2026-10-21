@@ -271,3 +271,62 @@ pub struct StorageQuery {
     pub limit: u32,
     pub files_only: bool,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupFile {
+    pub path: String,
+    pub allocated_bytes: f64,
+    pub logical_bytes: f64,
+    pub modified_at: String,
+    pub origin: String,
+    pub consequences: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupItem {
+    pub file: CleanupFile,
+    pub status: String,
+    pub detail: String,
+    pub trash_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupPlan {
+    pub id: String,
+    pub session_id: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub approved_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub items: Vec<CleanupItem>,
+    pub allocated_bytes: f64,
+    pub verification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupRequest {
+    pub session_id: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupApproval {
+    pub plan_id: String,
+    pub reviewed_at: String,
+    pub applications_closed: bool,
+    pub consequences_accepted: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupFilePage {
+    pub files: Vec<CleanupFile>,
+    pub next_offset: Option<u32>,
+    pub unavailable_count: u32,
+}

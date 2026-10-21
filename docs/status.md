@@ -1,4 +1,8 @@
-# Phase 1 delivery and validation
+# Delivery and validation
+
+Current build: **0.2.0, Phase 2 milestone 2.1 — cleanup approval and verification.** See [Phase 2 progress](phases/phase-2-progress.md) for the supported action, tests and remaining roadmap. The Phase 1 record below is retained as implementation history.
+
+## Phase 1 baseline
 
 Updated 2026-10-21. The working implementation uses **Tauri 2, Svelte 5, Vite, TypeScript, Rust and SQLite**, following the user's stack change. Flutter and Flutter Rust Bridge are superseded. Full Xcode is not a blocker for this implementation: the release built with Apple's Command Line Tools selected per process.
 
@@ -50,3 +54,15 @@ The principal Phase 1 workflow is implemented and locally validated. The items a
 ## UI refinement — repeated advisories
 
 Removed the persistent shield/read-only notices from the sidebar, content footer and dashboard device summary at the user's request. Contextual onboarding and permission guidance stays in place. Removed unused styles. `scripts/check.sh` passed again (15 frontend tests, 12 Rust tests, zero Svelte errors/warnings); the release app/archive were rebuilt, signature verified, and the relaunched native dashboard visually confirmed without the repeated notices. Capture: `.impeccable/review/native-dashboard-clean.png`.
+
+## Phase 2.1 — cleanup approval and verification
+
+User selected this milestone on 2026-10-21. Version 0.2.0 adds eligible individual user-cache files, exact-path review, ten-minute approvals, native macOS Trash, per-file verification, cancellation and retained action history. Scans remain read-only. The complete Phase 2 vision remains in `phases/phase-2.md`; current scope and exclusions are detailed in `phases/phase-2-progress.md`.
+
+`./scripts/check.sh` passes: zero Svelte errors/warnings, 20 frontend tests, 26 Rust tests, formatting and locked native Tauri check. The explicit native cleanup integration test also passes: newly created disposable fixtures were reviewed, approved, moved by FileManager, verified, journaled and restored to their fixture directory. No existing user files were used for mutation testing. The earlier lockfile mismatch noted during concurrent logo work is resolved by the Phase 2 dependency updates.
+
+The ad hoc signed 0.2.0 release app/archive were rebuilt. Packaged-app validation preserved old settings/history through schema 2 migration, scanned named disposable cache fixtures through real IPC, listed eligible files, displayed a disabled-until-acknowledged exact-path approval dialog, and saved Keep files as a declined action record. Visual captures cover cache files, approval, history and minimum window size. Native GUI validation declined the reviews; approved native execution was exercised by the separate Rust integration test. Full-device, macOS 14, VoiceOver and other-Mac Gatekeeper checks remain outstanding as above.
+
+Figma has a linked structural selection → approval → verification/recovery handoff in the existing Optimization Center page; see `figma-cleanup.json`. Phase 1's ZIP is retained locally under `release/phase-1/`. Nothing has been published or uploaded.
+
+Final review found and resolved a project-ancestry eligibility gap. Checks now include project markers through canonical home, with additional candidate/preview/execution fixtures. The reviewer scored that fix resolved and returned **ship**; the documenter preserved the existing visual system. The final packaged app was relaunched after the fix. This Mac's home-level `package.json` means current cache descendants are conservatively omitted; project-aware support for that case remains a subsequent milestone. No manifest was moved or bypassed. The final native fixture integration test passed again, for **20 frontend + 26 standard Rust + 1 explicit native integration test**.

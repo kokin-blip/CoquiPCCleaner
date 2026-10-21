@@ -1,6 +1,6 @@
 # CoquiPCCleaner
 
-A read-only macOS system and storage analyzer. **Tauri 2 + Svelte 5 + Vite + Rust + SQLite.** Targets Apple Silicon and macOS 14+.
+A macOS system analyzer with separately approved cache-file cleanup. **Tauri 2 + Svelte 5 + Vite + Rust + SQLite.** Targets Apple Silicon and macOS 14+.
 
 ## Run
 
@@ -36,10 +36,11 @@ npm run types
 - Standard home-folder scans, confirmed deep scans, explicit additional folders and exclusions.
 - Metadata-only storage traversal, category treemap, large files, folder drill-down, cache candidates and Finder reveal.
 - Capability disclosures, scan/cancel/history, permission guidance and user-chosen report export.
+- Exact-path cache-file review, expiring approval, native Trash moves, cancellation, verification and action history.
 - Rust-owned SQLite history and indexes with configurable retention and reviewed diagnostic-data removal.
 
-The scanner does **not** clean files, change startup/power/security/firmware settings, or estimate unavailable sensors. Modern login items can be incompletely observable. SMART/firmware fields depend on the model. Used memory alone is not a bottleneck, allocated file size is not guaranteed recoverable space, and APFS capacity must not be summed across shared volumes.
+The scanner remains read-only. Optimization can move individually approved eligible files in your Library/Caches to macOS Trash. It does not permanently delete files, empty Trash, change startup/power/security/firmware settings, or estimate unavailable sensors. Modern login items can be incompletely observable. SMART/firmware fields depend on the model. Used memory alone is not a bottleneck, allocated file size is not guaranteed recoverable space, and APFS capacity must not be summed across shared volumes.
 
 ## Project context
 
-Read PRODUCT.md, DESIGN.md and AGENTS.md. `docs/original-brief.md` preserves the request verbatim. `docs/roadmap.md` and `docs/phases/` retain later optimization, firmware, Windows and Intel work. `docs/status.md` records actual validation and remaining limits; `docs/figma.md` links the prototype and kit mapping; `docs/figma-*.json` records created design objects.
+Read PRODUCT.md, DESIGN.md and AGENTS.md. `docs/original-brief.md` preserves the request verbatim. `docs/roadmap.md` and `docs/phases/` retain later optimization, firmware, Windows and Intel work. `docs/phases/phase-2-progress.md` records the completed 2.1 milestone and remaining Phase 2 work. `docs/status.md` records actual validation and remaining limits; `docs/figma.md` links the prototype and kit mapping; `docs/figma-*.json` records created design objects.

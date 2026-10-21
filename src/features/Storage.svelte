@@ -215,8 +215,8 @@
       <div>
         <strong>Candidates for review, not confirmed junk.</strong>
         <p>
-          Phase 1 inspects known cache locations. Nothing is selected for
-          deletion. Regenerable data may still be useful to you.
+          Known cache locations can contain useful data. Review individual
+          eligible files in Optimization before proposing any changes.
         </p>
       </div>
     </div>
@@ -227,6 +227,9 @@
         </div>
         <p>{item.reason}</p>
         <p class="muted">{item.consequences}</p>
+        <button onclick={() => controller.navigate('Optimization')}
+          >Review individual cache files<ArrowRight size={14} /></button
+        >
         <div class="inline-between">
           <span class="subtle-tag">{item.safety}</span><button
             onclick={() =>

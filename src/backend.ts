@@ -7,8 +7,21 @@ import type { LiveMetrics } from './bindings/LiveMetrics';
 import type { ScanEvent } from './bindings/ScanEvent';
 import type { ScanRequest } from './bindings/ScanRequest';
 import type { StorageQuery } from './bindings/StorageQuery';
+import type { CleanupPlan } from './bindings/CleanupPlan';
+import type { CleanupRequest } from './bindings/CleanupRequest';
+import type { CleanupApproval } from './bindings/CleanupApproval';
+import type { CleanupFilePage } from './bindings/CleanupFilePage';
 
 export interface Backend {
+  cleanupFiles(sessionId: string, offset: number): Promise<CleanupFilePage>;
+  previewCleanup(request: CleanupRequest): Promise<CleanupPlan>;
+  executeCleanup(
+    approval: CleanupApproval,
+    onEvent: (plan: CleanupPlan) => void,
+  ): Promise<CleanupPlan>;
+  declineCleanup(id: string): Promise<CleanupPlan>;
+  cleanupHistory(offset: number, limit: number): Promise<CleanupPlan[]>;
+  cancelCleanup(): Promise<void>;
   initialize(): Promise<AppSettings>;
   save(settings: AppSettings): Promise<void>;
   history(offset: number, limit: number): Promise<DiagnosticSession[]>;
@@ -27,6 +40,18 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  cleanupFiles: (sessionId, offset) =>
+    invoke('cleanup_files', { sessionId, offset }),
+  previewCleanup: (request) => invoke('preview_cleanup', { request }),
+  executeCleanup: (approval, onEvent) => {
+    const channel = new Channel<CleanupPlan>();
+    channel.onmessage = onEvent;
+    return invoke('execute_cleanup', { approval, onEvent: channel });
+  },
+  declineCleanup: (id) => invoke('decline_cleanup', { id }),
+  cleanupHistory: (offset, limit) =>
+    invoke('cleanup_history', { offset, limit }),
+  cancelCleanup: () => invoke('cancel_cleanup'),
   initialize: async () => {
     if (!isTauri())
       throw new Error(

@@ -1,4 +1,4 @@
-use crate::{database, model::*, platform, storage};
+use crate::{cleanup, database, model::*, platform, storage};
 use anyhow::{Context, Result};
 use std::{
     path::PathBuf,
@@ -15,6 +15,7 @@ struct Engine {
     cancel: AtomicBool,
     monitoring: AtomicBool,
     stop_monitor: AtomicBool,
+    cancel_cleanup: AtomicBool,
 }
 static ENGINE: OnceLock<Mutex<Option<Arc<Engine>>>> = OnceLock::new();
 fn engine() -> Result<Arc<Engine>> {
@@ -54,6 +55,7 @@ pub fn init_engine(data_directory: String) -> Result<AppSettings> {
         cancel: AtomicBool::new(false),
         monitoring: AtomicBool::new(false),
         stop_monitor: AtomicBool::new(false),
+        cancel_cleanup: AtomicBool::new(false),
     }));
     Ok(settings)
 }
@@ -264,7 +266,7 @@ fn findings(s: &DiagnosticSession) -> Vec<DiagnosticFinding> {
         result.push(DiagnosticFinding{id:"startup".into(),title:format!("{} startup configurations detected",machine.startup_items.len()),explanation:"Configured entries are not measured startup delays. Review mechanisms and use Login Items in System Settings to inspect managed registrations.".into(),severity:"info".into(),confidence:"Partial coverage".into(),kind:"startup".into(),evidence:vec![]});
     }
     if !s.candidates.is_empty() {
-        result.push(DiagnosticFinding{id:"caches".into(),title:"Cache locations are available for inspection".into(),explanation:"These are known cache directories, not confirmed junk. Review their origin and consequences. Phase 1 does not delete files.".into(),severity:"info".into(),confidence:"Rule-based candidate".into(),kind:"storage".into(),evidence:vec![]});
+        result.push(DiagnosticFinding{id:"caches".into(),title:"Cache locations are available for inspection".into(),explanation:"These are known cache directories, not confirmed junk. Review their origin and consequences. Individual eligible files can be proposed for a separate approved Trash operation.".into(),severity:"info".into(),confidence:"Rule-based candidate".into(),kind:"storage".into(),evidence:vec![]});
     }
     result
 }
@@ -291,5 +293,84 @@ pub fn monitor(mut send: impl FnMut(LiveMetrics) -> bool) -> Result<()> {
             break;
         }
     }
+    Ok(())
+}
+
+fn cleanup_policy(e: &Engine) -> Result<cleanup::Policy> {
+    let settings = database::settings(&database::open(&e.path)?)?;
+    let mut exclusions = settings
+        .excluded_paths
+        .iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    if let Some(parent) = e.path.parent() {
+        exclusions.push(parent.to_owned());
+    }
+    Ok(cleanup::Policy {
+        home: platform::home()?,
+        exclusions,
+    })
+}
+pub fn cleanup_files(session_id: String, offset: u32) -> Result<CleanupFilePage> {
+    let e = engine()?;
+    cleanup::candidates(
+        &database::open(&e.path)?,
+        &session_id,
+        offset,
+        &cleanup_policy(&e)?,
+    )
+}
+pub fn preview_cleanup(request: CleanupRequest) -> Result<CleanupPlan> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active scan or cleanup to finish"
+    );
+    let _guard = ActiveGuard(&e.active);
+    cleanup::preview(&database::open(&e.path)?, request, &cleanup_policy(&e)?)
+}
+pub fn cleanup_history(offset: u32, limit: u32) -> Result<Vec<CleanupPlan>> {
+    cleanup::history(&database::open(&engine()?.path)?, offset, limit)
+}
+pub fn get_cleanup_plan(id: String) -> Result<CleanupPlan> {
+    cleanup::get(&database::open(&engine()?.path)?, &id)
+}
+pub fn decline_cleanup(id: String) -> Result<CleanupPlan> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active operation to finish"
+    );
+    let _guard = ActiveGuard(&e.active);
+    cleanup::decline(&database::open(&e.path)?, &id)
+}
+pub fn execute_cleanup(
+    approval: CleanupApproval,
+    send: impl FnMut(CleanupPlan) -> bool,
+) -> Result<CleanupPlan> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active scan or cleanup to finish"
+    );
+    let _guard = ActiveGuard(&e.active);
+    e.cancel_cleanup.store(false, Ordering::SeqCst);
+    cleanup::execute(
+        &database::open(&e.path)?,
+        approval,
+        &cleanup_policy(&e)?,
+        &e.cancel_cleanup,
+        cleanup::native_trash,
+        send,
+    )
+}
+pub fn cancel_cleanup() -> Result<()> {
+    engine()?.cancel_cleanup.store(true, Ordering::SeqCst);
     Ok(())
 }

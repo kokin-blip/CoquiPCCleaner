@@ -80,8 +80,8 @@
         <div>
           <ShieldCheck size={20} /><strong>Look first. Decide later.</strong>
           <p>
-            This build analyzes your Mac without changing your files or
-            settings.
+            Analysis does not change your files or settings. Any cleanup
+            requires a separate exact-path review and approval.
           </p>
         </div>
       </div>

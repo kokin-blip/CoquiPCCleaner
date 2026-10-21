@@ -44,3 +44,7 @@ The reference layout is 1440 × 960 with a 232 px sidebar, 52 px toolbar and 24 
 - `figma-prototype.json`: linked same-page frames and navigation/setup flows.
 
 Scripts in `scripts/figma/` record the construction approach. Ledgers are the authoritative identifiers for future edits; preserve original kit nodes and extend the Coqui pages.
+
+## Phase 2.1 cleanup workflow
+
+The existing Optimization Center page now includes linked, editable selection, exact-path approval and verification/recovery handoff frames. Start at [cache review](https://www.figma.com/design/Gz7WEiN8Y3Vvivvae0ZPlP?node-id=165-64). The original future-work guide is preserved. `figma-cleanup.json` records the new frame/button IDs, and `scripts/figma/cleanup.js` records construction using the Coqui variables, text styles and component instances. Example outcomes are illustrative rather than claims that device files were changed.

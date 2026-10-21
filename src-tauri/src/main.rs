@@ -107,10 +107,43 @@ fn open_system_settings(destination: String) -> Response<()> {
         Err("System Settings could not be opened. Open it from the Apple menu.".into())
     }
 }
+#[tauri::command]
+fn cleanup_files(session_id: String, offset: u32) -> Response<CleanupFilePage> {
+    api::cleanup_files(session_id,offset).map_err(error)
+}
+#[tauri::command]
+fn preview_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
+    api::preview_cleanup(request).map_err(error)
+}
+#[tauri::command]
+fn cleanup_history(offset: u32, limit: u32) -> Response<Vec<CleanupPlan>> {
+    api::cleanup_history(offset,limit).map_err(error)
+}
+#[tauri::command]
+fn get_cleanup_plan(id: String) -> Response<CleanupPlan> {
+    api::get_cleanup_plan(id).map_err(error)
+}
+#[tauri::command]
+fn decline_cleanup(id: String) -> Response<CleanupPlan> {
+    api::decline_cleanup(id).map_err(error)
+}
+#[tauri::command]
+fn cancel_cleanup() -> Response<()> {api::cancel_cleanup().map_err(error)}
+#[tauri::command]
+async fn execute_cleanup(approval: CleanupApproval, on_event: Channel<CleanupPlan>) -> Response<CleanupPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::execute_cleanup(approval,|e|on_event.send(e).is_ok())).await.map_err(error)?.map_err(error)
+}
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            cleanup_files,
+            preview_cleanup,
+            cleanup_history,
+            get_cleanup_plan,
+            decline_cleanup,
+            execute_cleanup,
+            cancel_cleanup,
             initialize,
             get_settings,
             update_settings,
@@ -131,6 +164,7 @@ fn main() {
         .run(|_app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
                 let _ = api::cancel_scan();
+                let _ = api::cancel_cleanup();
                 let _ = api::stop_monitoring();
             }
         });

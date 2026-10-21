@@ -44,7 +44,7 @@
       Your workload, your scan boundaries, and your local data.
     </p>
   </div>
-  <span class="subtle-tag">Local-first · Phase 1</span>
+  <span class="subtle-tag">Local-first</span>
 </div>
 <section class="panel settings-panel">
   <h2>General & appearance</h2>
@@ -257,28 +257,32 @@
   </p>
   <button
     class="danger-outline"
-    disabled={$controller.scanning}
+    disabled={$controller.scanning || $controller.cleanupRunning}
     onclick={() => (confirmPurge = true)}
     ><Trash2 size={15} />Remove diagnostic history</button
-  >{#if $controller.scanning}<p class="muted small">
-      Finish or cancel the active scan before clearing diagnostic data.
+  >{#if $controller.scanning || $controller.cleanupRunning}<p
+      class="muted small"
+    >
+      Finish or cancel the active operation before clearing diagnostic data.
     </p>{/if}
 </section>
 <section class="panel">
   <h2>About CoquiPCCleaner</h2>
-  <p>Version 0.1.0 · Apple Silicon · macOS 14+</p>
+  <p>Version 0.2.0 · Apple Silicon · macOS 14+</p>
   <p class="muted">
-    Tauri · Svelte · Vite · Rust · SQLite. This release provides read-only
-    analysis. Cleanup, conversational troubleshooting, scheduled maintenance and
-    advanced firmware actions are planned separately.
+    Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
+    Optimization can move individually approved cache files to macOS Trash.
+    Conversational troubleshooting, developer-artifact cleanup and maintenance
+    remain planned work.
   </p>
 </section>
 {#if confirmPurge}<Dialog
     title="Remove local diagnostic history?"
     onclose={() => (confirmPurge = false)}
     ><p>
-      This removes stored scans, findings, and file indexes from Coqui’s local
-      database. Your files, preferences, and system settings are preserved.
+      This removes stored scans, findings, file indexes, and cleanup action
+      records from Coqui’s local database. Your files, preferences, and system
+      settings are preserved.
     </p>
     <div class="dialog-actions">
       <button onclick={() => (confirmPurge = false)}>Keep history</button

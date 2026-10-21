@@ -220,8 +220,8 @@
     <h2>{$controller.settings?.workload.preference} preference</h2>
     <p>
       Preferences describe the tradeoffs you want future recommendations to
-      consider. This read-only build does not apply power profiles or change
-      startup settings.
+      consider. This build does not apply power profiles or change startup
+      settings.
     </p>
     <div class="inline-wrap">
       {#each ['Balanced', 'Performance', 'Efficiency'] as name}<button
