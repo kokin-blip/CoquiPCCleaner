@@ -1,0 +1,1 @@
+{"main":{"identifier":"main","description":"Local read-only scanner interface and user-selected folder/report dialogs","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-start-dragging","dialog:allow-open","dialog:allow-save"]}}

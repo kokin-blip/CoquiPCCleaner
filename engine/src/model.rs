@@ -1,0 +1,273 @@
+use serde::{Deserialize, Serialize};
+
+pub fn now() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum CapabilityState {
+    Supported,
+    RequiresPermission,
+    ManualOnly,
+    Unsupported,
+    Unknown,
+    TemporarilyUnavailable,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemCapability {
+    pub name: String,
+    pub state: CapabilityState,
+    pub explanation: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticEvidence {
+    pub label: String,
+    pub value: String,
+    pub unit: String,
+    pub source: String,
+    pub observed_at: String,
+    pub state: CapabilityState,
+    pub qualification: String,
+}
+impl DiagnosticEvidence {
+    pub fn observed(label: &str, value: String, unit: &str, source: &str) -> Self {
+        Self {
+            label: label.into(),
+            value,
+            unit: unit.into(),
+            source: source.into(),
+            observed_at: now(),
+            state: CapabilityState::Supported,
+            qualification: String::new(),
+        }
+    }
+    pub fn unavailable(label: &str, explanation: &str) -> Self {
+        Self {
+            label: label.into(),
+            value: "Unavailable".into(),
+            unit: String::new(),
+            source: "macOS adapter".into(),
+            observed_at: now(),
+            state: CapabilityState::Unknown,
+            qualification: explanation.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskInfo {
+    pub name: String,
+    pub mount: String,
+    pub filesystem: String,
+    pub total_bytes: f64,
+    pub available_bytes: f64,
+    pub removable: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupItem {
+    pub name: String,
+    pub path: String,
+    pub mechanism: String,
+    pub state: String,
+    pub explanation: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledApplication {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MachineSnapshot {
+    pub observed_at: String,
+    pub device_name: String,
+    pub model: String,
+    pub os_version: String,
+    pub architecture: String,
+    pub cpu: String,
+    pub core_count: u32,
+    pub memory_bytes: f64,
+    pub gpu: String,
+    pub disks: Vec<DiskInfo>,
+    pub evidence: Vec<DiagnosticEvidence>,
+    pub capabilities: Vec<SystemCapability>,
+    pub startup_items: Vec<StartupItem>,
+    pub applications: Vec<InstalledApplication>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkloadProfile {
+    pub workloads: Vec<String>,
+    pub preference: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub onboarding_complete: bool,
+    pub workload: WorkloadProfile,
+    pub appearance: String,
+    pub scan_mode: String,
+    pub excluded_paths: Vec<String>,
+    pub selected_roots: Vec<String>,
+    pub retention_days: u32,
+    pub monitoring_enabled: bool,
+    pub advanced_diagnostics: bool,
+}
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            onboarding_complete: false,
+            workload: WorkloadProfile {
+                workloads: vec!["General productivity".into()],
+                preference: "Balanced".into(),
+            },
+            appearance: "system".into(),
+            scan_mode: "standard".into(),
+            excluded_paths: vec![],
+            selected_roots: vec![],
+            retention_days: 30,
+            monitoring_enabled: true,
+            advanced_diagnostics: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticFinding {
+    pub id: String,
+    pub title: String,
+    pub explanation: String,
+    pub severity: String,
+    pub confidence: String,
+    pub kind: String,
+    pub evidence: Vec<DiagnosticEvidence>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionRequirement {
+    pub path: String,
+    pub reason: String,
+    pub guidance: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupCandidate {
+    pub path: String,
+    pub allocated_bytes: f64,
+    pub logical_bytes: f64,
+    pub modified_at: String,
+    pub origin: String,
+    pub reason: String,
+    pub safety: String,
+    pub consequences: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    pub path: String,
+    pub parent: String,
+    pub name: String,
+    pub category: String,
+    pub logical_bytes: f64,
+    pub allocated_bytes: f64,
+    pub is_directory: bool,
+    pub modified_at: String,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageCategory {
+    pub name: String,
+    pub logical_bytes: f64,
+    pub allocated_bytes: f64,
+    pub file_count: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticSession {
+    pub id: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub stage: String,
+    pub scope: String,
+    pub file_count: u32,
+    pub logical_bytes: f64,
+    pub allocated_bytes: f64,
+    pub skipped_count: u32,
+    pub snapshot: Option<MachineSnapshot>,
+    pub findings: Vec<DiagnosticFinding>,
+    pub permissions: Vec<PermissionRequirement>,
+    pub categories: Vec<StorageCategory>,
+    pub candidates: Vec<CleanupCandidate>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanRequest {
+    pub mode: String,
+    pub roots: Vec<String>,
+    pub excluded_paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanEvent {
+    pub session: DiagnosticSession,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessSample {
+    pub pid: u32,
+    pub name: String,
+    pub cpu_percent: f32,
+    pub memory_bytes: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveMetrics {
+    pub observed_at: String,
+    pub cpu_percent: f32,
+    pub used_memory_bytes: f64,
+    pub total_memory_bytes: f64,
+    pub swap_bytes: f64,
+    pub disk_read_bytes: f64,
+    pub disk_written_bytes: f64,
+    pub processes: Vec<ProcessSample>,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageQuery {
+    pub session_id: String,
+    pub parent: Option<String>,
+    pub category: Option<String>,
+    pub sort: String,
+    pub descending: bool,
+    pub offset: u32,
+    pub limit: u32,
+    pub files_only: bool,
+}
