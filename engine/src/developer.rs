@@ -22,7 +22,7 @@ fn excluded(path: &Path, exclusions: &[PathBuf]) -> bool {
         .iter()
         .any(|e| path.starts_with(e) || e.starts_with(path))
 }
-fn available(path: &Path, exclusions: &[PathBuf]) -> Result<()> {
+pub(crate) fn available(path: &Path, exclusions: &[PathBuf]) -> Result<()> {
     anyhow::ensure!(
         !excluded(path, exclusions),
         "Location intersects an exclusion"
@@ -49,7 +49,9 @@ fn marker(parent: &Path, name: &str) -> bool {
         m.is_file() && !m.file_type().is_symlink() && !storage::placeholder(&parent.join(name), &m)
     })
 }
-fn identify(path: &Path) -> Option<(&'static str, &'static str, PathBuf, String, &'static str)> {
+pub(crate) fn identify(
+    path: &Path,
+) -> Option<(&'static str, &'static str, PathBuf, String, &'static str)> {
     let parent = path.parent()?;
     let name = path.file_name()?.to_str()?;
     let (tech, kind, proof, consequence) = match name {
@@ -70,9 +72,17 @@ fn identify(path: &Path) -> Option<(&'static str, &'static str, PathBuf, String,
 
 /// Fixed executable, fixed read-only verbs, no inherited Git overrides, no hooks,
 /// fsmonitor, optional index writes, recursive submodules, shell or network.
-fn git(path: &Path, args: &[&str], cancel: &AtomicBool) -> Result<Vec<u8>> {
+pub(crate) fn git(path: &Path, args: &[&str], cancel: &AtomicBool) -> Result<Vec<u8>> {
     anyhow::ensure!(
-        ["rev-parse", "status", "worktree", "ls-files", "config"].contains(&args[0]),
+        [
+            "rev-parse",
+            "status",
+            "worktree",
+            "ls-files",
+            "config",
+            "check-ignore"
+        ]
+        .contains(&args[0]),
         "Unsupported Git operation"
     );
     let mut child = Command::new("/usr/bin/git")
@@ -84,9 +94,15 @@ fn git(path: &Path, args: &[&str], cancel: &AtomicBool) -> Result<Vec<u8>> {
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_NO_LAZY_FETCH", "1")
+        // check-ignore takes literal filenames, and rejects Git's literal
+        // pathspec magic. Other commands continue to require literal pathspecs.
+        .args(if args[0] == "check-ignore" {
+            &[][..]
+        } else {
+            &["--literal-pathspecs"][..]
+        })
         .args([
             "--no-optional-locks",
-            "--literal-pathspecs",
             "-c",
             "core.fsmonitor=false",
             "-c",
@@ -274,7 +290,7 @@ fn metadata_guard(root: &Path, cancel: &AtomicBool) -> Result<()> {
     }
     Ok(())
 }
-fn inspect_repository(
+pub(crate) fn inspect_repository(
     project: &Path,
     exclusions: &[PathBuf],
     cancel: &AtomicBool,
@@ -370,7 +386,11 @@ fn inspect_repository(
     })();
     result.unwrap_or_else(|e| unknown(e.to_string()))
 }
-fn tracked(path: &Path, repo: &GitValidation, cancel: &AtomicBool) -> Result<(u32, u32)> {
+pub(crate) fn tracked(
+    path: &Path,
+    repo: &GitValidation,
+    cancel: &AtomicBool,
+) -> Result<(u32, u32)> {
     let root = Path::new(
         repo.root
             .as_ref()

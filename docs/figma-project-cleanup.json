@@ -1,0 +1,22 @@
+{
+  "fileKey": "Gz7WEiN8Y3Vvivvae0ZPlP",
+  "pageId": "155:87",
+  "milestone": "2.3 / supported project-output cleanup / 0.4.0",
+  "frames": {
+    "inspection": "169:390",
+    "approval": "169:494",
+    "verificationRecovery": "169:599"
+  },
+  "actions": [
+    "169:492",
+    "169:597",
+    "169:702"
+  ],
+  "sources": {
+    "shell": "165:64",
+    "button": "156:32",
+    "appearance": "VariableCollectionId:155:94"
+  },
+  "prototype": "inspection \u2192 exact-folder approval \u2192 verified/partial outcomes and manual recovery \u2192 inspection",
+  "qualification": "Editable structural handoff using existing Coqui styles and component instances. Values are explicitly illustrative; packaged native UI is the implementation evidence. Original pages and earlier milestone views are preserved."
+}

@@ -924,3 +924,34 @@ fn unreadable_home_package_invalidates_an_existing_review() {
     assert!(r.items.iter().all(|i| i.status == "skipped"));
     assert!(f.files.iter().all(|p| p.exists()));
 }
+#[test]
+fn legacy_cache_plans_without_project_fields_still_open_and_decline_as_files() {
+    let f = Fixture::new();
+    let plan = f.plan();
+    let raw: String =
+        f.c.query_row(
+            "SELECT json FROM cleanup_plans WHERE id=?1",
+            [&plan.id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let mut record: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    record["plan"]
+        .as_object_mut()
+        .unwrap()
+        .remove("projectCleanup");
+    for identity in record["identities"].as_array_mut().unwrap() {
+        identity.as_object_mut().unwrap().remove("project");
+    }
+    f.c.execute(
+        "UPDATE cleanup_plans SET json=?1 WHERE id=?2",
+        rusqlite::params![record.to_string(), plan.id],
+    )
+    .unwrap();
+    assert!(!cleanup::get(&f.c, &plan.id).unwrap().project_cleanup);
+    let declined = cleanup::decline(&f.c, &plan.id).unwrap();
+    assert_eq!(declined.status, "declined");
+    assert!(declined.items.iter().all(
+        |item| item.status == "declined" && item.detail.contains("Not moved; review declined")
+    ));
+}

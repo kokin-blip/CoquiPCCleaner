@@ -1,4 +1,6 @@
-# Phase 2.2 — developer-artifact analysis
+# Developer-artifact analysis and Git/worktree review
+
+Current version 0.4.0 adds a separate approval-bearing cleanup workflow for supported folders; see [Phase 2.3 scope](project-cleanup.md). Reports themselves never authorize a move. The 0.3.0 analysis boundary below remains applicable.
 
 Version 0.3.0 adds a working Developer artifacts tab in Optimization. It reviews recognized output directories from the selected retained scan and performs fresh, read-only Git checks. It does **not** authorize removal of project directories or artifacts. Existing individual-user-cache approval remains separate and unchanged.
 
@@ -48,4 +50,4 @@ Analysis shares the engine operation guard with scans, preview/cleanup and purge
 
 Create an isolated native validation fixture with `./scripts/fixtures/developer.sh`; select the printed folder in Settings, scan it, then open Optimization → Developer artifacts → Check artifacts. It creates only new disposable repositories and an attached worktree under `/private/tmp`; it never runs against existing projects. Native validation does not remove project outputs.
 
-Separately approved project cleanup still needs per-technology manifests, untracked/ignored-content review, nested repository/worktree and dirty-state revalidation immediately before execution, interrupted-operation handling and verified recovery design. This milestone supplies evidence and review rather than bypassing that work. Full real-world repository configurations, huge/remote filesystems, complete VoiceOver and other supported hardware/OS combinations remain validation work.
+Separately approved project cleanup still needs per-technology manifests, untracked/ignored-content review, nested repository/worktree and dirty-state revalidation immediately before execution, interrupted-operation handling and verified recovery design. Milestone 2.2 supplied evidence and review; the supported 2.3 implementation is specified in project-cleanup.md. Broader technology-native execution remains future work. Full real-world repository configurations, huge/remote filesystems, complete VoiceOver and other supported hardware/OS combinations remain validation work.

@@ -15,6 +15,7 @@ const file = {
   consequences: 'Cached data may need to be regenerated.',
 };
 const plan: CleanupPlan = {
+  projectCleanup: false,
   id: 'review',
   sessionId: 'fixture',
   createdAt: '2026-10-21T08:01:00Z',

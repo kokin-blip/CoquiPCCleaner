@@ -65,7 +65,15 @@ pub fn get_settings() -> Result<AppSettings> {
     database::settings(&database::open(&engine()?.path)?)
 }
 pub fn update_settings(settings: AppSettings) -> Result<()> {
-    let c = database::open(&engine()?.path)?;
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active scan, validation or cleanup before changing preferences"
+    );
+    let _guard = ActiveGuard(&e.active);
+    let c = database::open(&e.path)?;
     database::save_settings(&c, &settings)?;
     database::retain(&c, settings.retention_days)
 }
@@ -332,6 +340,26 @@ pub fn preview_cleanup(request: CleanupRequest) -> Result<CleanupPlan> {
     );
     let _guard = ActiveGuard(&e.active);
     cleanup::preview(&database::open(&e.path)?, request, &cleanup_policy(&e)?)
+}
+pub fn preview_project_cleanup(request: CleanupRequest) -> Result<CleanupPlan> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active scan, validation or cleanup to finish"
+    );
+    let _guard = ActiveGuard(&e.active);
+    e.cancel_cleanup.store(false, Ordering::SeqCst);
+    cleanup::preview_project(
+        &database::open(&e.path)?,
+        request,
+        &cleanup_policy(&e)?,
+        &e.cancel_cleanup,
+    )
+}
+pub fn project_cleanup_entries(id: String, offset: u32) -> Result<ProjectCleanupPage> {
+    cleanup::project_entries(&database::open(&engine()?.path)?, &id, offset)
 }
 pub fn cleanup_history(offset: u32, limit: u32) -> Result<Vec<CleanupPlan>> {
     cleanup::history(&database::open(&engine()?.path)?, offset, limit)

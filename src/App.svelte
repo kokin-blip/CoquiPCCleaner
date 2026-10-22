@@ -213,6 +213,7 @@
           class="toolbar-scan"
           disabled={$controller.scanning ||
             $controller.cleanupRunning ||
+            $controller.cleanupPreparing ||
             $controller.developerRunning}
           onclick={scan}
           ><ScanLine size={15} />{$controller.scanning
@@ -274,14 +275,22 @@
             >Cancel validation</button
           >
         </div>{/if}
-      {#if $controller.cleanupRunning}<div class="scan-banner" role="status">
-          <BrushCleaning size={18} /><span>Moving approved files to Trash…</span
+      {#if $controller.cleanupRunning || ($controller.cleanupPreparing && $controller.page !== 'Optimization')}<div
+          class="scan-banner"
+          role="status"
+        >
+          <BrushCleaning size={18} /><span
+            >{$controller.cleanupPreparing
+              ? 'Preparing a project-folder review…'
+              : 'Moving approved items to Trash…'}</span
           ><button onclick={() => controller.navigate('Optimization')}
             >View progress</button
           ><button
             onclick={() =>
               controller.run(() => controller.service.cancelCleanup())}
-            >Stop remaining moves</button
+            >{$controller.cleanupPreparing
+              ? 'Cancel review preparation'
+              : 'Stop remaining moves'}</button
           >
         </div>{/if}
       <main class="content" id="main-content" tabindex="-1">

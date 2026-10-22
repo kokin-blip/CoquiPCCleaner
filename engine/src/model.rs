@@ -295,6 +295,8 @@ pub struct CleanupItem {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupPlan {
+    #[serde(default)]
+    pub project_cleanup: bool,
     pub id: String,
     pub session_id: String,
     pub created_at: String,
@@ -329,6 +331,22 @@ pub struct CleanupFilePage {
     pub files: Vec<CleanupFile>,
     pub next_offset: Option<u32>,
     pub unavailable_count: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCleanupEntry {
+    pub path: String,
+    pub directory: bool,
+    pub logical_bytes: f64,
+    pub allocated_bytes: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCleanupPage {
+    pub entries: Vec<ProjectCleanupEntry>,
+    pub total: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]

@@ -15,8 +15,12 @@
   let {
     controller,
     onScan,
-  }: { controller: ReturnType<typeof createAppStore>; onScan: () => void } =
-    $props();
+    onReview,
+  }: {
+    controller: ReturnType<typeof createAppStore>;
+    onScan: () => void;
+    onReview: (path: string) => void;
+  } = $props();
   let saved = $state<DeveloperReport | null>(null);
   let loading = $state(false);
   let error = $state('');
@@ -35,8 +39,22 @@
   let busy = $derived(
     $controller.scanning ||
       $controller.cleanupRunning ||
+      $controller.cleanupPreparing ||
       $controller.developerRunning,
   );
+  function supported(a: DeveloperArtifact) {
+    const name = a.path.split('/').at(-1);
+    return (
+      (a.technology === 'Rust' && name === 'target') ||
+      (a.technology === 'Node.js' &&
+        ['.next', '.nuxt', '.svelte-kit', 'dist', 'build'].includes(
+          name ?? '',
+        )) ||
+      (a.technology === 'Dart / Flutter' &&
+        ['build', '.dart_tool'].includes(name ?? '')) ||
+      (a.technology === 'Python' && name === '__pycache__')
+    );
+  }
   let stacks = $derived(
     [...new Set(report?.artifacts.map((a) => a.technology) ?? [])].sort(),
   );
@@ -103,10 +121,21 @@
       Scan scope: {$controller.session.scope}
     </p>{/if}
   <p class="muted small">
-    Sizes describe the storage scan. Git validation is a later observation. This
-    review does not authorize project removal.
+    Sizes describe the storage scan. Git validation is a later observation.
+    Supported folders require a separate fresh inspection and your exact-path
+    approval.
   </p>
 </section>
+{#if $controller.cleanupPreparing}<div class="scan-banner" role="status">
+    <span
+      >Preparing a fresh folder review: inspecting contents, Git state and
+      worktree relationships…</span
+    >
+    <button
+      onclick={() => controller.run(() => controller.service.cancelCleanup())}
+      >Cancel review preparation</button
+    >
+  </div>{/if}
 {#if error}<div class="inline-error" role="alert">
     <span>{error}</span><button onclick={() => revision++}
       >Retry loading review</button
@@ -257,7 +286,9 @@
       <dd>
         {bytes(detail.indexedAllocatedBytes)} / {bytes(
           detail.indexedLogicalBytes,
-        )} · {detail.indexedFileCount} indexed files
+        )} · {detail.indexedFileCount} indexed {detail.indexedFileCount === 1
+          ? 'file'
+          : 'files'}
       </dd>
       <dt>Storage observed</dt>
       <dd>{date(detail.scannedAt)}</dd>
@@ -322,4 +353,25 @@
         >Reveal output<ExternalLink size={14} /></button
       ><button onclick={() => (detail = null)}>Done</button>
     </div>
+    {#if supported(detail) && detail.assessment === 'Review required'}
+      <div class="dialog-actions">
+        <button
+          disabled={busy}
+          class="primary"
+          onclick={() => {
+            const path = detail!.path;
+            detail = null;
+            onReview(path);
+          }}>Review folder cleanup</button
+        >
+      </div>
+      <p class="muted small">
+        A fresh inspection may refuse this folder. Only ignored, untracked
+        outputs in a clean checkout are eligible. You must confirm that all
+        contents can be regenerated.
+      </p>
+    {:else}<p class="muted small">
+        Analysis only for this artifact or current assessment. Preserve it and
+        inspect its project with the appropriate tooling.
+      </p>{/if}
   </Dialog>{/if}

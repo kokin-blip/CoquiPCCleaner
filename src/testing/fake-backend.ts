@@ -69,6 +69,10 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     previewCleanup: vi.fn(async () => {
       throw new Error('No fixture plan configured');
     }),
+    previewProjectCleanup: vi.fn(async () => {
+      throw new Error('No project fixture plan configured');
+    }),
+    projectCleanupEntries: vi.fn(async () => ({ entries: [], total: 0 })),
     executeCleanup: vi.fn(async () => {
       throw new Error('No fixture execution configured');
     }),

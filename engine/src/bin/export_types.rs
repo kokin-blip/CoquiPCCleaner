@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     CleanupApproval::export_all_to(&path)?;
     CleanupPlan::export_all_to(&path)?;
     CleanupFilePage::export_all_to(&path)?;
+    ProjectCleanupPage::export_all_to(&path)?;
     DeveloperReport::export_all_to(&path)?;
     Ok(())
 }

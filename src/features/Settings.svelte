@@ -259,10 +259,11 @@
     class="danger-outline"
     disabled={$controller.scanning ||
       $controller.cleanupRunning ||
+      $controller.cleanupPreparing ||
       $controller.developerRunning}
     onclick={() => (confirmPurge = true)}
     ><Trash2 size={15} />Remove diagnostic history</button
-  >{#if $controller.scanning || $controller.cleanupRunning || $controller.developerRunning}<p
+  >{#if $controller.scanning || $controller.cleanupRunning || $controller.cleanupPreparing || $controller.developerRunning}<p
       class="muted small"
     >
       Finish or cancel the active operation before clearing diagnostic data.
@@ -270,12 +271,12 @@
 </section>
 <section class="panel">
   <h2>About CoquiPCCleaner</h2>
-  <p>Version 0.3.0 · Apple Silicon · macOS 14+</p>
+  <p>Version 0.4.0 · Apple Silicon · macOS 14+</p>
   <p class="muted">
     Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
-    Optimization can move individually approved cache files to macOS Trash.
-    Conversational troubleshooting, developer-artifact cleanup and maintenance
-    remain planned work.
+    Optimization can move individually approved cache files and supported
+    project-output folders to macOS Trash. Conversational troubleshooting and
+    maintenance remain planned work.
   </p>
 </section>
 {#if confirmPurge}<Dialog

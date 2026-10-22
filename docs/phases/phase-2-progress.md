@@ -1,6 +1,10 @@
 # Phase 2 progress
 
-Current milestone: **developer-artifact analysis and Git/worktree validation**, requested by the user on 2026-10-21. Version 0.3.0 adds milestone 2.2; versions 0.2.0–0.2.1 supplied individual cache-file approval and project-aware user-cache eligibility. This does not claim completion of the full Phase 2 specification.
+Current milestone: **approval and verified cleanup for supported project caches/build outputs**, requested by the user on 2026-10-21. Version 0.4.0 adds milestone 2.3; versions 0.3.0 and 0.2.x supplied developer/Git review and individual cache-file approval. This does not claim completion of the full Phase 2 specification.
+
+## Milestone 2.3 — project-folder approval and verified cleanup
+
+Implemented one-folder exact-path review, freshly inspected paginated descendants, per-technology eligibility, stopped-tools/regeneration acknowledgement, ten-minute single-use approvals, fresh Git/worktree/manifest/tree checks before native Trash, descendant verification and retained outcomes/recovery guidance. Dependencies, virtual environments and unassociated Xcode data remain analysis only. See [supported rules and limits](project-cleanup.md).
 
 ## Milestone 2.2 — developer-artifact review
 
@@ -20,7 +24,7 @@ The filesystem checks are point-in-time checks around a pathname-based native AP
 
 ## Validation
 
-The 0.3.0 standard check suite passes 26 frontend tests and 51 Rust tests. The 0.2.1 suite previously passed 20 frontend and 37 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
+The 0.4.0 standard check suite passes 32 frontend tests and 69 Rust tests. The 0.3.0 suite previously passed 26 frontend and 51 Rust tests. The 0.2.1 suite previously passed 20 frontend and 37 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
 
 Tests cover no-change/decline, missing acknowledgements, expired/replayed approval, index membership, out-of-scope paths, directories, links, hard links, projects, new exclusions, changed file/parent, audit persistence failure, native permission/tool failures, partial results, cancellation, channel loss, interruption recovery, schema migration/reopen and purge. UI tests exercise selection, exact-path confirmation, result/recovery presentation, errors and retained records.
 
@@ -28,11 +32,11 @@ Packaged native validation includes schema migration with existing history, a re
 
 ## Remaining Phase 2 milestones
 
-The full requirements in `phase-2.md` remain authoritative. The following are not implemented by 2.1 and have no inactive navigation:
+The full requirements in `phase-2.md` remain authoritative. The following remain outside milestones 2.1–2.3 and have no inactive navigation:
 
 - Ask Coqui, evidence-bound diagnostic tasks, conversation history and optional explicitly opted-in external models.
 - Exact duplicates with content verification and copy preservation; similar-photo and modified-copy distinctions.
-- Technology-specific developer-artifact execution, exhaustive Git/worktree validation for removal, Docker/application-native resource management and application leftovers. Milestone 2.2 provides bounded read-only analysis and relationship review.
+- Broader developer-artifact execution (dependencies/environments/Xcode/custom outputs), exhaustive Git/tool configurations, Docker/application-native resource management and application leftovers. Milestone 2.3 implements only the bounded supported folder policies above.
 - Supported startup/power adjustments and before/after workload baselines.
 - Sourced workload suitability/upgrade advice, forecasts, compatibility and cost ranges.
 - Maintenance scheduling, reminders and separately authorized rules.

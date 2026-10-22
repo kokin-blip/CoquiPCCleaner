@@ -6,6 +6,7 @@ import type { LiveMetrics } from './bindings/LiveMetrics';
 import type { DeveloperReport } from './bindings/DeveloperReport';
 import type { CleanupPlan } from './bindings/CleanupPlan';
 import type { CleanupApproval } from './bindings/CleanupApproval';
+import type { CleanupRequest } from './bindings/CleanupRequest';
 
 export type Page =
   | 'Dashboard'
@@ -29,6 +30,7 @@ export interface AppState {
   developerRunning: boolean;
   developerReport: DeveloperReport | null;
   cleanupRunning: boolean;
+  cleanupPreparing: boolean;
   cleanupPlan: CleanupPlan | null;
   cancelling: boolean;
   error: string | null;
@@ -48,6 +50,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     developerRunning: false,
     developerReport: null,
     cleanupRunning: false,
+    cleanupPreparing: false,
     cleanupPlan: null,
     cancelling: false,
     error: null,
@@ -164,7 +167,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   async function scan() {
     const s = get(store);
     if (!s.settings || s.scanning) return;
-    if (s.cleanupRunning || s.developerRunning) {
+    if (s.cleanupRunning || s.cleanupPreparing || s.developerRunning) {
       fail(
         'Wait for cleanup or developer validation to finish before scanning.',
       );
@@ -218,6 +221,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   async function executeCleanup(approval: CleanupApproval) {
     if (
       get(store).cleanupRunning ||
+      get(store).cleanupPreparing ||
       get(store).scanning ||
       get(store).developerRunning
     )
@@ -238,9 +242,31 @@ export function createAppStore(service: Backend = nativeBackend) {
       store.update((s) => ({ ...s, cleanupRunning: false }));
     }
   }
+  async function previewProjectCleanup(request: CleanupRequest) {
+    const s = get(store);
+    if (
+      s.scanning ||
+      s.cleanupRunning ||
+      s.cleanupPreparing ||
+      s.developerRunning
+    )
+      throw new Error('Wait for the active operation to finish.');
+    store.update((v) => ({ ...v, cleanupPreparing: true, error: null }));
+    try {
+      return await service.previewProjectCleanup(request);
+    } finally {
+      store.update((v) => ({ ...v, cleanupPreparing: false }));
+    }
+  }
   async function analyzeDeveloper() {
     const s = get(store);
-    if (!s.session || s.scanning || s.cleanupRunning || s.developerRunning)
+    if (
+      !s.session ||
+      s.scanning ||
+      s.cleanupRunning ||
+      s.cleanupPreparing ||
+      s.developerRunning
+    )
       return;
     store.update((v) => ({
       ...v,
@@ -271,6 +297,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     ...store,
     initialize,
     executeCleanup,
+    previewProjectCleanup,
     analyzeDeveloper,
     save,
     scan,

@@ -9,6 +9,7 @@
   import type { createAppStore } from '../state';
   import type { CleanupFile } from '../bindings/CleanupFile';
   import type { CleanupPlan } from '../bindings/CleanupPlan';
+  import type { ProjectCleanupPage } from '../bindings/ProjectCleanupPage';
   import DeveloperArtifacts from './DeveloperArtifacts.svelte';
   import Dialog from '../components/Dialog.svelte';
   import Status from '../components/Status.svelte';
@@ -36,9 +37,39 @@
   let records = $state<CleanupPlan[]>([]);
   let historyOffset = $state(0);
   let moreHistory = $state(false);
+  let contents = $state<ProjectCleanupPage | null>(null);
+  let contentsOffset = $state(0);
+  let contentsLoading = $state(false);
+  let contentsError = $state('');
+  let contentsRevision = $state(0);
   let lastSession = '';
   let session = $derived($controller.session);
   let currentPlan = $derived($controller.cleanupPlan);
+  $effect(() => {
+    const plan = review;
+    const offset = contentsOffset;
+    void contentsRevision;
+    let alive = true;
+    contents = null;
+    contentsError = '';
+    contentsLoading = false;
+    if (!plan?.projectCleanup) return;
+    contentsLoading = true;
+    controller.service
+      .projectCleanupEntries(plan.id, offset)
+      .then((r) => {
+        if (alive) contents = r;
+      })
+      .catch((e) => {
+        if (alive) contentsError = String(e);
+      })
+      .finally(() => {
+        if (alive) contentsLoading = false;
+      });
+    return () => {
+      alive = false;
+    };
+  });
   $effect(() => {
     const view = tab;
     const id = session?.id;
@@ -139,6 +170,24 @@
         revision++;
       });
   }
+  async function previewProject(path: string) {
+    if (!session) return;
+    pending = true;
+    error = '';
+    try {
+      review = await controller.previewProjectCleanup({
+        sessionId: session.id,
+        paths: [path],
+      });
+      contentsOffset = 0;
+      closed = false;
+      understood = false;
+    } catch (e) {
+      error = `${String(e)} Nothing was moved. Recheck artifacts or rescan the selected project after addressing this condition.`;
+    } finally {
+      pending = false;
+    }
+  }
   async function execute() {
     if (!review || !closed || !understood) return;
     const plan = review;
@@ -171,6 +220,7 @@
     onclick={onScan}
     disabled={$controller.scanning ||
       $controller.cleanupRunning ||
+      $controller.cleanupPreparing ||
       $controller.developerRunning}><Search size={16} />Analyze storage</button
   >
 </div>
@@ -200,24 +250,27 @@
       }}>Retry loading</button
     >
   </div>{/if}
-{#if currentPlan && tab === 'Cache files'}
+{#if currentPlan && tab !== 'Action history'}
   <section class="panel cleanup-result" aria-live="polite">
     <div class="section-heading">
       <h2>
         {$controller.cleanupRunning
-          ? 'Moving approved files…'
+          ? 'Moving approved items…'
           : 'Last cleanup result'}
       </h2>
       <Status value={currentPlan.status} />
     </div>
     <p>
       {currentPlan.items.filter((i) => i.status === 'movedToTrash').length} of {currentPlan
-        .items.length} files verified in Trash.
+        .items.length}
+      {currentPlan.projectCleanup ? 'folders' : 'files'} verified in Trash.
     </p>
     <p class="muted">{currentPlan.verification}</p>
     <div class="inline-wrap">
       <button onclick={() => (detail = currentPlan)}
-        >Inspect per-file results<ChevronRight size={14} /></button
+        >{currentPlan.projectCleanup
+          ? 'Inspect folder results'
+          : 'Inspect per-file results'}<ChevronRight size={14} /></button
       >{#if $controller.cleanupRunning}<button
           onclick={() =>
             controller.run(() => controller.service.cancelCleanup())}
@@ -273,6 +326,7 @@
             disabled={!selected.length ||
               pending ||
               $controller.cleanupRunning ||
+              $controller.cleanupPreparing ||
               $controller.developerRunning}
             onclick={() => (selected = [])}>Clear selection</button
           ><button
@@ -280,6 +334,7 @@
             disabled={!selected.length ||
               pending ||
               $controller.cleanupRunning ||
+              $controller.cleanupPreparing ||
               loading}
             onclick={preview}
             >{pending
@@ -308,6 +363,7 @@
                     aria-label={`Select ${file.path}`}
                     checked={selected.includes(file.path)}
                     disabled={$controller.cleanupRunning ||
+                      $controller.cleanupPreparing ||
                       (!selected.includes(file.path) && selected.length >= 100)}
                     onchange={() => toggle(file.path)}
                   /></td
@@ -363,10 +419,14 @@
     </section>
   {/if}
 {:else if tab === 'Developer artifacts'}
-  <DeveloperArtifacts {controller} {onScan} />
+  <DeveloperArtifacts
+    {controller}
+    {onScan}
+    onReview={(path) => void previewProject(path)}
+  />
 {:else}
   <p class="muted">
-    Approved plans, declined reviews and per-file outcomes are retained locally.
+    Approved plans, declined reviews and per-item outcomes are retained locally.
     A completed move does not guarantee that Finder can still restore the item.
   </p>
   {#if loading}<p role="status">Loading action records…</p>{/if}
@@ -377,8 +437,16 @@
         ><span class="history-icon"><BrushCleaning size={18} /></span><span
           class="history-description"
           ><strong
-            >Cache file review · {plan.items.length}
-            {plan.items.length === 1 ? 'file' : 'files'}</strong
+            >{plan.projectCleanup
+              ? 'Project folder review'
+              : 'Cache file review'} · {plan.items.length}
+            {plan.projectCleanup
+              ? plan.items.length === 1
+                ? 'folder'
+                : 'folders'
+              : plan.items.length === 1
+                ? 'file'
+                : 'files'}</strong
           ><span class="muted small"
             >{date(plan.createdAt)} · {bytes(plan.allocatedBytes)} reviewed allocation</span
           ></span
@@ -405,19 +473,23 @@
   </section>
 {/if}
 {#if review}<Dialog
-    title={`Move ${review.items.length} selected ${review.items.length === 1 ? 'file' : 'files'} to Trash?`}
+    title={`Move ${review.items.length} selected ${review.projectCleanup ? (review.items.length === 1 ? 'folder' : 'folders') : review.items.length === 1 ? 'file' : 'files'} to Trash?`}
     onclose={() => void decline()}
   >
     <p>
-      Review expires {date(review.expiresAt)}. Files are rechecked immediately
-      before moving. A changed or unavailable file will be skipped.
+      Review expires {date(review.expiresAt)}. {review.projectCleanup
+        ? 'The entire folder, manifests, Git state and worktree relationships are rechecked before moving. Changed or unavailable contents prevent the move.'
+        : 'Files are rechecked immediately before moving. A changed or unavailable file will be skipped.'}
     </p>
     <p>
       <strong
         >{bytes(review.allocatedBytes)} allocated across the selection.</strong
       > This space is not freed while the files remain in Trash.
     </p>
-    <div class="cleanup-review-list">
+    <div
+      class="cleanup-review-list"
+      class:project-review-list={review.projectCleanup}
+    >
       {#each review.items as item}<div class="cleanup-review-item">
           <strong class="path selectable">{item.file.path}</strong><span
             class="muted small"
@@ -425,26 +497,87 @@
               item.file.modifiedAt,
             )}</span
           >
-          <p class="muted small">{item.file.origin}</p>
+          <p class="muted small" class:path={review.projectCleanup}>
+            {item.file.origin}
+          </p>
           <p>{item.file.consequences}</p>
         </div>{/each}
     </div>
+    {#if review.projectCleanup}
+      <h3>Reviewed folder contents</h3>
+      <p class="muted small">
+        Exact descendant paths from this fresh review. Folder allocation is the
+        sum of regular-file allocation; APFS sharing and Trash affect actual
+        capacity.
+      </p>
+      {#if contentsLoading}<p role="status">Loading reviewed contents…</p>{/if}
+      {#if contentsError}<div class="inline-error" role="alert">
+          <span>{contentsError}</span><button onclick={() => contentsRevision++}
+            >Retry contents</button
+          >
+        </div>{/if}
+      {#if contents}<div class="table-scroll">
+          <table>
+            <thead
+              ><tr
+                ><th>Exact path</th><th>Kind</th><th class="numeric"
+                  >Allocated</th
+                ></tr
+              ></thead
+            ><tbody
+              >{#each contents.entries as entry}<tr
+                  ><td class="path selectable cleanup-path">{entry.path}</td><td
+                    >{entry.directory ? 'Folder' : 'File'}</td
+                  ><td class="numeric nowrap"
+                    >{entry.directory ? '—' : bytes(entry.allocatedBytes)}</td
+                  ></tr
+                >{/each}</tbody
+            >
+          </table>
+        </div>
+        <div class="pagination">
+          <button
+            disabled={contentsOffset === 0 || contentsLoading}
+            onclick={() => (contentsOffset = Math.max(0, contentsOffset - 50))}
+            >Previous contents</button
+          ><span class="muted small"
+            >Page {Math.floor(contentsOffset / 50) + 1} · {contents.total}
+            {contents.total === 1 ? 'descendant' : 'descendants'}</span
+          ><button
+            disabled={contentsOffset + 50 >= contents.total || contentsLoading}
+            onclick={() => (contentsOffset += 50)}>Next contents</button
+          >
+        </div>
+      {/if}
+    {/if}
     <label class="cleanup-consent"
       ><input type="checkbox" bind:checked={closed} /><span
-        >I have closed the applications that use these files.</span
+        >{review.projectCleanup
+          ? 'I have stopped builds, watchers, editors and tools that use this folder.'
+          : 'I have closed the applications that use these files.'}</span
       ></label
     >
     <label class="cleanup-consent"
       ><input type="checkbox" bind:checked={understood} /><span
-        >I reviewed every path and accept that cached data may need to be
-        downloaded or regenerated. Recovery depends on these items remaining
-        available in Trash.</span
+        >{#if review.projectCleanup}I reviewed the entire folder and its
+          contents, including ignored files. They contain no unique work and I
+          can regenerate them. Recovery depends on the folder remaining
+          available in Trash.{:else}I reviewed every path and accept that cached
+          data may need to be downloaded or regenerated. Recovery depends on
+          these items remaining available in Trash.{/if}</span
       ></label
     >
     <div class="dialog-actions">
-      <button onclick={() => void decline()}>Keep files</button><button
+      <button onclick={() => void decline()}
+        >{review.projectCleanup ? 'Keep folder' : 'Keep files'}</button
+      ><button
         class="primary"
-        disabled={!closed || !understood || $controller.cleanupRunning}
+        disabled={!closed ||
+          !understood ||
+          $controller.cleanupRunning ||
+          $controller.cleanupPreparing ||
+          (review.projectCleanup &&
+            (!contents || contentsLoading || !!contentsError))}
         onclick={execute}>Approve and move to Trash</button
       >
     </div>
@@ -460,11 +593,18 @@
     {#each detail.items as item}<div class="cleanup-review-item">
         <div class="inline-between">
           <strong class="path selectable">{item.file.path}</strong><Status
-            value={item.status}
+            value={detail.status === 'declined' && item.status === 'pending'
+              ? 'declined'
+              : item.status}
           />
         </div>
         <p class="muted small">{item.file.origin}</p>
-        <p>{item.detail}</p>
+        <p>{item.file.consequences}</p>
+        <p>
+          {detail.status === 'declined' && item.status === 'pending'
+            ? 'Not moved; review declined. Create a fresh review for another attempt.'
+            : item.detail}
+        </p>
         {#if item.trashPath}<p class="path muted small selectable">
             {item.trashPath}
           </p>

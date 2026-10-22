@@ -1,6 +1,6 @@
-//! Approval-bearing cache cleanup. Only indexed regular files beneath this user's
-//! Library/Caches are eligible; directories, links and project trees are never targets.
-use crate::{database, model::*, storage};
+//! Approval-bearing cleanup: eligible individual user-cache files, or separately
+//! reviewed supported project outputs with fresh descendant/Git inspection seals.
+use crate::{database, developer, model::*, project_cleanup, storage};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,8 @@ struct Identity {
     changed_ns: i64,
     parent_device: u64,
     parent_inode: u64,
+    #[serde(default)]
+    project: Option<project_cleanup::Seal>,
 }
 #[derive(Serialize, Deserialize)]
 struct Record {
@@ -196,6 +198,7 @@ fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
         changed_ns: m.ctime_nsec(),
         parent_device: pm.dev(),
         parent_inode: pm.ino(),
+        project: None,
     };
     let file = CleanupFile {path: path.to_str().context("This filename cannot be represented")?.into(), allocated_bytes:(m.blocks() as f64)*512., logical_bytes:m.len() as f64, modified_at:m.modified().ok().map(|t|chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()).unwrap_or_default(), origin, consequences:"Close the related application first. Cached data may be useful; the app may need to download or regenerate it and can be slower next time. Moving to Trash does not free disk space until Trash is emptied. Coqui does not empty Trash.".into()};
     Ok((file, identity))
@@ -210,6 +213,13 @@ fn load(c: &Connection, id: &str) -> Result<Record> {
     anyhow::ensure!(
         record.plan.items.len() == record.identities.len(),
         "This action record is incomplete. No operation can be executed from it."
+    );
+    anyhow::ensure!(
+        record
+            .identities
+            .iter()
+            .all(|i| i.project.is_some() == record.plan.project_cleanup),
+        "The action type does not match its retained inspection"
     );
     Ok(record)
 }
@@ -302,6 +312,7 @@ pub fn preview(c: &Connection, request: CleanupRequest, policy: &Policy) -> Resu
         });
     }
     let plan = CleanupPlan {
+        project_cleanup: false,
         id: uuid::Uuid::new_v4().to_string(),
         session_id: request.session_id,
         created_at: now(),
@@ -323,6 +334,120 @@ pub fn preview(c: &Connection, request: CleanupRequest, policy: &Policy) -> Resu
     )?;
     Ok(plan)
 }
+
+/// A distinct command creates a folder review; a cache-file request can never
+/// acquire project-folder authority. Only the saved scan/report chooses targets.
+pub fn preview_project(
+    c: &Connection,
+    request: CleanupRequest,
+    policy: &Policy,
+    cancel: &AtomicBool,
+) -> Result<CleanupPlan> {
+    anyhow::ensure!(
+        request.paths.len() == 1,
+        "Review one project output folder at a time"
+    );
+    let session = database::session(c, &request.session_id)?;
+    anyhow::ensure!(
+        session.status == "complete",
+        "A complete storage scan is required. Rescan the selected project folder."
+    );
+    let report =
+        developer::get(c, &request.session_id)?.context("Check developer artifacts first")?;
+    anyhow::ensure!(
+        ["complete", "partial"].contains(&report.status.as_str()),
+        "Finish developer analysis before creating a cleanup review"
+    );
+    let path = Path::new(&request.paths[0]);
+    anyhow::ensure!(
+        report.artifacts.iter().any(|a| Path::new(&a.path) == path),
+        "This output is not in the selected developer report"
+    );
+    let directory: Option<bool> = c
+        .query_row(
+            "SELECT directory FROM files WHERE session_id=?1 AND path=?2",
+            params![request.session_id, request.paths[0]],
+            |r| r.get(0),
+        )
+        .optional()?;
+    anyhow::ensure!(
+        directory == Some(true),
+        "Output is no longer in the scan index. Rescan."
+    );
+    let (file, seal) = project_cleanup::inspect(path, policy, cancel)?;
+    let m = fs::symlink_metadata(path)?;
+    let parent = fs::symlink_metadata(path.parent().context("Missing parent")?)?;
+    let identity = Identity {
+        device: m.dev(),
+        inode: m.ino(),
+        size: m.len(),
+        blocks: m.blocks(),
+        modified: m.mtime(),
+        modified_ns: m.mtime_nsec(),
+        changed: m.ctime(),
+        changed_ns: m.ctime_nsec(),
+        parent_device: parent.dev(),
+        parent_inode: parent.ino(),
+        project: Some(seal),
+    };
+    let plan = CleanupPlan {project_cleanup:true,id:uuid::Uuid::new_v4().to_string(),session_id:request.session_id,created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),approved_at:None,finished_at:None,status:"review".into(),allocated_bytes:file.allocated_bytes,items:vec![CleanupItem {file,status:"pending".into(),detail:"Awaiting exact-folder approval and reproducibility acknowledgement".into(),trash_path:None}],verification:"Not executed. Fresh metadata inspection; review the folder, every listed descendant and technology consequences. No content reproducibility is guaranteed.".into()};
+    anyhow::ensure!(
+        !cancel.load(Ordering::SeqCst),
+        "Project inspection cancelled; no review was created"
+    );
+    save(
+        c,
+        &Record {
+            plan: plan.clone(),
+            identities: vec![identity],
+        },
+    )?;
+    Ok(plan)
+}
+
+pub fn project_entries(c: &Connection, id: &str, offset: u32) -> Result<ProjectCleanupPage> {
+    let record = load(c, id)?;
+    anyhow::ensure!(
+        record.plan.project_cleanup && record.plan.items.len() == 1,
+        "Not a project-folder review"
+    );
+    let seal = record.identities[0]
+        .project
+        .as_ref()
+        .context("Missing folder inspection")?;
+    Ok(project_cleanup::page(
+        &record.plan.items[0].file.path,
+        seal,
+        offset,
+    ))
+}
+
+fn current_identity(
+    path: &Path,
+    policy: &Policy,
+    project: bool,
+    cancel: &AtomicBool,
+) -> Result<Identity> {
+    if !project {
+        return Ok(inspect(path, policy)?.1);
+    }
+    let (_, seal) = project_cleanup::inspect(path, policy, cancel)?;
+    let m = fs::symlink_metadata(path)?;
+    let parent = fs::symlink_metadata(path.parent().context("Missing parent")?)?;
+    Ok(Identity {
+        device: m.dev(),
+        inode: m.ino(),
+        size: m.len(),
+        blocks: m.blocks(),
+        modified: m.mtime(),
+        modified_ns: m.mtime_nsec(),
+        changed: m.ctime(),
+        changed_ns: m.ctime_nsec(),
+        parent_device: parent.dev(),
+        parent_inode: parent.ino(),
+        project: Some(seal),
+    })
+}
 pub fn decline(c: &Connection, id: &str) -> Result<CleanupPlan> {
     let mut r = load(c, id)?;
     anyhow::ensure!(
@@ -330,6 +455,13 @@ pub fn decline(c: &Connection, id: &str) -> Result<CleanupPlan> {
         "Only an unexecuted review can be declined"
     );
     r.plan.status = "declined".into();
+    for item in &mut r.plan.items {
+        if item.status == "pending" {
+            item.status = "declined".into();
+            item.detail =
+                "Not moved; review declined. Create a fresh review for another attempt.".into();
+        }
+    }
     r.plan.finished_at = Some(now());
     r.plan.verification = "Declined. No files were changed.".into();
     save(c, &r)?;
@@ -377,7 +509,7 @@ pub fn execute(
         }
         let path = PathBuf::from(&r.plan.items[i].file.path);
         let validation = (|| -> Result<fs::File> {
-            let (_, current) = inspect(&path, policy)?;
+            let current = current_identity(&path, policy, r.plan.project_cleanup, cancel)?;
             anyhow::ensure!(
                 current == r.identities[i],
                 "The file or its parent changed since preview. Scan and review it again."
@@ -395,35 +527,64 @@ pub fn execute(
         })();
         match validation {
             Err(e) => {
-                r.plan.items[i].status = "skipped".into();
+                r.plan.items[i].status = if cancel.load(Ordering::SeqCst) {
+                    "cancelled"
+                } else {
+                    "skipped"
+                }
+                .into();
                 r.plan.items[i].detail = format!("Not moved: {e:#}");
             }
             Ok(_parent) => {
                 r.plan.items[i].status = "moving".into();
-                r.plan.items[i].detail = "Approved; native Trash operation started".into();
+                r.plan.items[i].detail =
+                    "Approved; intent saved; revalidating before native Trash".into();
                 save(c, &r)?;
+                let mut native_started = false;
                 let outcome = (|| -> Result<PathBuf> {
-                    let (_, latest) = inspect(&path, policy)?;
+                    let latest = current_identity(&path, policy, r.plan.project_cleanup, cancel)?;
                     anyhow::ensure!(
                         latest == r.identities[i],
                         "Target changed immediately before the native operation"
                     );
+                    anyhow::ensure!(
+                        !cancel.load(Ordering::SeqCst),
+                        "Cancelled before the native operation"
+                    );
+                    native_started = true;
                     trash(&path)
                 })();
                 match outcome {
                     Err(e) => {
-                        r.plan.items[i].status = "failed".into();
-                        r.plan.items[i].detail=format!("Native Trash operation failed: {e:#}. Inspect the source location before retrying.");
+                        r.plan.items[i].status = if native_started {
+                            "failed"
+                        } else if cancel.load(Ordering::SeqCst) {
+                            "cancelled"
+                        } else {
+                            "skipped"
+                        }
+                        .into();
+                        r.plan.items[i].detail = if native_started {
+                            format!("Native Trash operation failed: {e:#}. Inspect the source location before retrying.")
+                        } else {
+                            format!("Not moved: {e:#}")
+                        };
                     }
                     Ok(destination) => {
                         r.plan.items[i].trash_path = destination.to_str().map(String::from);
                         let verified = fs::symlink_metadata(&path)
                             .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
                             && fs::symlink_metadata(&destination).is_ok_and(|m| {
-                                m.is_file()
-                                    && m.dev() == r.identities[i].device
+                                (if r.plan.project_cleanup {
+                                    m.is_dir()
+                                } else {
+                                    m.is_file()
+                                }) && m.dev() == r.identities[i].device
                                     && m.ino() == r.identities[i].inode
                                     && m.len() == r.identities[i].size
+                            })
+                            && r.identities[i].project.as_ref().is_none_or(|seal| {
+                                project_cleanup::verify(&destination, seal).is_ok()
                             });
                         r.plan.items[i].status = if verified {
                             "movedToTrash"
@@ -431,7 +592,7 @@ pub fn execute(
                             "unverified"
                         }
                         .into();
-                        r.plan.items[i].detail=if verified {"Verified: the original path is absent and the same file is present in Trash. Finder may offer Put Back while the item remains available."} else {"The native operation returned, but the move could not be fully verified. Inspect both locations; do not retry automatically."}.into();
+                        r.plan.items[i].detail=if verified {if r.plan.project_cleanup {"Verified: the original folder path is absent; the same directory and all reviewed descendant identities are present in Trash. Finder may offer Put Back while it remains available."} else {"Verified: the original path is absent and the same file is present in Trash. Finder may offer Put Back while the item remains available."}} else {"The native operation returned, but the move could not be fully verified. Inspect both locations; do not retry automatically."}.into();
                     }
                 }
             }
@@ -448,7 +609,7 @@ pub fn execute(
         "partial"
     }
     .into();
-    r.plan.verification="Per-file verification only. No performance improvement or reclaimed capacity is claimed. Recovery depends on the item remaining in Trash; Coqui never empties it. Rescan to refresh storage results.".into();
+    r.plan.verification="Per-item verification only. No performance improvement or reclaimed capacity is claimed. Recovery depends on the item remaining in Trash; Coqui never empties it. Rescan to refresh storage results.".into();
     save(c, &r)?;
     let _ = emit(r.plan.clone());
     Ok(r.plan)

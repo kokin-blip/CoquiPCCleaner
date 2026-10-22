@@ -39,7 +39,7 @@ npm run types
 - Exact-path cache-file review, expiring approval, native Trash moves, cancellation, verification and action history.
 - Rust-owned SQLite history and indexes with configurable retention and reviewed diagnostic-data removal.
 
-The scanner remains read-only. Optimization can move individually approved eligible files in your Library/Caches to macOS Trash. It does not permanently delete files, empty Trash, change startup/power/security/firmware settings, or estimate unavailable sensors. Modern login items can be incompletely observable. SMART/firmware fields depend on the model. Used memory alone is not a bottleneck, allocated file size is not guaranteed recoverable space, and APFS capacity must not be summed across shared volumes.
+The scanner remains read-only. Optimization can move individually approved eligible files in your Library/Caches, and separately reviewed supported project-output folders after fresh Git/worktree and descendant checks, to macOS Trash. It does not permanently delete files, empty Trash, change startup/power/security/firmware settings, or estimate unavailable sensors. Modern login items can be incompletely observable. SMART/firmware fields depend on the model. Used memory alone is not a bottleneck, allocated file size is not guaranteed recoverable space, and APFS capacity must not be summed across shared volumes.
 
 ## Project context
 
@@ -48,3 +48,5 @@ Read PRODUCT.md, DESIGN.md and AGENTS.md. `docs/original-brief.md` preserves the
 Project-aware eligibility in 0.2.1 distinguishes a parsed standalone home `package.json` from actual repository/workspace boundaries. Declared workspaces, cache-local projects and ambiguous configuration remain excluded; see [the eligibility rules](docs/phases/phase-2-progress.md#project-aware-user-cache-eligibility--021).
 
 Version 0.3.0 adds Optimization → Developer artifacts: recognized outputs, indexed allocation, fresh Git status/tracked-file checks, worktree relationships, filters and saved evidence. It grants no project-removal approval. See [developer-artifact review](docs/phases/developer-artifacts.md). Native fixture: `./scripts/fixtures/developer.sh`.
+
+Supported project-folder approval, verification, recovery and disposable fixture commands: [Phase 2.3](docs/phases/project-cleanup.md).

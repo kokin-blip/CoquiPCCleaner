@@ -197,3 +197,257 @@ describe('developer artifact reviews', () => {
     expect(developerReport).toHaveBeenCalledTimes(1);
   });
 });
+
+const projectPlan = {
+  projectCleanup: true,
+  id: 'project-review',
+  sessionId: 'fixture',
+  createdAt: '2026-10-21T10:01:00Z',
+  expiresAt: '2026-10-21T10:11:00Z',
+  approvedAt: null,
+  finishedAt: null,
+  status: 'review',
+  allocatedBytes: 4096,
+  verification: 'Not executed.',
+  items: [
+    {
+      file: {
+        path: '/fixture/target',
+        allocatedBytes: 4096,
+        logicalBytes: 32,
+        modifiedAt: '2026-10-21T10:00:00Z',
+        origin:
+          'Rust · fresh inspected folder · clean confirmed checkout · main HEAD abcdef',
+        consequences: 'The entire folder moves. Rebuild with project tooling.',
+      },
+      status: 'pending',
+      detail: 'Awaiting folder approval',
+      trashPath: null,
+    },
+  ],
+};
+const cleanReport = () => ({
+  ...structuredClone(report),
+  artifacts: [
+    {
+      ...structuredClone(report.artifacts[0]),
+      assessment: 'Review required',
+      trackedEntries: 0,
+      reasons: ['Review contents and regeneration.'],
+      git: { ...structuredClone(report.artifacts[0].git), status: 'clean' },
+    },
+  ],
+});
+const contentPage = {
+  total: 1,
+  entries: [
+    {
+      path: '/fixture/target/build.cache',
+      directory: false,
+      logicalBytes: 32,
+      allocatedBytes: 4096,
+    },
+  ],
+};
+async function projectSetup(overrides: Parameters<typeof fakeBackend>[0] = {}) {
+  return setup({
+    developerReport: async () => cleanReport(),
+    previewProjectCleanup: vi.fn(async () => structuredClone(projectPlan)),
+    projectCleanupEntries: vi.fn(async () => structuredClone(contentPage)),
+    declineCleanup: vi.fn(async () => ({ ...projectPlan, status: 'declined' })),
+    ...overrides,
+  });
+}
+async function openFolderReview() {
+  await fireEvent.click(
+    await screen.findByRole('button', { name: 'Inspect /fixture/target' }),
+  );
+  await fireEvent.click(
+    screen.getByRole('button', { name: 'Review folder cleanup' }),
+  );
+  return screen.findByRole('dialog', {
+    name: 'Move 1 selected folder to Trash?',
+  });
+}
+describe('project-folder cleanup approval', () => {
+  it('reviews exact current contents and declines without mutation', async () => {
+    const { service } = await projectSetup();
+    await openFolderReview();
+    expect(
+      await screen.findByText('/fixture/target/build.cache'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'clean confirmed checkout',
+    );
+    expect(service.previewProjectCleanup).toHaveBeenCalledWith({
+      sessionId: 'fixture',
+      paths: ['/fixture/target'],
+    });
+    expect(
+      screen.getByRole('button', { name: 'Approve and move to Trash' }),
+    ).toBeDisabled();
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep folder' }));
+    expect(service.declineCleanup).toHaveBeenCalledWith('project-review');
+    expect(service.executeCleanup).not.toHaveBeenCalled();
+  });
+  it('requires stopped tools and regeneration acknowledgement then presents verified folder results', async () => {
+    const done = {
+      ...projectPlan,
+      status: 'complete',
+      verification:
+        'Original folder absent; same directory and descendants verified in Trash.',
+      items: projectPlan.items.map((i) => ({
+        ...i,
+        status: 'movedToTrash',
+        detail: 'All reviewed descendant identities verified.',
+        trashPath: '/fixture/.Trash/target',
+      })),
+    };
+    const { service } = await projectSetup({
+      executeCleanup: vi.fn(async (_approval, on) => {
+        on(done);
+        return done;
+      }),
+    });
+    await openFolderReview();
+    await screen.findByText('/fixture/target/build.cache');
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: /I have stopped builds/ }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Approve and move to Trash' }),
+    ).toBeDisabled();
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: /I reviewed the entire folder/ }),
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Approve and move to Trash' }),
+    );
+    await screen.findByText('1 of 1 folders verified in Trash.');
+    expect(service.executeCleanup).toHaveBeenCalledWith(
+      {
+        planId: 'project-review',
+        reviewedAt: projectPlan.createdAt,
+        applicationsClosed: true,
+        consequencesAccepted: true,
+      },
+      expect.any(Function),
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Inspect folder results' }),
+    );
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'All reviewed descendant identities verified.',
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Show in Trash' }),
+    );
+    expect(service.reveal).toHaveBeenCalledWith('/fixture/.Trash/target');
+  });
+  it('keeps failed or missing reviewed contents unapprovable and supports retry', async () => {
+    const entries = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Inspection record unavailable'))
+      .mockResolvedValue(contentPage);
+    await projectSetup({ projectCleanupEntries: entries });
+    await openFolderReview();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Inspection record unavailable',
+    );
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: /I have stopped builds/ }),
+    );
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: /I reviewed the entire folder/ }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Approve and move to Trash' }),
+    ).toBeDisabled();
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Retry contents' }),
+    );
+    await screen.findByText('/fixture/target/build.cache');
+    expect(
+      screen.getByRole('button', { name: 'Approve and move to Trash' }),
+    ).toBeEnabled();
+  });
+  it('cancels preparation, serializes scans, and refuses stale Git without offering execution', async () => {
+    let reject!: (error: Error) => void;
+    const { controller, service } = await projectSetup({
+      previewProjectCleanup: vi.fn(
+        async () =>
+          new Promise<typeof projectPlan>((_resolve, rejectFn) => {
+            reject = rejectFn;
+          }),
+      ),
+    });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Inspect /fixture/target' }),
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Review folder cleanup' }),
+    );
+    await waitFor(() => expect(get(controller).cleanupPreparing).toBe(true));
+    await controller.scan();
+    expect(service.scan).not.toHaveBeenCalled();
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Cancel review preparation' }),
+    );
+    expect(service.cancelCleanup).toHaveBeenCalled();
+    reject(new Error('Git changed; protected'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Nothing was moved',
+    );
+    expect(get(controller).cleanupPreparing).toBe(false);
+    expect(
+      screen.queryByRole('button', { name: 'Approve and move to Trash' }),
+    ).toBeNull();
+  });
+  it('reopens project action records with manual recovery and their consequences', async () => {
+    await projectSetup({
+      cleanupHistory: async () => [
+        {
+          ...projectPlan,
+          status: 'interrupted',
+          verification: 'Inspect manually before retrying.',
+        },
+      ],
+    });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Action history' }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /Project folder review/ }),
+    );
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'The entire folder moves.',
+    );
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'Finder may offer Put Back',
+    );
+  });
+});
+
+it('presents legacy declined project items as terminal while preserving their evidence', async () => {
+  await projectSetup({
+    cleanupHistory: async () => [
+      {
+        ...projectPlan,
+        status: 'declined',
+        verification: 'Declined. No files were changed.',
+      },
+    ],
+  });
+  await fireEvent.click(screen.getByRole('tab', { name: 'Action history' }));
+  await fireEvent.click(
+    await screen.findByRole('button', { name: /Project folder review/ }),
+  );
+  const dialog = screen.getByRole('dialog');
+  expect(dialog).toHaveTextContent(
+    'Not moved; review declined. Create a fresh review for another attempt.',
+  );
+  expect(dialog).not.toHaveTextContent('Pending');
+  expect(dialog).not.toHaveTextContent('Awaiting folder approval');
+  expect(dialog).toHaveTextContent('main HEAD abcdef');
+  expect(
+    screen.queryByRole('button', { name: 'Approve and move to Trash' }),
+  ).toBeNull();
+});

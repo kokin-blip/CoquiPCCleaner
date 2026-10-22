@@ -1732,6 +1732,10 @@ tbody tr:last-child td {
   overflow-y: auto;
   margin: 16px 0;
 }
+.cleanup-review-list.project-review-list {
+  max-height: none;
+  overflow-y: visible;
+}
 .cleanup-review-item {
   padding: 16px 0;
   border-bottom: 1px solid var(--border);

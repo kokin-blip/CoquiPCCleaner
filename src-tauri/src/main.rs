@@ -116,6 +116,14 @@ fn preview_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
     api::preview_cleanup(request).map_err(error)
 }
 #[tauri::command]
+async fn preview_project_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::preview_project_cleanup(request)).await.map_err(error)?.map_err(error)
+}
+#[tauri::command]
+fn project_cleanup_entries(id: String, offset: u32) -> Response<ProjectCleanupPage> {
+    api::project_cleanup_entries(id,offset).map_err(error)
+}
+#[tauri::command]
 fn cleanup_history(offset: u32, limit: u32) -> Response<Vec<CleanupPlan>> {
     api::cleanup_history(offset,limit).map_err(error)
 }
@@ -152,6 +160,8 @@ fn main() {
             cancel_developer,
             cleanup_files,
             preview_cleanup,
+            preview_project_cleanup,
+            project_cleanup_entries,
             cleanup_history,
             get_cleanup_plan,
             decline_cleanup,

@@ -11,6 +11,7 @@ import type { CleanupPlan } from './bindings/CleanupPlan';
 import type { CleanupRequest } from './bindings/CleanupRequest';
 import type { CleanupApproval } from './bindings/CleanupApproval';
 import type { CleanupFilePage } from './bindings/CleanupFilePage';
+import type { ProjectCleanupPage } from './bindings/ProjectCleanupPage';
 
 import type { DeveloperReport } from './bindings/DeveloperReport';
 export interface Backend {
@@ -22,6 +23,11 @@ export interface Backend {
   cancelDeveloper(): Promise<void>;
   cleanupFiles(sessionId: string, offset: number): Promise<CleanupFilePage>;
   previewCleanup(request: CleanupRequest): Promise<CleanupPlan>;
+  previewProjectCleanup(request: CleanupRequest): Promise<CleanupPlan>;
+  projectCleanupEntries(
+    id: string,
+    offset: number,
+  ): Promise<ProjectCleanupPage>;
   executeCleanup(
     approval: CleanupApproval,
     onEvent: (plan: CleanupPlan) => void,
@@ -57,6 +63,10 @@ export const backend: Backend = {
   cleanupFiles: (sessionId, offset) =>
     invoke('cleanup_files', { sessionId, offset }),
   previewCleanup: (request) => invoke('preview_cleanup', { request }),
+  previewProjectCleanup: (request) =>
+    invoke('preview_project_cleanup', { request }),
+  projectCleanupEntries: (id, offset) =>
+    invoke('project_cleanup_entries', { id, offset }),
   executeCleanup: (approval, onEvent) => {
     const channel = new Channel<CleanupPlan>();
     channel.onmessage = onEvent;
