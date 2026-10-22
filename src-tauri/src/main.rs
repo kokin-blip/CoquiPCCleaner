@@ -133,10 +133,23 @@ fn cancel_cleanup() -> Response<()> {api::cancel_cleanup().map_err(error)}
 async fn execute_cleanup(approval: CleanupApproval, on_event: Channel<CleanupPlan>) -> Response<CleanupPlan> {
     tauri::async_runtime::spawn_blocking(move || api::execute_cleanup(approval,|e|on_event.send(e).is_ok())).await.map_err(error)?.map_err(error)
 }
+#[tauri::command]
+fn developer_report(session_id: String) -> Response<Option<DeveloperReport>> {
+    api::developer_report(session_id).map_err(error)
+}
+#[tauri::command]
+fn cancel_developer() -> Response<()> { api::cancel_developer().map_err(error) }
+#[tauri::command]
+async fn analyze_developer(session_id: String, on_event: Channel<DeveloperReport>) -> Response<DeveloperReport> {
+    tauri::async_runtime::spawn_blocking(move || api::analyze_developer(session_id, |e| on_event.send(e).is_ok())).await.map_err(error)?.map_err(error)
+}
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            developer_report,
+            analyze_developer,
+            cancel_developer,
             cleanup_files,
             preview_cleanup,
             cleanup_history,
@@ -163,6 +176,7 @@ fn main() {
         .expect("Could not initialize CoquiPCCleaner")
         .run(|_app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                let _ = api::cancel_developer();
                 let _ = api::cancel_scan();
                 let _ = api::cancel_cleanup();
                 let _ = api::stop_monitoring();

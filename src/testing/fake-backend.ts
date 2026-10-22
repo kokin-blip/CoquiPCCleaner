@@ -45,6 +45,22 @@ export const session: DiagnosticSession = {
 };
 export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
   return {
+    developerReport: async () => null,
+    analyzeDeveloper: vi.fn(async (sessionId, on) => {
+      const report = {
+        sessionId,
+        checkedAt: '',
+        status: 'complete',
+        examined: 0,
+        candidateCount: 0,
+        artifacts: [],
+        errors: [],
+        qualification: 'Fixture',
+      };
+      on(report);
+      return report;
+    }),
+    cancelDeveloper: vi.fn(async () => {}),
     cleanupFiles: vi.fn(async () => ({
       files: [],
       nextOffset: null,

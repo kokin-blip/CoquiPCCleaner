@@ -211,7 +211,9 @@
         <div class="toolbar-divider"></div>
         <button
           class="toolbar-scan"
-          disabled={$controller.scanning || $controller.cleanupRunning}
+          disabled={$controller.scanning ||
+            $controller.cleanupRunning ||
+            $controller.developerRunning}
           onclick={scan}
           ><ScanLine size={15} />{$controller.scanning
             ? 'Analyzing…'
@@ -259,6 +261,17 @@
             class="icon-button"
             aria-label="Dismiss notification"
             onclick={() => controller.dismiss()}><X size={16} /></button
+          >
+        </div>{/if}
+      {#if $controller.developerRunning}<div class="scan-banner" role="status">
+          <LoaderCircle class="spin" size={17} /><span
+            >Checking developer artifacts and Git/worktree relationships…</span
+          ><button onclick={() => controller.navigate('Optimization')}
+            >View optimization</button
+          ><button
+            onclick={() =>
+              controller.run(() => controller.service.cancelDeveloper())}
+            >Cancel validation</button
           >
         </div>{/if}
       {#if $controller.cleanupRunning}<div class="scan-banner" role="status">

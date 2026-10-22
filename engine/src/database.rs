@@ -9,7 +9,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
     let version: u32 = c.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
-        version <= 2,
+        version <= 3,
         "This diagnostic database was created by a newer version of CoquiPCCleaner."
     );
     if version == 0 {
@@ -28,6 +28,11 @@ pub fn open(path: &Path) -> Result<Connection> {
         c.execute_batch("BEGIN IMMEDIATE;
         CREATE TABLE IF NOT EXISTS cleanup_plans(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL, json TEXT NOT NULL);
         PRAGMA user_version=2; COMMIT;")?;
+    }
+    if version < 3 {
+        c.execute_batch("BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS developer_reports(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE, checked_at TEXT NOT NULL, status TEXT NOT NULL, json TEXT NOT NULL);
+        PRAGMA user_version=3; COMMIT;")?;
     }
     Ok(c)
 }
@@ -155,6 +160,19 @@ pub fn recover_interrupted(c: &Connection) -> Result<()> {
         s.finished_at = Some(now());
         save_session(c, &s)?;
     }
+    let mut q = c.prepare("SELECT session_id FROM developer_reports WHERE status='running'")?;
+    let ids = q
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for id in ids {
+        if let Some(mut report) = crate::developer::get(c, &id)? {
+            report.status = "interrupted".into();
+            report.errors.push(
+                "The app closed during validation. Recheck before using these observations.".into(),
+            );
+            crate::developer::save(c, &report)?;
+        }
+    }
     crate::cleanup::recover_interrupted(c)?;
     Ok(())
 }
@@ -173,6 +191,6 @@ pub fn retain(c: &Connection, days: u32) -> Result<()> {
     Ok(())
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }

@@ -257,10 +257,12 @@
   </p>
   <button
     class="danger-outline"
-    disabled={$controller.scanning || $controller.cleanupRunning}
+    disabled={$controller.scanning ||
+      $controller.cleanupRunning ||
+      $controller.developerRunning}
     onclick={() => (confirmPurge = true)}
     ><Trash2 size={15} />Remove diagnostic history</button
-  >{#if $controller.scanning || $controller.cleanupRunning}<p
+  >{#if $controller.scanning || $controller.cleanupRunning || $controller.developerRunning}<p
       class="muted small"
     >
       Finish or cancel the active operation before clearing diagnostic data.
@@ -268,7 +270,7 @@
 </section>
 <section class="panel">
   <h2>About CoquiPCCleaner</h2>
-  <p>Version 0.2.1 · Apple Silicon · macOS 14+</p>
+  <p>Version 0.3.0 · Apple Silicon · macOS 14+</p>
   <p class="muted">
     Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
     Optimization can move individually approved cache files to macOS Trash.
@@ -280,9 +282,9 @@
     title="Remove local diagnostic history?"
     onclose={() => (confirmPurge = false)}
     ><p>
-      This removes stored scans, findings, file indexes, and cleanup action
-      records from Coqui’s local database. Your files, preferences, and system
-      settings are preserved.
+      This removes stored scans, findings, file indexes, developer reviews, and
+      cleanup action records from Coqui’s local database. Your files,
+      preferences, and system settings are preserved.
     </p>
     <div class="dialog-actions">
       <button onclick={() => (confirmPurge = false)}>Keep history</button

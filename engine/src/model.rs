@@ -330,3 +330,68 @@ pub struct CleanupFilePage {
     pub next_offset: Option<u32>,
     pub unavailable_count: u32,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktree {
+    pub path: String,
+    pub head: Option<String>,
+    pub branch: Option<String>,
+    pub detached: bool,
+    pub bare: bool,
+    pub locked: bool,
+    pub prunable: bool,
+    pub present: bool,
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChanges {
+    pub staged: u32,
+    pub modified: u32,
+    pub untracked: u32,
+    pub conflicts: u32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitValidation {
+    pub status: String,
+    pub root: Option<String>,
+    pub git_directory: Option<String>,
+    pub common_directory: Option<String>,
+    pub changes: Option<GitChanges>,
+    pub worktrees: Vec<GitWorktree>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DeveloperArtifact {
+    pub path: String,
+    pub project_root: String,
+    pub technology: String,
+    pub kind: String,
+    pub marker: String,
+    pub indexed_allocated_bytes: f64,
+    pub indexed_logical_bytes: f64,
+    pub indexed_file_count: u32,
+    pub scanned_at: String,
+    pub checked_at: String,
+    pub git: GitValidation,
+    pub tracked_entries: Option<u32>,
+    pub gitlinks: Option<u32>,
+    pub nested_markers: bool,
+    pub assessment: String,
+    pub reasons: Vec<String>,
+    pub consequences: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DeveloperReport {
+    pub session_id: String,
+    pub checked_at: String,
+    pub status: String,
+    pub examined: u32,
+    pub candidate_count: u32,
+    pub artifacts: Vec<DeveloperArtifact>,
+    pub errors: Vec<String>,
+    pub qualification: String,
+}

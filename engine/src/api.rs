@@ -1,4 +1,4 @@
-use crate::{cleanup, database, model::*, platform, storage};
+use crate::{cleanup, database, developer, model::*, platform, storage};
 use anyhow::{Context, Result};
 use std::{
     path::PathBuf,
@@ -16,6 +16,7 @@ struct Engine {
     monitoring: AtomicBool,
     stop_monitor: AtomicBool,
     cancel_cleanup: AtomicBool,
+    cancel_developer: AtomicBool,
 }
 static ENGINE: OnceLock<Mutex<Option<Arc<Engine>>>> = OnceLock::new();
 fn engine() -> Result<Arc<Engine>> {
@@ -56,6 +57,7 @@ pub fn init_engine(data_directory: String) -> Result<AppSettings> {
         monitoring: AtomicBool::new(false),
         stop_monitor: AtomicBool::new(false),
         cancel_cleanup: AtomicBool::new(false),
+        cancel_developer: AtomicBool::new(false),
     }));
     Ok(settings)
 }
@@ -372,5 +374,35 @@ pub fn execute_cleanup(
 }
 pub fn cancel_cleanup() -> Result<()> {
     engine()?.cancel_cleanup.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+pub fn developer_report(session_id: String) -> Result<Option<DeveloperReport>> {
+    developer::get(&database::open(&engine()?.path)?, &session_id)
+}
+pub fn analyze_developer(
+    session_id: String,
+    send: impl FnMut(DeveloperReport) -> bool,
+) -> Result<DeveloperReport> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active scan, validation or cleanup to finish"
+    );
+    let _guard = ActiveGuard(&e.active);
+    e.cancel_developer.store(false, Ordering::SeqCst);
+    let policy = cleanup_policy(&e)?;
+    developer::analyze(
+        &database::open(&e.path)?,
+        &session_id,
+        &policy.exclusions,
+        &e.cancel_developer,
+        send,
+    )
+}
+pub fn cancel_developer() -> Result<()> {
+    engine()?.cancel_developer.store(true, Ordering::SeqCst);
     Ok(())
 }

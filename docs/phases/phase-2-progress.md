@@ -1,6 +1,10 @@
 # Phase 2 progress
 
-Current milestone: **cleanup approval and verification**, selected by the user on 2026-10-21. Version 0.2.0 implemented the first milestone; 0.2.1 adds project-aware user-cache eligibility. This does not claim completion of the full Phase 2 specification.
+Current milestone: **developer-artifact analysis and Git/worktree validation**, requested by the user on 2026-10-21. Version 0.3.0 adds milestone 2.2; versions 0.2.0–0.2.1 supplied individual cache-file approval and project-aware user-cache eligibility. This does not claim completion of the full Phase 2 specification.
+
+## Milestone 2.2 — developer-artifact review
+
+Implemented read-only recognition, indexed allocation, Git status/tracked-entry checks, registered-worktree relationships, protected/review-required assessments, filters, per-artifact evidence, cancellation and retained reviews. Project removal remains unavailable. See [the complete scope and command boundary](developer-artifacts.md).
 
 ## Milestone 2.1 — individual cache-file review
 
@@ -16,7 +20,7 @@ The filesystem checks are point-in-time checks around a pathname-based native AP
 
 ## Validation
 
-The 0.2.1 standard check suite passes 20 frontend tests and 37 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
+The 0.3.0 standard check suite passes 26 frontend tests and 51 Rust tests. The 0.2.1 suite previously passed 20 frontend and 37 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
 
 Tests cover no-change/decline, missing acknowledgements, expired/replayed approval, index membership, out-of-scope paths, directories, links, hard links, projects, new exclusions, changed file/parent, audit persistence failure, native permission/tool failures, partial results, cancellation, channel loss, interruption recovery, schema migration/reopen and purge. UI tests exercise selection, exact-path confirmation, result/recovery presentation, errors and retained records.
 
@@ -28,7 +32,7 @@ The full requirements in `phase-2.md` remain authoritative. The following are no
 
 - Ask Coqui, evidence-bound diagnostic tasks, conversation history and optional explicitly opted-in external models.
 - Exact duplicates with content verification and copy preservation; similar-photo and modified-copy distinctions.
-- Git/worktree validation and technology-specific developer-artifact analysis/cleanup, Docker/application-native resource management and application leftovers.
+- Technology-specific developer-artifact execution, exhaustive Git/worktree validation for removal, Docker/application-native resource management and application leftovers. Milestone 2.2 provides bounded read-only analysis and relationship review.
 - Supported startup/power adjustments and before/after workload baselines.
 - Sourced workload suitability/upgrade advice, forecasts, compatibility and cost ranges.
 - Maintenance scheduling, reminders and separately authorized rules.

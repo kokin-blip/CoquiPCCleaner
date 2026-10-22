@@ -9,6 +9,7 @@
   import type { createAppStore } from '../state';
   import type { CleanupFile } from '../bindings/CleanupFile';
   import type { CleanupPlan } from '../bindings/CleanupPlan';
+  import DeveloperArtifacts from './DeveloperArtifacts.svelte';
   import Dialog from '../components/Dialog.svelte';
   import Status from '../components/Status.svelte';
   import { bytes, date } from '../format';
@@ -168,8 +169,9 @@
   </div>
   <button
     onclick={onScan}
-    disabled={$controller.scanning || $controller.cleanupRunning}
-    ><Search size={16} />Analyze storage</button
+    disabled={$controller.scanning ||
+      $controller.cleanupRunning ||
+      $controller.developerRunning}><Search size={16} />Analyze storage</button
   >
 </div>
 <div
@@ -179,7 +181,7 @@
   onkeydown={tabKeys}
   aria-label="Optimization views"
 >
-  {#each ['Cache files', 'Action history'] as name}<button
+  {#each ['Cache files', 'Developer artifacts', 'Action history'] as name}<button
       role="tab"
       tabindex={tab === name ? 0 : -1}
       aria-selected={tab === name}
@@ -268,7 +270,10 @@
         </div>
         <div class="inline-wrap">
           <button
-            disabled={!selected.length || pending || $controller.cleanupRunning}
+            disabled={!selected.length ||
+              pending ||
+              $controller.cleanupRunning ||
+              $controller.developerRunning}
             onclick={() => (selected = [])}>Clear selection</button
           ><button
             class="primary"
@@ -357,6 +362,8 @@
       </div>
     </section>
   {/if}
+{:else if tab === 'Developer artifacts'}
+  <DeveloperArtifacts {controller} {onScan} />
 {:else}
   <p class="muted">
     Approved plans, declined reviews and per-file outcomes are retained locally.

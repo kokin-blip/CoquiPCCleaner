@@ -64,7 +64,55 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
         std::fs::read(fixture.path().join("keep.txt")).unwrap(),
         b"preserve these bytes"
     );
+    std::fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname='fixture'\n",
+    )
+    .unwrap();
+    std::fs::create_dir(fixture.path().join("target")).unwrap();
+    std::fs::write(
+        fixture.path().join("target/build.cache"),
+        "keep generated fixture",
+    )
+    .unwrap();
+    let mut indexed = None;
+    api::scan(
+        ScanRequest {
+            mode: "selected".into(),
+            roots: vec![fixture.path().to_string_lossy().into()],
+            excluded_paths: vec![],
+        },
+        |e| {
+            indexed = Some(e.session);
+            true
+        },
+    )
+    .unwrap();
+    let id = indexed.unwrap().id;
+    let mut developer_events = vec![];
+    let report = api::analyze_developer(id.clone(), |r| {
+        developer_events.push(r.status);
+        true
+    })
+    .unwrap();
+    assert_eq!(report.artifacts.len(), 1);
+    assert_eq!(report.artifacts[0].git.status, "notDetected");
+    assert!(developer_events.contains(&"running".to_string()));
+    api::init_engine(data.path().to_string_lossy().into()).unwrap();
+    assert_eq!(
+        api::developer_report(id.clone())
+            .unwrap()
+            .unwrap()
+            .artifacts
+            .len(),
+        1
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("target/build.cache")).unwrap(),
+        "keep generated fixture"
+    );
     api::clear_diagnostic_data().unwrap();
     assert!(api::scan_history(0, 10).unwrap().is_empty());
+    assert!(api::developer_report(id).unwrap().is_none());
     assert!(fixture.path().join("keep.txt").exists());
 }

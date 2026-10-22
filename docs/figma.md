@@ -48,3 +48,5 @@ Scripts in `scripts/figma/` record the construction approach. Ledgers are the au
 ## Phase 2.1 cleanup workflow
 
 The existing Optimization Center page now includes linked, editable selection, exact-path approval and verification/recovery handoff frames. Start at [cache review](https://www.figma.com/design/Gz7WEiN8Y3Vvivvae0ZPlP?node-id=165-64). The original future-work guide is preserved. `figma-cleanup.json` records the new frame/button IDs, and `scripts/figma/cleanup.js` records construction using the Coqui variables, text styles and component instances. Example outcomes are illustrative rather than claims that device files were changed.
+
+Phase 2.2 adds linked Developer artifacts and Git/worktree evidence handoff frames on the existing Optimization Center page. They reuse the incumbent appearance variables, text styles and button instance. `figma-developer.json` records the source and result nodes; `scripts/figma/developer.js` reproduces the addition. Values are explicitly illustrative. The list frame was visually inspected; these are structural views rather than pixel-exact native captures.

@@ -12,7 +12,14 @@ import type { CleanupRequest } from './bindings/CleanupRequest';
 import type { CleanupApproval } from './bindings/CleanupApproval';
 import type { CleanupFilePage } from './bindings/CleanupFilePage';
 
+import type { DeveloperReport } from './bindings/DeveloperReport';
 export interface Backend {
+  developerReport(sessionId: string): Promise<DeveloperReport | null>;
+  analyzeDeveloper(
+    sessionId: string,
+    onEvent: (report: DeveloperReport) => void,
+  ): Promise<DeveloperReport>;
+  cancelDeveloper(): Promise<void>;
   cleanupFiles(sessionId: string, offset: number): Promise<CleanupFilePage>;
   previewCleanup(request: CleanupRequest): Promise<CleanupPlan>;
   executeCleanup(
@@ -40,6 +47,13 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  developerReport: (sessionId) => invoke('developer_report', { sessionId }),
+  analyzeDeveloper: (sessionId, onEvent) => {
+    const channel = new Channel<DeveloperReport>();
+    channel.onmessage = onEvent;
+    return invoke('analyze_developer', { sessionId, onEvent: channel });
+  },
+  cancelDeveloper: () => invoke('cancel_developer'),
   cleanupFiles: (sessionId, offset) =>
     invoke('cleanup_files', { sessionId, offset }),
   previewCleanup: (request) => invoke('preview_cleanup', { request }),
