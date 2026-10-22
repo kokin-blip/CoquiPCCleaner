@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { version } from '../../package.json';
   import {
     FolderPlus,
     X,
@@ -273,7 +274,7 @@
 </section>
 <section class="panel">
   <h2>About CoquiPCCleaner</h2>
-  <p>Version 0.5.0 · Apple Silicon · macOS 14+</p>
+  <p>Version {version} · Apple Silicon · macOS 14+</p>
   <p class="muted">
     Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
     Optimization can move individually approved cache files and supported

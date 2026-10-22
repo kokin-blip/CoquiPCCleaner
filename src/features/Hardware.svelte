@@ -12,10 +12,7 @@
   import { bytes, date } from '../format';
   import Evidence from '../components/Evidence.svelte';
   import Status from '../components/Status.svelte';
-  let {
-    controller,
-    firmware = false,
-  }: { controller: ReturnType<typeof createAppStore>; firmware?: boolean } =
+  let { controller }: { controller: ReturnType<typeof createAppStore> } =
     $props();
   let machine = $derived($controller.session?.snapshot);
   let tab = $state('Components');
@@ -24,11 +21,9 @@
 
 <div class="page-heading">
   <div>
-    <h1>{firmware ? 'Firmware & Security' : 'Hardware'}</h1>
+    <h1>Hardware</h1>
     <p class="muted">
-      {firmware
-        ? 'Supported Mac platform information. Always read-only.'
-        : 'The configuration your operating system actually reports.'}
+      The configuration your operating system actually reports.
     </p>
   </div>
   {#if machine}<span class="muted small"
@@ -42,39 +37,7 @@
       Run an analysis from the toolbar. Missing readings will remain
       unavailable.
     </p>
-  </div>{:else if firmware}
-  <section class="panel">
-    <h2>{machine.model}</h2>
-    <p>{machine.architecture} · {machine.osVersion}</p>
-    <p class="muted">
-      Apple Silicon does not expose conventional PC BIOS tuning controls. Coqui
-      reports readable properties and provides manual guidance.
-    </p>
-  </section>
-  <section class="panel">
-    <h2>Reported properties</h2>
-    <Evidence items={machine.evidence} />
-  </section>
-  <section class="panel">
-    <div class="section-heading">
-      <h2>Capability limits</h2>
-      <button
-        onclick={() =>
-          controller.run(() => controller.service.settings('security'))}
-        >Open Privacy & Security</button
-      >
-    </div>
-    {#each machine.capabilities.filter((c) => !['Hardware inventory', 'Startup coverage'].includes(c.name)) as c}<div
-        class="capability-row"
-      >
-        <div>
-          <strong>{c.name}</strong>
-          <p class="muted">{c.explanation}</p>
-        </div>
-        <Status value={c.state} />
-      </div>{/each}
-  </section>
-{:else}
+  </div>{:else}
   <div
     class="tabs"
     role="tablist"

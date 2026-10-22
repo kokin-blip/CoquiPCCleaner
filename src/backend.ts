@@ -28,7 +28,22 @@ import type { ActivityRecord } from './bindings/ActivityRecord';
 import type { RetainedRecord } from './bindings/RetainedRecord';
 import type { MaintenanceRule } from './bindings/MaintenanceRule';
 import type { MaintenanceEvent } from './bindings/MaintenanceEvent';
+import type { FirmwareRequest } from './bindings/FirmwareRequest';
+import type { FirmwareReport } from './bindings/FirmwareReport';
+import type { FirmwarePlan } from './bindings/FirmwarePlan';
+import type { FirmwarePlanKind } from './bindings/FirmwarePlanKind';
 export interface Backend {
+  auditFirmware(
+    request: FirmwareRequest,
+    onEvent: (r: FirmwareReport) => void,
+  ): Promise<FirmwareReport>;
+  firmwarePlan(reportId: string, kind: FirmwarePlanKind): Promise<FirmwarePlan>;
+  acknowledgeFirmwarePlan(id: string, accepted: boolean): Promise<FirmwarePlan>;
+  observeFirmwarePlan(
+    id: string,
+    performed: boolean,
+    onEvent: (r: FirmwareReport) => void,
+  ): Promise<FirmwarePlan>;
   reference(url: string): Promise<void>;
   analyzeDuplicates(
     sessionId: string,
@@ -94,6 +109,19 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  auditFirmware: (request, onEvent) => {
+    const channel = new Channel<FirmwareReport>();
+    channel.onmessage = onEvent;
+    return invoke('audit_firmware', { request, onEvent: channel });
+  },
+  firmwarePlan: (reportId, kind) => invoke('firmware_plan', { reportId, kind }),
+  acknowledgeFirmwarePlan: (id, accepted) =>
+    invoke('acknowledge_firmware_plan', { id, accepted }),
+  observeFirmwarePlan: (id, performed, onEvent) => {
+    const channel = new Channel<FirmwareReport>();
+    channel.onmessage = onEvent;
+    return invoke('observe_firmware_plan', { id, performed, onEvent: channel });
+  },
   reference: (url) => invoke('open_reference', { url }),
   analyzeDuplicates: (sessionId, onEvent) => {
     const channel = new Channel<DuplicateReport>();

@@ -1988,3 +1988,71 @@ tbody tr:last-child td {
     flex-wrap: wrap;
   }
 }
+
+/* Phase 3 extends the existing evidence workspace without new visual tokens. */
+.firmware-options .check-row {
+  align-items: start;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.firmware-options .check-row strong,
+.firmware-options .check-row .small {
+  display: block;
+}
+.firmware-options input {
+  margin-top: 4px;
+}
+.firmware-network {
+  margin-block: 16px;
+  max-width: 75ch;
+}
+.firmware-network p,
+.firmware-plan > p,
+.firmware-plan li,
+.firmware-report > p {
+  max-width: 75ch;
+}
+.firmware-plan li {
+  margin-block: 8px;
+}
+.firmware-cautions {
+  padding: 12px 12px 12px 32px;
+  background: var(--warning-wash);
+  color: var(--warning);
+  border-radius: 6px;
+}
+.firmware-finding {
+  padding-block: 12px;
+  border-top: 1px solid var(--border);
+}
+.firmware-plan .check-row {
+  margin-block: 16px;
+}
+.firmware-plan .section-heading {
+  flex-wrap: wrap;
+}
+.firmware-report .table-scroll td {
+  vertical-align: top;
+}
+
+.firmware-workspace .check-row,
+.firmware-plan .check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+.firmware-workspace .check-row input,
+.firmware-plan .check-row input {
+  flex: 0 0 auto;
+}
+.firmware-workspace .button-row,
+.firmware-plan .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.firmware-workspace .history-row {
+  justify-content: space-between;
+}

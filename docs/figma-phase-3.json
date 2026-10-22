@@ -1,0 +1,67 @@
+{
+  "pageId": "155:91",
+  "frames": [
+    "177:1249",
+    "177:1351",
+    "177:1453"
+  ],
+  "actions": [
+    "177:1349",
+    "177:1451",
+    "177:1553"
+  ],
+  "evidence": [
+    {
+      "id": "177:1249",
+      "name": "Firmware / Optional audit scope / Phase 3.1",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 14,
+        "TEXT": 22,
+        "INSTANCE": 19,
+        "VECTOR": 36
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": 0
+    },
+    {
+      "id": "177:1351",
+      "name": "Firmware / Evidence and coverage / Phase 3.1",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 14,
+        "TEXT": 22,
+        "INSTANCE": 19,
+        "VECTOR": 36
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": 0
+    },
+    {
+      "id": "177:1453",
+      "name": "Firmware / Apple guidance and outcome / Phase 3.1",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 14,
+        "TEXT": 22,
+        "INSTANCE": 19,
+        "VECTOR": 36
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": 0
+    }
+  ],
+  "sourcePreserved": "173:1385",
+  "sourceButton": "156:32",
+  "appearanceCollection": "VariableCollectionId:155:94",
+  "font": "Incumbent Inter fallback; native app uses macOS system font"
+}

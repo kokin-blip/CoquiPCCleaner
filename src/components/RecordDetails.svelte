@@ -2,6 +2,8 @@
   import type { createAppStore } from '../state';
   import type { RetainedRecord } from '../bindings/RetainedRecord';
   import Evidence from './Evidence.svelte';
+  import FirmwareReportView from './FirmwareReportView.svelte';
+  import FirmwarePlanView from './FirmwarePlanView.svelte';
   import Status from './Status.svelte';
   import { bytes, date } from '../format';
   let {
@@ -30,7 +32,13 @@
 </script>
 
 {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
-{#if record.kind === 'baseline'}<h2>{record.data.request.workload}</h2>
+{#if record.kind === 'firmware'}<FirmwareReportView
+    report={record.data}
+  />{:else if record.kind === 'firmwarePlan'}<FirmwarePlanView
+    {controller}
+    plan={record.data}
+    onUpdate={(p) => onUpdate({ kind: 'firmwarePlan', data: p })}
+  />{:else if record.kind === 'baseline'}<h2>{record.data.request.workload}</h2>
   <Status value={record.data.status} />
   <p>{record.data.request.target} · {record.data.request.context}</p>
   <p class="muted">{record.data.qualification}</p>

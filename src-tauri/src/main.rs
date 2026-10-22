@@ -94,6 +94,7 @@ fn open_system_settings(destination: String) -> Response<()> {
         "login" => "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
         "power" => "x-apple.systempreferences:com.apple.Battery-Settings.extension",
         "storage" => "x-apple.systempreferences:com.apple.settings.Storage",
+        "updates" => "x-apple.systempreferences:com.apple.Software-Update-Settings.extension",
         "security" => "x-apple.systempreferences:com.apple.preference.security",
         _ => return Err("Unknown System Settings destination".into()),
     };
@@ -278,6 +279,9 @@ fn open_reference(url: String) -> Response<()> {
         "https://support.apple.com/en-ie/102328",
         "https://support.apple.com/macos/upgrade",
         "https://www.apple.com/mac/compare/",
+        coqui_engine::firmware::UPDATE_GUIDE,
+        coqui_engine::firmware::POLICY_GUIDE,
+        coqui_engine::firmware::RECOVERY_GUIDE,
     ];
     if !allowed.contains(&url.as_str()) {
         return Err("Unknown reference link".into());
@@ -292,11 +296,48 @@ fn open_reference(url: String) -> Response<()> {
         Err("Could not open reference in your browser".into())
     }
 }
+#[tauri::command]
+async fn audit_firmware(
+    request: FirmwareRequest,
+    on_event: Channel<FirmwareReport>,
+) -> Response<FirmwareReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::audit_firmware(request, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+fn firmware_plan(report_id: String, kind: FirmwarePlanKind) -> Response<FirmwarePlan> {
+    api::firmware_plan(report_id, kind).map_err(error)
+}
+#[tauri::command]
+fn acknowledge_firmware_plan(id: String, accepted: bool) -> Response<FirmwarePlan> {
+    api::acknowledge_firmware_plan(id, accepted).map_err(error)
+}
+#[tauri::command]
+async fn observe_firmware_plan(
+    id: String,
+    performed: bool,
+    on_event: Channel<FirmwareReport>,
+) -> Response<FirmwarePlan> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::observe_firmware_plan(id, performed, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             open_reference,
+            audit_firmware,
+            firmware_plan,
+            acknowledge_firmware_plan,
+            observe_firmware_plan,
             cancel_work,
             analyze_duplicates,
             preview_duplicate_cleanup,

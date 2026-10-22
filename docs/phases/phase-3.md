@@ -7,3 +7,5 @@ Each advanced capability is individually enabled. Default stays read-only. Provi
 Any supported firmware modification is a separate operation with additional explicit authorization, compatibility/eligibility checks, interruption/reboot warnings and supported recovery guidance. It never joins routine cleanup or power-profile batches. Do not invent vendor APIs or promise modification support before a tested implementation exists.
 
 Acceptance: supported/unsupported model matrix, permission failures, update-source freshness, manual-only actions, security status uncertainty and truthful reboot/recovery states. Preserve original Flow H.
+
+Milestone 3.1 implementation and measured acceptance results: [phase-3-implementation.md](phase-3-implementation.md). The specification above remains the full Phase 3 contract; no firmware-modification support is claimed.

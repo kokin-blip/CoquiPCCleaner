@@ -55,8 +55,10 @@ Version 0.3.0 adds Optimization → Developer artifacts: recognized outputs, ind
 
 Supported project-folder approval, verification, recovery and disposable fixture commands: [Phase 2.3](docs/phases/project-cleanup.md).
 
-Version 0.5.0 remaining supported workflows, operation bounds, manual capabilities and persistence: [Phase 2.4](docs/phases/phase-2-workflows.md). Native disposable duplicate/keeper Trash verification (explicit, then restores its fixture):
+Version 0.6.0 remaining supported workflows, operation bounds, manual capabilities and persistence: [Phase 2.4](docs/phases/phase-2-workflows.md). Native disposable duplicate/keeper Trash verification (explicit, then restores its fixture):
 
 ```sh
 cargo test --manifest-path engine/Cargo.toml --locked --test phase2 native_duplicate_trash -- --ignored
 ```
+
+Phase 3.1 adds **Firmware & Security → Advanced audit**: individually select firmware inventory, readable security status and an optional macOS update check. Update checks require network consent each run and never download or install. The Guidance tab prepares separate Apple manual checklists with interruption/recovery disclosures; observations after a manual step remain qualified. Audits and plans are retained in History → Activity and follow Settings retention/purge. See [capabilities, compatibility and validation](docs/phases/phase-3-implementation.md).

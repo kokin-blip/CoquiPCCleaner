@@ -14,3 +14,5 @@ pub mod duplicates;
 pub mod maintenance;
 pub mod records;
 pub mod resources;
+
+pub mod firmware;

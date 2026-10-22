@@ -615,4 +615,83 @@ pub enum RetainedRecord {
     Investigation(Investigation),
     Advice(AdviceReport),
     Resources(ResourceReview),
+    Firmware(FirmwareReport),
+    FirmwarePlan(FirmwarePlan),
+}
+
+/// Scope is explicit for every run; no capability is enabled by a saved default.
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareRequest {
+    pub inventory: bool,
+    pub security: bool,
+    pub updates: bool,
+    pub network_acknowledged: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformCompatibility {
+    pub manufacturer: String,
+    pub model: String,
+    pub chip: String,
+    pub architecture: String,
+    pub os_version: String,
+    pub os_build: String,
+    pub eligible: bool,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareUpdate {
+    pub label: String,
+    pub title: String,
+    pub version: String,
+    pub restart: bool,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareReport {
+    pub id: String,
+    pub created_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub stage: String,
+    pub request: FirmwareRequest,
+    pub platform: PlatformCompatibility,
+    pub evidence: Vec<DiagnosticEvidence>,
+    pub capabilities: Vec<SystemCapability>,
+    pub findings: Vec<DiagnosticFinding>,
+    pub updates: Vec<FirmwareUpdate>,
+    pub update_state: String,
+    pub update_checked_at: Option<String>,
+    pub errors: Vec<String>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum FirmwarePlanKind {
+    SoftwareUpdate,
+    StartupPolicyReview,
+    RecoveryReview,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwarePlan {
+    pub id: String,
+    pub created_at: String,
+    pub report_id: String,
+    pub kind: FirmwarePlanKind,
+    pub status: String,
+    pub title: String,
+    pub before: PlatformCompatibility,
+    pub previous: Vec<DiagnosticEvidence>,
+    pub steps: Vec<String>,
+    pub cautions: Vec<String>,
+    pub source_url: String,
+    pub source_reviewed_at: String,
+    pub acknowledged_at: Option<String>,
+    pub outcome: String,
+    pub after_report_id: Option<String>,
+    pub recovery: String,
 }

@@ -505,6 +505,8 @@ pub fn activity_records(kind: Option<String>, offset: u32) -> Result<Vec<Activit
 pub fn get_record(kind: String, id: String) -> Result<RetainedRecord> {
     let c = database::open(&engine()?.path)?;
     Ok(match kind.as_str() {
+        "firmware" => RetainedRecord::Firmware(crate::records::get(&c, &kind, &id)?),
+        "firmwarePlan" => RetainedRecord::FirmwarePlan(crate::records::get(&c, &kind, &id)?),
         "duplicates" => RetainedRecord::Duplicates(crate::records::get(&c, &kind, &id)?),
         "baseline" => RetainedRecord::Baseline(crate::records::get(&c, &kind, &id)?),
         "manualPlan" => RetainedRecord::ManualPlan(crate::records::get(&c, &kind, &id)?),
@@ -553,4 +555,24 @@ pub fn maintenance_tick() -> Result<Option<MaintenanceEvent>> {
     Ok(Some(crate::maintenance::finish(
         &c, event, &status, id, message,
     )?))
+}
+
+pub fn audit_firmware(
+    request: FirmwareRequest,
+    send: impl FnMut(FirmwareReport) -> bool,
+) -> Result<FirmwareReport> {
+    with_work(|e, c| crate::firmware::audit(c, request, &e.cancel_work, send))
+}
+pub fn firmware_plan(report_id: String, kind: FirmwarePlanKind) -> Result<FirmwarePlan> {
+    with_work(|_, c| crate::firmware::plan(c, &report_id, kind))
+}
+pub fn acknowledge_firmware_plan(id: String, accepted: bool) -> Result<FirmwarePlan> {
+    with_work(|_, c| crate::firmware::acknowledge(c, &id, accepted))
+}
+pub fn observe_firmware_plan(
+    id: String,
+    performed: bool,
+    send: impl FnMut(FirmwareReport) -> bool,
+) -> Result<FirmwarePlan> {
+    with_work(|e, c| crate::firmware::observe(c, &id, performed, &e.cancel_work, send))
 }

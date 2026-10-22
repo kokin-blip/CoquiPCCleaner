@@ -28,6 +28,7 @@
   import Analysis from './features/Analysis.svelte';
   import Storage from './features/Storage.svelte';
   import Hardware from './features/Hardware.svelte';
+  import Firmware from './features/Firmware.svelte';
   import Performance from './features/Performance.svelte';
   import History from './features/History.svelte';
   import Optimization from './features/Optimization.svelte';
@@ -326,9 +327,8 @@
             {controller}
           />{:else if $controller.page === 'Performance'}<Performance
             {controller}
-          />{:else if $controller.page === 'Firmware & Security'}<Hardware
+          />{:else if $controller.page === 'Firmware & Security'}<Firmware
             {controller}
-            firmware
           />{:else if $controller.page === 'Ask Coqui'}<AskCoqui
             {controller}
           />{:else if $controller.page === 'Maintenance'}<Maintenance

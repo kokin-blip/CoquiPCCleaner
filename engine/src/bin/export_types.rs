@@ -21,5 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     AdviceRequest::export_all_to(&path)?;
     ActivityRecord::export_all_to(&path)?;
     RetainedRecord::export_all_to(&path)?;
+    FirmwareRequest::export_all_to(&path)?;
+    FirmwareReport::export_all_to(&path)?;
+    FirmwarePlanKind::export_all_to(&path)?;
     Ok(())
 }

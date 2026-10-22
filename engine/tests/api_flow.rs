@@ -223,7 +223,51 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
         api::get_record("duplicates".into(), duplicate.id).unwrap(),
         RetainedRecord::Duplicates(_)
     ));
-    assert_eq!(api::activity_records(None, 0).unwrap().len(), 5);
+    let audit = api::audit_firmware(
+        FirmwareRequest {
+            inventory: true,
+            security: true,
+            updates: false,
+            network_acknowledged: false,
+        },
+        |_| true,
+    )
+    .unwrap();
+    assert_eq!(audit.update_state, "notRequested");
+    if audit.platform.eligible {
+        let guidance =
+            api::firmware_plan(audit.id.clone(), FirmwarePlanKind::SoftwareUpdate).unwrap();
+        assert_eq!(
+            api::acknowledge_firmware_plan(guidance.id.clone(), false)
+                .unwrap()
+                .status,
+            "declined"
+        );
+        assert!(matches!(
+            api::get_record("firmwarePlan".into(), guidance.id).unwrap(),
+            RetainedRecord::FirmwarePlan(_)
+        ));
+    }
+    let cancelled = api::audit_firmware(
+        FirmwareRequest {
+            inventory: true,
+            security: false,
+            updates: false,
+            network_acknowledged: false,
+        },
+        |_| {
+            api::cancel_work().unwrap();
+            true
+        },
+    )
+    .unwrap();
+    assert_eq!(cancelled.status, "cancelled");
+    api::init_engine(data.path().to_string_lossy().into()).unwrap();
+    assert!(matches!(
+        api::get_record("firmware".into(), audit.id).unwrap(),
+        RetainedRecord::Firmware(_)
+    ));
+    assert!(api::activity_records(None, 0).unwrap().len() >= 7);
     api::clear_diagnostic_data().unwrap();
     assert!(api::scan_history(0, 10).unwrap().is_empty());
     assert!(api::activity_records(None, 0).unwrap().is_empty());

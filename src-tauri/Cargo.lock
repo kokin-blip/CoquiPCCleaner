@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "coqui-pc-cleaner"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "coqui_engine",
  "serde",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "coqui_engine"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "chrono",

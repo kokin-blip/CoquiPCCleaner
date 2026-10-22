@@ -48,6 +48,10 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     throw new Error('No phase 2 fixture configured');
   };
   return {
+    auditFirmware: vi.fn(missing),
+    firmwarePlan: vi.fn(missing),
+    acknowledgeFirmwarePlan: vi.fn(missing),
+    observeFirmwarePlan: vi.fn(missing),
     reference: vi.fn(async () => {}),
     analyzeDuplicates: vi.fn(missing),
     previewDuplicates: vi.fn(missing),

@@ -2,9 +2,11 @@
 import type { AdviceReport } from "./AdviceReport";
 import type { Baseline } from "./Baseline";
 import type { DuplicateReport } from "./DuplicateReport";
+import type { FirmwarePlan } from "./FirmwarePlan";
+import type { FirmwareReport } from "./FirmwareReport";
 import type { Investigation } from "./Investigation";
 import type { MaintenanceEvent } from "./MaintenanceEvent";
 import type { ManualPlan } from "./ManualPlan";
 import type { ResourceReview } from "./ResourceReview";
 
-export type RetainedRecord = { "kind": "duplicates", "data": DuplicateReport } | { "kind": "baseline", "data": Baseline } | { "kind": "manualPlan", "data": ManualPlan } | { "kind": "maintenance", "data": MaintenanceEvent } | { "kind": "investigation", "data": Investigation } | { "kind": "advice", "data": AdviceReport } | { "kind": "resources", "data": ResourceReview };
+export type RetainedRecord = { "kind": "duplicates", "data": DuplicateReport } | { "kind": "baseline", "data": Baseline } | { "kind": "manualPlan", "data": ManualPlan } | { "kind": "maintenance", "data": MaintenanceEvent } | { "kind": "investigation", "data": Investigation } | { "kind": "advice", "data": AdviceReport } | { "kind": "resources", "data": ResourceReview } | { "kind": "firmware", "data": FirmwareReport } | { "kind": "firmwarePlan", "data": FirmwarePlan };
