@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import {
     Activity,
+    MessageCircle,
+    CalendarClock,
     BrushCleaning,
     LayoutDashboard,
     Search,
@@ -29,6 +31,8 @@
   import Performance from './features/Performance.svelte';
   import History from './features/History.svelte';
   import Optimization from './features/Optimization.svelte';
+  import AskCoqui from './features/AskCoqui.svelte';
+  import Maintenance from './features/Maintenance.svelte';
   import Settings from './features/Settings.svelte';
   import Dialog from './components/Dialog.svelte';
   import Status from './components/Status.svelte';
@@ -38,6 +42,7 @@
   let deepConfirm = $state(false);
   let notifications = $state(false);
   const pages: { name: Page; icon: typeof LayoutDashboard; group: string }[] = [
+    { name: 'Ask Coqui', icon: MessageCircle, group: 'Main' },
     { name: 'Dashboard', icon: LayoutDashboard, group: 'Main' },
     { name: 'System Analysis', icon: ScanLine, group: 'Analysis' },
     { name: 'Hardware', icon: Cpu, group: 'Analysis' },
@@ -45,6 +50,7 @@
     { name: 'Optimization', icon: BrushCleaning, group: 'Analysis' },
     { name: 'Performance', icon: Activity, group: 'Analysis' },
     { name: 'Firmware & Security', icon: ShieldCheck, group: 'Analysis' },
+    { name: 'Maintenance', icon: CalendarClock, group: 'Application' },
     { name: 'History', icon: HistoryIcon, group: 'Application' },
     { name: 'Settings', icon: SettingsIcon, group: 'Application' },
   ];
@@ -293,6 +299,16 @@
               : 'Stop remaining moves'}</button
           >
         </div>{/if}
+      {#if $controller.workRunning}<div class="work-banner" role="status">
+          <span
+            ><LoaderCircle class="spin" size={15} />
+            {$controller.workLabel}…</span
+          ><button
+            onclick={() =>
+              controller.run(() => controller.service.cancelWork())}
+            >Cancel operation</button
+          >
+        </div>{/if}
       <main class="content" id="main-content" tabindex="-1">
         {#if $controller.page === 'Dashboard'}<Dashboard
             {controller}
@@ -313,6 +329,10 @@
           />{:else if $controller.page === 'Firmware & Security'}<Hardware
             {controller}
             firmware
+          />{:else if $controller.page === 'Ask Coqui'}<AskCoqui
+            {controller}
+          />{:else if $controller.page === 'Maintenance'}<Maintenance
+            {controller}
           />{:else if $controller.page === 'History'}<History
             {controller}
           />{:else}<Settings {controller} />{/if}

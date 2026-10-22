@@ -10,6 +10,8 @@
   import type { CleanupFile } from '../bindings/CleanupFile';
   import type { CleanupPlan } from '../bindings/CleanupPlan';
   import type { ProjectCleanupPage } from '../bindings/ProjectCleanupPage';
+  import Duplicates from './Duplicates.svelte';
+  import Resources from './Resources.svelte';
   import DeveloperArtifacts from './DeveloperArtifacts.svelte';
   import Dialog from '../components/Dialog.svelte';
   import Status from '../components/Status.svelte';
@@ -218,7 +220,8 @@
   </div>
   <button
     onclick={onScan}
-    disabled={$controller.scanning ||
+    disabled={$controller.workRunning ||
+      $controller.scanning ||
       $controller.cleanupRunning ||
       $controller.cleanupPreparing ||
       $controller.developerRunning}><Search size={16} />Analyze storage</button
@@ -231,7 +234,7 @@
   onkeydown={tabKeys}
   aria-label="Optimization views"
 >
-  {#each ['Cache files', 'Developer artifacts', 'Action history'] as name}<button
+  {#each ['Cache files', 'Developer artifacts', 'Duplicates', 'Resources', 'Action history'] as name}<button
       role="tab"
       tabindex={tab === name ? 0 : -1}
       aria-selected={tab === name}
@@ -309,7 +312,10 @@
       </p>
       <button class="primary" onclick={onScan}>Analyze storage</button>
     </div>
-  {:else if $controller.scanning}<div class="empty-inline" role="status">
+  {:else if $controller.workRunning || $controller.scanning}<div
+      class="empty-inline"
+      role="status"
+    >
       <h2>Analysis is in progress.</h2>
       <p>Eligible files will be available when the scan finishes.</p>
     </div>
@@ -418,7 +424,16 @@
       </div>
     </section>
   {/if}
-{:else if tab === 'Developer artifacts'}
+{:else if tab === 'Duplicates'}<Duplicates
+    {controller}
+    onReview={(plan) => {
+      review = plan;
+      closed = false;
+      understood = false;
+    }}
+  />{:else if tab === 'Resources'}<Resources
+    {controller}
+  />{:else if tab === 'Developer artifacts'}
   <DeveloperArtifacts
     {controller}
     {onScan}
@@ -439,7 +454,9 @@
           ><strong
             >{plan.projectCleanup
               ? 'Project folder review'
-              : 'Cache file review'} · {plan.items.length}
+              : plan.duplicateCleanup
+                ? 'Duplicate copy review'
+                : 'Cache file review'} · {plan.items.length}
             {plan.projectCleanup
               ? plan.items.length === 1
                 ? 'folder'
@@ -479,8 +496,13 @@
     <p>
       Review expires {date(review.expiresAt)}. {review.projectCleanup
         ? 'The entire folder, manifests, Git state and worktree relationships are rechecked before moving. Changed or unavailable contents prevent the move.'
-        : 'Files are rechecked immediately before moving. A changed or unavailable file will be skipped.'}
+        : review.duplicateCleanup
+          ? 'Each copy and its retained keeper are freshly hashed and byte-compared before the move. Changed or unavailable contents prevent the move.'
+          : 'Files are rechecked immediately before moving. A changed or unavailable file will be skipped.'}
     </p>
+    {#if review.duplicateCleanup}<p class="callout">
+        {review.verification}
+      </p>{/if}
     <p>
       <strong
         >{bytes(review.allocatedBytes)} allocated across the selection.</strong
@@ -562,9 +584,12 @@
         >{#if review.projectCleanup}I reviewed the entire folder and its
           contents, including ignored files. They contain no unique work and I
           can regenerate them. Recovery depends on the folder remaining
-          available in Trash.{:else}I reviewed every path and accept that cached
-          data may need to be downloaded or regenerated. Recovery depends on
-          these items remaining available in Trash.{/if}</span
+          available in Trash.{:else if review.duplicateCleanup}I reviewed every
+          copy and the keeper. These are not intentional backups I need; I
+          accept removal of the selected copies. Recovery depends on the copies
+          remaining available in Trash.{:else}I reviewed every path and accept
+          that cached data may need to be downloaded or regenerated. Recovery
+          depends on these items remaining available in Trash.{/if}</span
       ></label
     >
     <div class="dialog-actions">

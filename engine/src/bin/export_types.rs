@@ -14,5 +14,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     CleanupFilePage::export_all_to(&path)?;
     ProjectCleanupPage::export_all_to(&path)?;
     DeveloperReport::export_all_to(&path)?;
+    DuplicateCleanupRequest::export_all_to(&path)?;
+    BaselineRequest::export_all_to(&path)?;
+    BaselineComparison::export_all_to(&path)?;
+    MaintenanceRule::export_all_to(&path)?;
+    AdviceRequest::export_all_to(&path)?;
+    ActivityRecord::export_all_to(&path)?;
+    RetainedRecord::export_all_to(&path)?;
     Ok(())
 }

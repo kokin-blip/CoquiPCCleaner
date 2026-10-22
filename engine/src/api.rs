@@ -17,6 +17,7 @@ struct Engine {
     stop_monitor: AtomicBool,
     cancel_cleanup: AtomicBool,
     cancel_developer: AtomicBool,
+    cancel_work: AtomicBool,
 }
 static ENGINE: OnceLock<Mutex<Option<Arc<Engine>>>> = OnceLock::new();
 fn engine() -> Result<Arc<Engine>> {
@@ -58,6 +59,7 @@ pub fn init_engine(data_directory: String) -> Result<AppSettings> {
         stop_monitor: AtomicBool::new(false),
         cancel_cleanup: AtomicBool::new(false),
         cancel_developer: AtomicBool::new(false),
+        cancel_work: AtomicBool::new(false),
     }));
     Ok(settings)
 }
@@ -433,4 +435,122 @@ pub fn analyze_developer(
 pub fn cancel_developer() -> Result<()> {
     engine()?.cancel_developer.store(true, Ordering::SeqCst);
     Ok(())
+}
+
+pub fn cancel_work() -> Result<()> {
+    engine()?.cancel_work.store(true, Ordering::SeqCst);
+    Ok(())
+}
+fn with_work<T>(action: impl FnOnce(&Engine, &rusqlite::Connection) -> Result<T>) -> Result<T> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active scan, analysis or cleanup"
+    );
+    let _guard = ActiveGuard(&e.active);
+    e.cancel_work.store(false, Ordering::SeqCst);
+    action(&e, &database::open(&e.path)?)
+}
+pub fn analyze_duplicates(
+    session_id: String,
+    send: impl FnMut(DuplicateReport) -> bool,
+) -> Result<DuplicateReport> {
+    with_work(|e, c| {
+        crate::duplicates::analyze(c, &session_id, &cleanup_policy(e)?, &e.cancel_work, send)
+    })
+}
+pub fn preview_duplicate_cleanup(request: DuplicateCleanupRequest) -> Result<CleanupPlan> {
+    with_work(|e, c| cleanup::preview_duplicates(c, request, &cleanup_policy(e)?, &e.cancel_work))
+}
+pub fn capture_baseline(
+    request: BaselineRequest,
+    send: impl FnMut(Baseline) -> bool,
+) -> Result<Baseline> {
+    with_work(|e, c| crate::baseline::capture(c, request, &e.cancel_work, send))
+}
+pub fn compare_baselines(before: String, after: String) -> Result<BaselineComparison> {
+    crate::baseline::compare(&database::open(&engine()?.path)?, &before, &after)
+}
+pub fn create_manual_plan(kind: String, requested: String) -> Result<ManualPlan> {
+    with_work(|_, c| crate::baseline::plan(c, &kind, &requested))
+}
+pub fn verify_manual_plan(id: String, performed: bool) -> Result<ManualPlan> {
+    with_work(|_, c| crate::baseline::verify_plan(c, &id, performed))
+}
+pub fn ask_coqui(
+    id: Option<String>,
+    session_id: Option<String>,
+    text: String,
+) -> Result<Investigation> {
+    with_work(|_, c| crate::assistant::ask(c, id.as_deref(), session_id.as_deref(), &text))
+}
+pub fn assess_workload(request: AdviceRequest) -> Result<AdviceReport> {
+    with_work(|_, c| crate::advice::assess(c, request))
+}
+pub fn analyze_resources(session_id: String) -> Result<ResourceReview> {
+    with_work(|e, c| {
+        crate::resources::analyze(
+            c,
+            &session_id,
+            &cleanup_policy(e)?.exclusions,
+            &e.cancel_work,
+        )
+    })
+}
+pub fn activity_records(kind: Option<String>, offset: u32) -> Result<Vec<ActivityRecord>> {
+    crate::records::list(&database::open(&engine()?.path)?, kind.as_deref(), offset)
+}
+pub fn get_record(kind: String, id: String) -> Result<RetainedRecord> {
+    let c = database::open(&engine()?.path)?;
+    Ok(match kind.as_str() {
+        "duplicates" => RetainedRecord::Duplicates(crate::records::get(&c, &kind, &id)?),
+        "baseline" => RetainedRecord::Baseline(crate::records::get(&c, &kind, &id)?),
+        "manualPlan" => RetainedRecord::ManualPlan(crate::records::get(&c, &kind, &id)?),
+        "maintenance" => RetainedRecord::Maintenance(crate::records::get(&c, &kind, &id)?),
+        "investigation" => RetainedRecord::Investigation(crate::records::get(&c, &kind, &id)?),
+        "advice" => RetainedRecord::Advice(crate::records::get(&c, &kind, &id)?),
+        "resources" => RetainedRecord::Resources(crate::records::get(&c, &kind, &id)?),
+        _ => anyhow::bail!("Unknown record type"),
+    })
+}
+pub fn maintenance_rule() -> Result<Option<MaintenanceRule>> {
+    crate::maintenance::get(&database::open(&engine()?.path)?)
+}
+pub fn save_maintenance(rule: MaintenanceRule) -> Result<()> {
+    with_work(|_, c| crate::maintenance::save(c, &rule))
+}
+pub fn maintenance_tick() -> Result<Option<MaintenanceEvent>> {
+    let e = engine()?;
+    if e.active
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Ok(None);
+    }
+    let guard = ActiveGuard(&e.active);
+    let mut c = database::open(&e.path)?;
+    let Some((mut rule, event)) = crate::maintenance::due(&mut c)? else {
+        return Ok(None);
+    };
+    let prefs = database::settings(&c)?;
+    for p in prefs.excluded_paths {
+        if !rule.scope.excluded_paths.contains(&p) {
+            rule.scope.excluded_paths.push(p);
+        }
+    }
+    drop(guard);
+    if rule.mode == "reminder" {
+        return Ok(Some(event));
+    }
+    let mut result = None;
+    let scan = scan(rule.scope, |e| {
+        result = Some(e.session);
+        true
+    });
+    let (status,id,message)=match (scan,result){(Ok(()),Some(s))=>{let alerts=s.snapshot.as_ref().map(|m|m.disks.iter().filter(|d|!d.removable && d.total_bytes>0. && (1.-d.available_bytes/d.total_bytes)*100.>=rule.capacity_threshold_percent as f64).map(|d|format!("{} meets the {}% capacity alert threshold",d.mount,rule.capacity_threshold_percent)).collect::<Vec<_>>().join("; ")).unwrap_or_default();(s.status.clone(),Some(s.id),format!("Scheduled read-only scan: {}. {} No cleanup executed.",s.status,alerts))},(Err(error),_)=> ("failed".into(),None,format!("Scheduled scan did not finish: {error}. No automatic retry until the next due occurrence.")),_=> ("failed".into(),None,"No terminal scan result was retained".into())};
+    Ok(Some(crate::maintenance::finish(
+        &c, event, &status, id, message,
+    )?))
 }

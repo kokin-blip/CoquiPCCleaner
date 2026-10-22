@@ -179,8 +179,55 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
         api::decline_cleanup(plan.id.clone()).unwrap().status,
         "declined"
     );
+    let investigation =
+        api::ask_coqui(None, Some(id.clone()), "Review project storage".into()).unwrap();
+    let duplicate = api::analyze_duplicates(id.clone(), |_| true).unwrap();
+    let resources = api::analyze_resources(id.clone()).unwrap();
+    assert!(!resources.capabilities.is_empty());
+    let baseline = api::capture_baseline(
+        BaselineRequest {
+            workload: "Integration fixture".into(),
+            target: "Observe and cancel".into(),
+            context: "Controlled fixture".into(),
+            duration_seconds: 6,
+        },
+        |_| {
+            api::cancel_work().unwrap();
+            true
+        },
+    )
+    .unwrap();
+    assert_eq!(baseline.status, "cancelled");
+    assert!(!baseline.samples.is_empty());
+    let maintenance = MaintenanceRule {
+        enabled: true,
+        mode: "reminder".into(),
+        interval_days: 7,
+        next_due_at: "2020-01-01T00:00:00Z".into(),
+        scope: ScanRequest {
+            mode: "selected".into(),
+            roots: vec![fixture.path().to_string_lossy().into()],
+            excluded_paths: vec![],
+        },
+        capacity_threshold_percent: 90,
+    };
+    api::save_maintenance(maintenance).unwrap();
+    assert_eq!(api::maintenance_tick().unwrap().unwrap().status, "reminder");
+    assert!(api::maintenance_tick().unwrap().is_none());
+    api::init_engine(data.path().to_string_lossy().into()).unwrap();
+    assert!(matches!(
+        api::get_record("investigation".into(), investigation.id).unwrap(),
+        RetainedRecord::Investigation(_)
+    ));
+    assert!(matches!(
+        api::get_record("duplicates".into(), duplicate.id).unwrap(),
+        RetainedRecord::Duplicates(_)
+    ));
+    assert_eq!(api::activity_records(None, 0).unwrap().len(), 5);
     api::clear_diagnostic_data().unwrap();
     assert!(api::scan_history(0, 10).unwrap().is_empty());
+    assert!(api::activity_records(None, 0).unwrap().is_empty());
+    assert!(api::maintenance_rule().unwrap().unwrap().enabled);
     assert!(api::get_cleanup_plan(plan.id).is_err());
     assert!(api::developer_report(id).unwrap().is_none());
     assert!(fixture.path().join("keep.txt").exists());

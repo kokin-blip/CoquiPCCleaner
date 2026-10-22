@@ -9,6 +9,8 @@ import type { CleanupApproval } from './bindings/CleanupApproval';
 import type { CleanupRequest } from './bindings/CleanupRequest';
 
 export type Page =
+  | 'Ask Coqui'
+  | 'Maintenance'
   | 'Dashboard'
   | 'System Analysis'
   | 'Hardware'
@@ -26,6 +28,8 @@ export interface AppState {
   samples: LiveMetrics[];
   monitoringStatus: 'off' | 'starting' | 'live' | 'failed';
   monitoringError: string | null;
+  workRunning: boolean;
+  workLabel: string;
   scanning: boolean;
   developerRunning: boolean;
   developerReport: DeveloperReport | null;
@@ -46,6 +50,8 @@ export function createAppStore(service: Backend = nativeBackend) {
     samples: [],
     monitoringStatus: 'off',
     monitoringError: null,
+    workRunning: false,
+    workLabel: '',
     scanning: false,
     developerRunning: false,
     developerReport: null,
@@ -59,6 +65,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   });
   let monitoring: Promise<void> | null = null;
   let disposed = false;
+  let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
   let saves: Promise<void> = Promise.resolve();
   const fail = (e: unknown) =>
     store.update((s) => ({
@@ -122,6 +129,10 @@ export function createAppStore(service: Backend = nativeBackend) {
         history,
         session: history[0] ?? null,
       }));
+      if (!maintenanceTimer) {
+        maintenanceTimer = setInterval(() => void checkMaintenance(), 30000);
+        void checkMaintenance();
+      }
       if (settings.onboardingComplete && settings.monitoringEnabled)
         startMonitoring();
     } catch (e) {
@@ -167,10 +178,13 @@ export function createAppStore(service: Backend = nativeBackend) {
   async function scan() {
     const s = get(store);
     if (!s.settings || s.scanning) return;
-    if (s.cleanupRunning || s.cleanupPreparing || s.developerRunning) {
-      fail(
-        'Wait for cleanup or developer validation to finish before scanning.',
-      );
+    if (
+      s.workRunning ||
+      s.cleanupRunning ||
+      s.cleanupPreparing ||
+      s.developerRunning
+    ) {
+      fail('Wait for the active operation to finish before scanning.');
       return;
     }
     store.update((s) => ({
@@ -215,11 +229,12 @@ export function createAppStore(service: Backend = nativeBackend) {
       developerReport: null,
       samples: [],
       notice:
-        'Local diagnostic history, file indexes, developer reviews and cleanup action records removed. Your files and preferences were preserved.',
+        'Local scans, file indexes, reviews, investigations, measurements and action history removed. Files, preferences and the maintenance schedule were preserved.',
     }));
   }
   async function executeCleanup(approval: CleanupApproval) {
     if (
+      get(store).workRunning ||
       get(store).cleanupRunning ||
       get(store).cleanupPreparing ||
       get(store).scanning ||
@@ -245,6 +260,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   async function previewProjectCleanup(request: CleanupRequest) {
     const s = get(store);
     if (
+      s.workRunning ||
       s.scanning ||
       s.cleanupRunning ||
       s.cleanupPreparing ||
@@ -262,6 +278,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     const s = get(store);
     if (
       !s.session ||
+      s.workRunning ||
       s.scanning ||
       s.cleanupRunning ||
       s.cleanupPreparing ||
@@ -286,6 +303,53 @@ export function createAppStore(service: Backend = nativeBackend) {
       store.update((v) => ({ ...v, developerRunning: false }));
     }
   }
+  async function work<T>(label: string, action: () => Promise<T>): Promise<T> {
+    const s = get(store);
+    if (
+      s.workRunning ||
+      s.scanning ||
+      s.cleanupRunning ||
+      s.cleanupPreparing ||
+      s.developerRunning
+    )
+      throw new Error('Wait for the active operation');
+    store.update((s) => ({ ...s, workRunning: true, workLabel: label }));
+    try {
+      return await action();
+    } finally {
+      store.update((s) => ({ ...s, workRunning: false, workLabel: '' }));
+    }
+  }
+  async function checkMaintenance() {
+    if (
+      disposed ||
+      get(store).loading ||
+      !get(store).settings?.onboardingComplete
+    )
+      return;
+    const s = get(store);
+    if (
+      s.workRunning ||
+      s.scanning ||
+      s.cleanupRunning ||
+      s.cleanupPreparing ||
+      s.developerRunning
+    )
+      return;
+    try {
+      const rule = await service.maintenanceRule();
+      if (!rule?.enabled || Date.parse(rule.nextDueAt) > Date.now()) return;
+      const event = await work('Scheduled maintenance', () =>
+        service.maintenanceTick(),
+      );
+      if (event) {
+        store.update((s) => ({ ...s, notice: event.message }));
+        await refresh();
+      }
+    } catch (e) {
+      fail(e);
+    }
+  }
   async function run(action: () => Promise<unknown>) {
     try {
       await action();
@@ -296,6 +360,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   return {
     ...store,
     initialize,
+    work,
     executeCleanup,
     previewProjectCleanup,
     analyzeDeveloper,
@@ -313,6 +378,8 @@ export function createAppStore(service: Backend = nativeBackend) {
     dismiss: () => store.update((s) => ({ ...s, error: null, notice: null })),
     dispose: async () => {
       disposed = true;
+      if (maintenanceTimer) clearInterval(maintenanceTimer);
+      await service.cancelWork();
       store.update((s) => ({
         ...s,
         samples: [],

@@ -1,0 +1,28 @@
+{
+  "fileKey": "Gz7WEiN8Y3Vvivvae0ZPlP",
+  "pageId": "155:91",
+  "frames": {
+    "ask": "173:865",
+    "duplicates": "173:977",
+    "baselinesManualPlans": "173:1079",
+    "upgrade": "173:1181",
+    "resources": "173:1283",
+    "maintenanceHistory": "173:1385"
+  },
+  "actions": [
+    "173:975",
+    "173:1077",
+    "173:1179",
+    "173:1281",
+    "173:1383",
+    "173:1485"
+  ],
+  "sources": {
+    "shell": "165:64",
+    "button": "156:32",
+    "appearance": "VariableCollectionId:155:94"
+  },
+  "qualification": "Linked editable structural handoff with explicitly illustrative content. Original kit and milestone pages preserved; native packaged captures remain implementation evidence.",
+  "fontQualification": "Native macOS system typography; editable Figma Inter fallback. Connector listed SF Pro but rendered its glyphs blank; corrected all new text to incumbent Inter and visually confirmed.",
+  "validation": "Six editable frames: 14\u201318 frames, 21\u201327 text nodes, 19 instances and 36 vectors per view; no full-UI raster layers. Ask composition visually checked after one font correction."
+}

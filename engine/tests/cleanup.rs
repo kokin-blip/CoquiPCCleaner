@@ -396,7 +396,7 @@ fn migration_reopen_and_interruption_do_not_retry_uncertain_actions() {
         reopened
             .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
             .unwrap(),
-        3
+        4
     );
     database::purge(&reopened).unwrap();
     assert!(cleanup::history(&reopened, 0, 10).unwrap().is_empty());
@@ -409,7 +409,7 @@ fn version_one_database_preserves_settings_and_scans_on_upgrade() {
     let mut settings = AppSettings::default();
     settings.appearance = "light".into();
     database::save_settings(&c, &settings).unwrap();
-    c.execute_batch("DROP TABLE cleanup_plans; PRAGMA user_version=1;")
+    c.execute_batch("DROP TABLE records; DROP TABLE maintenance; DROP TABLE cleanup_plans; PRAGMA user_version=1;")
         .unwrap();
     drop(c);
     let c = database::open(&path).unwrap();

@@ -44,7 +44,26 @@ export const session: DiagnosticSession = {
   errors: [],
 };
 export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
+  const missing = async (): Promise<never> => {
+    throw new Error('No phase 2 fixture configured');
+  };
   return {
+    reference: vi.fn(async () => {}),
+    analyzeDuplicates: vi.fn(missing),
+    previewDuplicates: vi.fn(missing),
+    captureBaseline: vi.fn(missing),
+    compareBaselines: vi.fn(missing),
+    manualPlan: vi.fn(missing),
+    verifyManualPlan: vi.fn(missing),
+    ask: vi.fn(missing),
+    assess: vi.fn(missing),
+    resources: vi.fn(missing),
+    records: vi.fn(async () => []),
+    record: vi.fn(missing),
+    maintenanceRule: vi.fn(async () => null),
+    saveMaintenance: vi.fn(async () => {}),
+    maintenanceTick: vi.fn(async () => null),
+    cancelWork: vi.fn(async () => {}),
     developerReport: async () => null,
     analyzeDeveloper: vi.fn(async (sessionId, on) => {
       const report = {

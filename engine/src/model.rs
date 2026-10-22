@@ -296,6 +296,8 @@ pub struct CleanupItem {
 #[serde(rename_all = "camelCase")]
 pub struct CleanupPlan {
     #[serde(default)]
+    pub duplicate_cleanup: bool,
+    #[serde(default)]
     pub project_cleanup: bool,
     pub id: String,
     pub session_id: String,
@@ -412,4 +414,205 @@ pub struct DeveloperReport {
     pub artifacts: Vec<DeveloperArtifact>,
     pub errors: Vec<String>,
     pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateFile {
+    #[serde(default)]
+    pub review_supported: bool,
+    #[serde(default)]
+    pub review_qualification: String,
+    pub path: String,
+    pub logical_bytes: f64,
+    pub allocated_bytes: f64,
+    pub modified_at: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateGroup {
+    pub id: String,
+    pub digest: String,
+    pub files: Vec<DuplicateFile>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PhotoMatch {
+    pub left: String,
+    pub right: String,
+    pub distance: u32,
+    pub classification: String,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateReport {
+    pub id: String,
+    pub session_id: String,
+    pub created_at: String,
+    pub status: String,
+    pub stage: String,
+    pub examined: u32,
+    pub total: u32,
+    pub hashed_bytes: f64,
+    pub groups: Vec<DuplicateGroup>,
+    pub photo_matches: Vec<PhotoMatch>,
+    pub gaps: Vec<String>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateCleanupRequest {
+    pub report_id: String,
+    pub group_id: String,
+    pub keep_path: String,
+    pub remove_paths: Vec<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct BaselineRequest {
+    pub workload: String,
+    pub target: String,
+    pub context: String,
+    pub duration_seconds: u32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Baseline {
+    pub id: String,
+    pub created_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub request: BaselineRequest,
+    pub samples: Vec<LiveMetrics>,
+    pub power: Vec<DiagnosticEvidence>,
+    pub summary: Vec<DiagnosticEvidence>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct BaselineComparison {
+    pub before: Baseline,
+    pub after: Baseline,
+    pub observations: Vec<String>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualPlan {
+    pub id: String,
+    pub created_at: String,
+    pub kind: String,
+    pub requested: String,
+    pub previous: Vec<DiagnosticEvidence>,
+    pub steps: Vec<String>,
+    pub status: String,
+    pub observed: Vec<DiagnosticEvidence>,
+    pub verification: String,
+    pub recovery: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MaintenanceRule {
+    pub enabled: bool,
+    pub mode: String,
+    pub interval_days: u32,
+    pub next_due_at: String,
+    pub scope: ScanRequest,
+    pub capacity_threshold_percent: u32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MaintenanceEvent {
+    pub id: String,
+    pub created_at: String,
+    pub status: String,
+    pub message: String,
+    pub scan_id: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticTask {
+    pub name: String,
+    pub status: String,
+    pub evidence: Vec<DiagnosticEvidence>,
+    pub detail: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct InvestigationMessage {
+    pub role: String,
+    pub text: String,
+    pub created_at: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Investigation {
+    pub id: String,
+    pub created_at: String,
+    pub title: String,
+    pub session_id: Option<String>,
+    pub messages: Vec<InvestigationMessage>,
+    pub tasks: Vec<DiagnosticTask>,
+    pub findings: Vec<DiagnosticFinding>,
+    pub actions: Vec<String>,
+    pub status: String,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AdviceRequest {
+    pub session_id: String,
+    pub baseline_id: Option<String>,
+    pub workload: String,
+    pub expectation: String,
+    pub annual_growth_percent: f64,
+    pub current_demand_percent: f64,
+    pub quote_low: Option<f64>,
+    pub quote_high: Option<f64>,
+    pub quote_source: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AdviceReport {
+    pub id: String,
+    pub created_at: String,
+    pub workload: String,
+    pub assessment: String,
+    pub findings: Vec<DiagnosticFinding>,
+    pub scenarios: Vec<DiagnosticEvidence>,
+    pub sources: Vec<String>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceReview {
+    pub id: String,
+    pub created_at: String,
+    pub session_id: String,
+    pub capabilities: Vec<SystemCapability>,
+    pub evidence: Vec<DiagnosticEvidence>,
+    pub suggestions: Vec<DiagnosticFinding>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityRecord {
+    pub id: String,
+    pub kind: String,
+    pub created_at: String,
+    pub title: String,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "data", rename_all = "camelCase")]
+pub enum RetainedRecord {
+    Duplicates(DuplicateReport),
+    Baseline(Baseline),
+    ManualPlan(ManualPlan),
+    Maintenance(MaintenanceEvent),
+    Investigation(Investigation),
+    Advice(AdviceReport),
+    Resources(ResourceReview),
 }

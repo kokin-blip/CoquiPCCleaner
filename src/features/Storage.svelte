@@ -37,7 +37,7 @@
   let session = $derived($controller.session);
   let sessionId = $derived(session?.id);
   let revision = $derived(
-    $controller.scanning
+    $controller.workRunning || $controller.scanning
       ? Math.floor((session?.fileCount ?? 0) / 250)
       : session?.status,
   );
@@ -123,7 +123,7 @@
       See what’s here. Understand it before deciding what to remove.
     </p>
   </div>
-  <button onclick={onScan} disabled={$controller.scanning}
+  <button onclick={onScan} disabled={$controller.workRunning || $controller.scanning}
     ><Search size={16} />Analyze storage</button
   >
 </div>

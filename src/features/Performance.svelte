@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Baselines from './Baselines.svelte';
+  import ManualPlans from './ManualPlans.svelte';
   import { tabKeys } from '../keyboard';
   import { Activity, ArrowRight, Info } from '@lucide/svelte';
   import type { createAppStore } from '../state';
@@ -53,7 +55,7 @@
   onkeydown={tabKeys}
   aria-label="Performance views"
 >
-  {#each ['Overview', 'Processes', 'Startup', 'Preferences'] as name}<button
+  {#each ['Overview', 'Processes', 'Startup', 'Preferences', 'Baselines', 'Manual plans'] as name}<button
       role="tab"
       tabindex={tab === name ? 0 : -1}
       aria-selected={tab === name}
@@ -61,7 +63,11 @@
       onclick={() => (tab = name)}>{name}</button
     >{/each}
 </div>
-{#if tab === 'Overview'}
+{#if tab === 'Baselines'}<Baselines
+    {controller}
+  />{:else if tab === 'Manual plans'}<ManualPlans
+    {controller}
+  />{:else if tab === 'Overview'}
   {#if !$controller.settings?.monitoringEnabled}<div class="callout">
       <Activity size={21} />
       <div>

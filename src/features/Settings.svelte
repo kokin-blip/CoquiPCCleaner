@@ -252,18 +252,20 @@
     ~/Library/Application Support/CoquiPCCleaner/coqui.sqlite3
   </p>
   <p class="muted small">
-    File contents and routine command dumps are not retained. Reports contain
-    file paths and device metadata; inspect before sharing.
+    Duplicate scans read file contents only after you request analysis; contents
+    and routine command dumps are not retained. Reports contain file paths and
+    device metadata; inspect before sharing.
   </p>
   <button
     class="danger-outline"
-    disabled={$controller.scanning ||
+    disabled={$controller.workRunning ||
+      $controller.scanning ||
       $controller.cleanupRunning ||
       $controller.cleanupPreparing ||
       $controller.developerRunning}
     onclick={() => (confirmPurge = true)}
     ><Trash2 size={15} />Remove diagnostic history</button
-  >{#if $controller.scanning || $controller.cleanupRunning || $controller.cleanupPreparing || $controller.developerRunning}<p
+  >{#if $controller.workRunning || $controller.scanning || $controller.cleanupRunning || $controller.cleanupPreparing || $controller.developerRunning}<p
       class="muted small"
     >
       Finish or cancel the active operation before clearing diagnostic data.
@@ -271,12 +273,12 @@
 </section>
 <section class="panel">
   <h2>About CoquiPCCleaner</h2>
-  <p>Version 0.4.0 · Apple Silicon · macOS 14+</p>
+  <p>Version 0.5.0 · Apple Silicon · macOS 14+</p>
   <p class="muted">
     Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
     Optimization can move individually approved cache files and supported
-    project-output folders to macOS Trash. Conversational troubleshooting and
-    maintenance remain planned work.
+    project-output folders to macOS Trash. Ask Coqui, baselines, manual plans
+    and maintenance keep inspectable local records.
   </p>
 </section>
 {#if confirmPurge}<Dialog
@@ -284,8 +286,11 @@
     onclose={() => (confirmPurge = false)}
     ><p>
       This removes stored scans, findings, file indexes, developer reviews, and
-      cleanup action records from Coqui’s local database. Your files,
-      preferences, and system settings are preserved.
+      cleanup action records, duplicate reports, conversations, baselines,
+      workload advice, resource reviews and maintenance events from Coqui’s
+      local database. Your files, preferences, maintenance schedule, and system
+      settings are preserved. Disable maintenance separately if you do not want
+      new records.
     </p>
     <div class="dialog-actions">
       <button onclick={() => (confirmPurge = false)}>Keep history</button

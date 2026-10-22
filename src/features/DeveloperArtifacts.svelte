@@ -37,7 +37,7 @@
       : saved,
   );
   let busy = $derived(
-    $controller.scanning ||
+    $controller.workRunning || $controller.scanning ||
       $controller.cleanupRunning ||
       $controller.cleanupPreparing ||
       $controller.developerRunning,

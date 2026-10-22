@@ -24,6 +24,7 @@ pub fn command(program: &str, args: &[&str], timeout: Duration) -> Result<Vec<u8
         "/usr/bin/csrutil",
         "/usr/bin/fdesetup",
         "/usr/sbin/sysctl",
+        "/usr/bin/pmset",
     ];
     anyhow::ensure!(ALLOWED.contains(&program), "Command is not allowlisted");
     let mut child = Command::new(program)
@@ -262,4 +263,44 @@ pub fn metrics(sys: &mut System) -> LiveMetrics {
     processes.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
     processes.truncate(40);
     LiveMetrics {observed_at:now(),cpu_percent:sys.global_cpu_usage().clamp(0.,100.),used_memory_bytes:sys.used_memory() as f64,total_memory_bytes:sys.total_memory() as f64,swap_bytes:sys.used_swap() as f64,disk_read_bytes:reads,disk_written_bytes:writes,processes,qualification:"Two-second sampling. Process CPU is normalized across logical cores. I/O is the sum of readable process counters, not physical disk throughput. Used memory and swap alone do not establish a bottleneck.".into()}
+}
+
+/// Bounded, non-following public bundle metadata; absence never proves an app is uninstalled.
+pub fn bundle_identifier(bundle: &Path) -> Option<String> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let path = bundle.join("Contents/Info.plist");
+    for p in path.ancestors() {
+        let m = fs::symlink_metadata(p).ok()?;
+        if m.file_type().is_symlink() || crate::storage::placeholder(p, &m) {
+            return None;
+        }
+    }
+    let m = fs::symlink_metadata(&path).ok()?;
+    if !m.is_file() || m.len() > 256 * 1024 {
+        return None;
+    }
+    let f = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(&path)
+        .ok()?;
+    let before = f.metadata().ok()?;
+    if before.dev() != m.dev() || before.ino() != m.ino() {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    (&f).take(256 * 1024 + 1).read_to_end(&mut bytes).ok()?;
+    let after = f.metadata().ok()?;
+    if bytes.len() > 256 * 1024
+        || before.mtime() != after.mtime()
+        || before.ctime() != after.ctime()
+    {
+        return None;
+    }
+    let p = plist::Value::from_reader(std::io::Cursor::new(bytes)).ok()?;
+    p.as_dictionary()?
+        .get("CFBundleIdentifier")?
+        .as_string()
+        .filter(|s| !s.is_empty() && s.len() <= 256)
+        .map(str::to_owned)
 }

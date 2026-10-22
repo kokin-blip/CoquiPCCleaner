@@ -293,7 +293,7 @@ fn cancellation_channel_loss_recovery_migration_and_purge() {
         developer::get(&f.db, "scan").unwrap().unwrap().status,
         "interrupted"
     );
-    f.db.execute_batch("DROP TABLE developer_reports; PRAGMA user_version=2;")
+    f.db.execute_batch("DROP TABLE records; DROP TABLE maintenance; DROP TABLE developer_reports; PRAGMA user_version=2;")
         .unwrap();
     let c = database::open(&f._dir.path().join("app.db")).unwrap();
     assert!(developer::get(&c, "scan").unwrap().is_none());

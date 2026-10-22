@@ -19,7 +19,8 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 button {
@@ -87,7 +88,8 @@ button.icon-button:hover {
   background: var(--hover);
 }
 input,
-select {
+select,
+textarea {
   min-height: 32px;
   padding: 6px 10px;
   border: 1px solid var(--border);
@@ -99,8 +101,14 @@ select {
 input[type='search'] {
   min-width: 160px;
 }
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--secondary);
+  opacity: 1;
+}
+textarea {
+  resize: vertical;
+  min-height: 72px;
 }
 input[type='checkbox'],
 input[type='radio'] {
@@ -1759,4 +1767,224 @@ tbody tr:last-child td {
 }
 .cleanup-result .inline-wrap {
   margin-top: 16px;
+}
+
+/* Phase 2 investigations, measured plans and maintenance reuse native surfaces. */
+.sidebar nav {
+  min-height: 0;
+  overflow-y: auto;
+}
+.work-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 24px;
+  background: var(--accent-wash);
+  border-bottom: 1px solid var(--border);
+}
+.work-banner > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.feature-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  max-width: 900px;
+}
+.feature-form label,
+.form-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.feature-form .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.feature-form input:not([type='checkbox']):not([type='radio']),
+.feature-form select,
+.feature-form textarea,
+.ask-composer textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.feature-form > button {
+  justify-self: start;
+}
+.resource-pair {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.resource-pair:last-child {
+  border-bottom: 0;
+}
+.resource-pair > div {
+  min-width: 0;
+}
+.resource-pair .button-row {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: 170px;
+}
+.source-links {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.source-links a,
+.source-links a:visited,
+.reference-link,
+.reference-link:visited {
+  color: var(--accent-text);
+  text-underline-offset: 2px;
+}
+.schedule-scope {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--elevated);
+}
+.investigation-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 560px;
+  align-items: start;
+}
+.investigation-layout.context-open {
+  grid-template-columns: 180px minmax(260px, 1fr) 320px;
+}
+.investigation-history,
+.investigation-context {
+  min-width: 0;
+}
+.investigation-history .section-heading {
+  gap: 8px;
+}
+.investigation-history h2 {
+  font-size: 14px;
+}
+.conversation-row {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+  padding: 12px 8px;
+  margin-bottom: 4px;
+  border: 0;
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+.conversation-row.active {
+  background: var(--selected);
+}
+.conversation-row strong {
+  font-size: 12px;
+}
+.discussion {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface, 12px);
+  background: var(--surface);
+  overflow: hidden;
+}
+.messages {
+  max-height: 58vh;
+  min-height: 300px;
+  overflow: auto;
+  padding: 20px;
+}
+.message {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.message:first-child {
+  padding-top: 0;
+}
+.message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.message strong {
+  font-size: 12px;
+  color: var(--accent-text);
+}
+.user-message strong {
+  color: var(--text);
+}
+.ask-introduction {
+  padding: 16px 0;
+}
+.ask-introduction button {
+  display: block;
+  text-align: left;
+  margin-top: 12px;
+  white-space: normal;
+}
+.ask-composer {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--elevated);
+}
+.ask-composer .section-heading {
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0;
+}
+.investigation-context {
+  padding: 0 0 0 16px;
+  border-left: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.investigation-context h2 {
+  font-size: 15px;
+}
+.investigation-context h3 {
+  font-size: 13px;
+  margin-top: 24px;
+}
+.investigation-context .evidence-row {
+  display: block;
+}
+.investigation-context .evidence-value {
+  text-align: left;
+  margin-top: 8px;
+}
+.context-action {
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+}
+@media (max-width: 1250px) {
+  .investigation-layout.context-open {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+  .investigation-context {
+    grid-column: 2;
+  }
+  .form-grid {
+    gap: 12px;
+  }
+  .tabs {
+    flex-wrap: wrap;
+  }
+  .resource-pair {
+    flex-wrap: wrap;
+  }
 }

@@ -14,7 +14,48 @@ import type { CleanupFilePage } from './bindings/CleanupFilePage';
 import type { ProjectCleanupPage } from './bindings/ProjectCleanupPage';
 
 import type { DeveloperReport } from './bindings/DeveloperReport';
+import type { DuplicateReport } from './bindings/DuplicateReport';
+import type { DuplicateCleanupRequest } from './bindings/DuplicateCleanupRequest';
+import type { Baseline } from './bindings/Baseline';
+import type { BaselineRequest } from './bindings/BaselineRequest';
+import type { BaselineComparison } from './bindings/BaselineComparison';
+import type { ManualPlan } from './bindings/ManualPlan';
+import type { Investigation } from './bindings/Investigation';
+import type { AdviceReport } from './bindings/AdviceReport';
+import type { AdviceRequest } from './bindings/AdviceRequest';
+import type { ResourceReview } from './bindings/ResourceReview';
+import type { ActivityRecord } from './bindings/ActivityRecord';
+import type { RetainedRecord } from './bindings/RetainedRecord';
+import type { MaintenanceRule } from './bindings/MaintenanceRule';
+import type { MaintenanceEvent } from './bindings/MaintenanceEvent';
 export interface Backend {
+  reference(url: string): Promise<void>;
+  analyzeDuplicates(
+    sessionId: string,
+    onEvent: (r: DuplicateReport) => void,
+  ): Promise<DuplicateReport>;
+  previewDuplicates(request: DuplicateCleanupRequest): Promise<CleanupPlan>;
+  captureBaseline(
+    request: BaselineRequest,
+    onEvent: (r: Baseline) => void,
+  ): Promise<Baseline>;
+  compareBaselines(before: string, after: string): Promise<BaselineComparison>;
+  manualPlan(kind: string, requested: string): Promise<ManualPlan>;
+  verifyManualPlan(id: string, performed: boolean): Promise<ManualPlan>;
+  ask(
+    id: string | null,
+    sessionId: string | null,
+    text: string,
+  ): Promise<Investigation>;
+  assess(request: AdviceRequest): Promise<AdviceReport>;
+  resources(sessionId: string): Promise<ResourceReview>;
+  records(kind: string | null, offset: number): Promise<ActivityRecord[]>;
+  record(kind: string, id: string): Promise<RetainedRecord>;
+  maintenanceRule(): Promise<MaintenanceRule | null>;
+  saveMaintenance(rule: MaintenanceRule): Promise<void>;
+  maintenanceTick(): Promise<MaintenanceEvent | null>;
+  cancelWork(): Promise<void>;
+
   developerReport(sessionId: string): Promise<DeveloperReport | null>;
   analyzeDeveloper(
     sessionId: string,
@@ -53,6 +94,35 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  reference: (url) => invoke('open_reference', { url }),
+  analyzeDuplicates: (sessionId, onEvent) => {
+    const channel = new Channel<DuplicateReport>();
+    channel.onmessage = onEvent;
+    return invoke('analyze_duplicates', { sessionId, onEvent: channel });
+  },
+  previewDuplicates: (request) =>
+    invoke('preview_duplicate_cleanup', { request }),
+  captureBaseline: (request, onEvent) => {
+    const channel = new Channel<Baseline>();
+    channel.onmessage = onEvent;
+    return invoke('capture_baseline', { request, onEvent: channel });
+  },
+  compareBaselines: (before, after) =>
+    invoke('compare_baselines', { before, after }),
+  manualPlan: (kind, requested) =>
+    invoke('create_manual_plan', { kind, requested }),
+  verifyManualPlan: (id, performed) =>
+    invoke('verify_manual_plan', { id, performed }),
+  ask: (id, sessionId, text) => invoke('ask_coqui', { id, sessionId, text }),
+  assess: (request) => invoke('assess_workload', { request }),
+  resources: (sessionId) => invoke('analyze_resources', { sessionId }),
+  records: (kind, offset) => invoke('activity_records', { kind, offset }),
+  record: (kind, id) => invoke('get_record', { kind, id }),
+  maintenanceRule: () => invoke('maintenance_rule'),
+  saveMaintenance: (rule) => invoke('save_maintenance', { rule }),
+  maintenanceTick: () => invoke('maintenance_tick'),
+  cancelWork: () => invoke('cancel_work'),
+
   developerReport: (sessionId) => invoke('developer_report', { sessionId }),
   analyzeDeveloper: (sessionId, onEvent) => {
     const channel = new Channel<DeveloperReport>();

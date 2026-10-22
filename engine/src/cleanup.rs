@@ -1,6 +1,6 @@
 //! Approval-bearing cleanup: eligible individual user-cache files, or separately
 //! reviewed supported project outputs with fresh descendant/Git inspection seals.
-use crate::{database, developer, model::*, project_cleanup, storage};
+use crate::{database, developer, duplicates, model::*, project_cleanup, storage};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,8 @@ struct Identity {
     parent_inode: u64,
     #[serde(default)]
     project: Option<project_cleanup::Seal>,
+    #[serde(default)]
+    duplicate: Option<duplicates::CopySeal>,
 }
 #[derive(Serialize, Deserialize)]
 struct Record {
@@ -199,6 +201,7 @@ fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
         parent_device: pm.dev(),
         parent_inode: pm.ino(),
         project: None,
+        duplicate: None,
     };
     let file = CleanupFile {path: path.to_str().context("This filename cannot be represented")?.into(), allocated_bytes:(m.blocks() as f64)*512., logical_bytes:m.len() as f64, modified_at:m.modified().ok().map(|t|chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()).unwrap_or_default(), origin, consequences:"Close the related application first. Cached data may be useful; the app may need to download or regenerate it and can be slower next time. Moving to Trash does not free disk space until Trash is emptied. Coqui does not empty Trash.".into()};
     Ok((file, identity))
@@ -218,7 +221,9 @@ fn load(c: &Connection, id: &str) -> Result<Record> {
         record
             .identities
             .iter()
-            .all(|i| i.project.is_some() == record.plan.project_cleanup),
+            .all(|i| i.project.is_some() == record.plan.project_cleanup
+                && i.duplicate.is_some() == record.plan.duplicate_cleanup)
+            && !(record.plan.project_cleanup && record.plan.duplicate_cleanup),
         "The action type does not match its retained inspection"
     );
     Ok(record)
@@ -313,6 +318,7 @@ pub fn preview(c: &Connection, request: CleanupRequest, policy: &Policy) -> Resu
     }
     let plan = CleanupPlan {
         project_cleanup: false,
+        duplicate_cleanup: false,
         id: uuid::Uuid::new_v4().to_string(),
         session_id: request.session_id,
         created_at: now(),
@@ -389,8 +395,9 @@ pub fn preview_project(
         parent_device: parent.dev(),
         parent_inode: parent.ino(),
         project: Some(seal),
+        duplicate: None,
     };
-    let plan = CleanupPlan {project_cleanup:true,id:uuid::Uuid::new_v4().to_string(),session_id:request.session_id,created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),approved_at:None,finished_at:None,status:"review".into(),allocated_bytes:file.allocated_bytes,items:vec![CleanupItem {file,status:"pending".into(),detail:"Awaiting exact-folder approval and reproducibility acknowledgement".into(),trash_path:None}],verification:"Not executed. Fresh metadata inspection; review the folder, every listed descendant and technology consequences. No content reproducibility is guaranteed.".into()};
+    let plan = CleanupPlan {duplicate_cleanup:false,project_cleanup:true,id:uuid::Uuid::new_v4().to_string(),session_id:request.session_id,created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),approved_at:None,finished_at:None,status:"review".into(),allocated_bytes:file.allocated_bytes,items:vec![CleanupItem {file,status:"pending".into(),detail:"Awaiting exact-folder approval and reproducibility acknowledgement".into(),trash_path:None}],verification:"Not executed. Fresh metadata inspection; review the folder, every listed descendant and technology consequences. No content reproducibility is guaranteed.".into()};
     anyhow::ensure!(
         !cancel.load(Ordering::SeqCst),
         "Project inspection cancelled; no review was created"
@@ -426,8 +433,15 @@ fn current_identity(
     path: &Path,
     policy: &Policy,
     project: bool,
+    copy: Option<&duplicates::CopySeal>,
     cancel: &AtomicBool,
 ) -> Result<Identity> {
+    if let Some(seal) = copy {
+        duplicate_scope(path, policy)?;
+        duplicate_scope(Path::new(&seal.keeper), policy)?;
+        duplicates::revalidate(path, seal, policy, cancel)?;
+        return copy_identity(path, seal.clone());
+    }
     if !project {
         return Ok(inspect(path, policy)?.1);
     }
@@ -446,6 +460,7 @@ fn current_identity(
         parent_device: parent.dev(),
         parent_inode: parent.ino(),
         project: Some(seal),
+        duplicate: None,
     })
 }
 pub fn decline(c: &Connection, id: &str) -> Result<CleanupPlan> {
@@ -509,7 +524,13 @@ pub fn execute(
         }
         let path = PathBuf::from(&r.plan.items[i].file.path);
         let validation = (|| -> Result<fs::File> {
-            let current = current_identity(&path, policy, r.plan.project_cleanup, cancel)?;
+            let current = current_identity(
+                &path,
+                policy,
+                r.plan.project_cleanup,
+                r.identities[i].duplicate.as_ref(),
+                cancel,
+            )?;
             anyhow::ensure!(
                 current == r.identities[i],
                 "The file or its parent changed since preview. Scan and review it again."
@@ -542,7 +563,13 @@ pub fn execute(
                 save(c, &r)?;
                 let mut native_started = false;
                 let outcome = (|| -> Result<PathBuf> {
-                    let latest = current_identity(&path, policy, r.plan.project_cleanup, cancel)?;
+                    let latest = current_identity(
+                        &path,
+                        policy,
+                        r.plan.project_cleanup,
+                        r.identities[i].duplicate.as_ref(),
+                        cancel,
+                    )?;
                     anyhow::ensure!(
                         latest == r.identities[i],
                         "Target changed immediately before the native operation"
@@ -585,6 +612,9 @@ pub fn execute(
                             })
                             && r.identities[i].project.as_ref().is_none_or(|seal| {
                                 project_cleanup::verify(&destination, seal).is_ok()
+                            })
+                            && r.identities[i].duplicate.as_ref().is_none_or(|seal| {
+                                duplicates::verify_moved(&destination, seal, policy).is_ok()
                             });
                         r.plan.items[i].status = if verified {
                             "movedToTrash"
@@ -657,4 +687,118 @@ pub fn native_trash(path: &Path) -> Result<PathBuf> {
 #[cfg(not(target_os = "macos"))]
 pub fn native_trash(_path: &Path) -> Result<PathBuf> {
     anyhow::bail!("Native Trash is currently supported only on macOS")
+}
+
+fn copy_identity(path: &Path, seal: duplicates::CopySeal) -> Result<Identity> {
+    let m = fs::symlink_metadata(path)?;
+    let pm = fs::symlink_metadata(path.parent().context("Missing parent")?)?;
+    Ok(Identity {
+        device: m.dev(),
+        inode: m.ino(),
+        size: m.len(),
+        blocks: m.blocks(),
+        modified: m.mtime(),
+        modified_ns: m.mtime_nsec(),
+        changed: m.ctime(),
+        changed_ns: m.ctime_nsec(),
+        parent_device: pm.dev(),
+        parent_inode: pm.ino(),
+        project: None,
+        duplicate: Some(seal),
+    })
+}
+pub fn preview_duplicates(
+    c: &Connection,
+    request: DuplicateCleanupRequest,
+    policy: &Policy,
+    cancel: &AtomicBool,
+) -> Result<CleanupPlan> {
+    let report = duplicates::get(c, &request.report_id)?;
+    anyhow::ensure!(
+        report.status != "running"
+            && !request.remove_paths.is_empty()
+            && request.remove_paths.len() <= 50,
+        "Select 1–50 copies from a finished report"
+    );
+    let group = report
+        .groups
+        .iter()
+        .find(|g| g.id == request.group_id)
+        .context("Exact duplicate group not found")?;
+    anyhow::ensure!(
+        group.files.iter().any(|f| f.path == request.keep_path),
+        "Choose a confirmed keeper from this group"
+    );
+    let unique = request.remove_paths.iter().collect::<HashSet<_>>();
+    anyhow::ensure!(
+        unique.len() == request.remove_paths.len() && !unique.contains(&request.keep_path),
+        "Keeper/removal selections overlap or repeat"
+    );
+    let mut items = vec![];
+    let mut identities = vec![];
+    for path in &request.remove_paths {
+        let f = group
+            .files
+            .iter()
+            .find(|f| f.path == *path)
+            .context("Copy is not in this group")?;
+        // Duplicate authority is restricted to ordinary personal folders. Project, app,
+        // system and library contents retain their technology-specific policies.
+        let p = Path::new(path);
+        let keeper = Path::new(&request.keep_path);
+        for candidate in [p, keeper] {
+            duplicate_scope(candidate, policy)?;
+        }
+        let seal = duplicates::confirm(p, keeper, policy, cancel)?;
+        anyhow::ensure!(
+            seal.digest == group.digest,
+            "Contents changed since analysis"
+        );
+        let identity = copy_identity(p, seal)?;
+        items.push(CleanupItem{file:CleanupFile{path:path.clone(),logical_bytes:f.logical_bytes,allocated_bytes:identity.blocks as f64*512.,modified_at:f.modified_at.clone(),origin:format!("Exact duplicate; keep {}",request.keep_path),consequences:"Intentional copies/backups may be useful. The selected keeper is freshly content-verified before each move. Close editors first. Trash may support Finder Put Back while available; Coqui does not empty Trash. Shared APFS allocation is not guaranteed recoverable space.".into()},status:"pending".into(),detail:"Awaiting duplicate-copy approval".into(),trash_path:None});
+        identities.push(identity);
+    }
+    let plan=CleanupPlan{project_cleanup:false,duplicate_cleanup:true,id:uuid::Uuid::new_v4().to_string(),session_id:report.session_id,created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),approved_at:None,finished_at:None,status:"review".into(),allocated_bytes:items.iter().map(|i|i.file.allocated_bytes).sum(),items,verification:format!("Not executed. Keep at least this confirmed copy: {}. Review every removal path; this may be an intentional backup.",request.keep_path)};
+    save(
+        c,
+        &Record {
+            plan: plan.clone(),
+            identities,
+        },
+    )?;
+    Ok(plan)
+}
+
+pub(crate) fn duplicate_scope(candidate: &Path, policy: &Policy) -> Result<()> {
+    let relative = candidate
+        .strip_prefix(&policy.home)
+        .context("Only personal home-folder duplicates support Trash review")?;
+    anyhow::ensure!(
+        !candidate.components().any(|c| matches!(
+            c,
+            std::path::Component::ParentDir | std::path::Component::CurDir
+        )),
+        "Path traversal is unsupported"
+    );
+    let first = relative
+        .components()
+        .next()
+        .context("Missing personal folder")?
+        .as_os_str()
+        .to_str()
+        .unwrap_or("");
+    anyhow::ensure!(
+        [
+            "Desktop",
+            "Documents",
+            "Downloads",
+            "Pictures",
+            "Movies",
+            "Music"
+        ]
+        .contains(&first),
+        "Only Desktop/Documents/Downloads/Pictures/Movies/Music copies support cleanup"
+    );
+    cache_project_context(candidate.parent().context("Missing parent")?, &policy.home)?;
+    Ok(())
 }

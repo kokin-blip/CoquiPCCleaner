@@ -9,7 +9,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
     let version: u32 = c.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
-        version <= 3,
+        version <= 4,
         "This diagnostic database was created by a newer version of CoquiPCCleaner."
     );
     if version == 0 {
@@ -33,6 +33,13 @@ pub fn open(path: &Path) -> Result<Connection> {
         c.execute_batch("BEGIN IMMEDIATE;
         CREATE TABLE IF NOT EXISTS developer_reports(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE, checked_at TEXT NOT NULL, status TEXT NOT NULL, json TEXT NOT NULL);
         PRAGMA user_version=3; COMMIT;")?;
+    }
+    if version < 4 {
+        c.execute_batch("BEGIN IMMEDIATE;
+        CREATE TABLE records(id TEXT PRIMARY KEY,kind TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL,title TEXT NOT NULL,json TEXT NOT NULL);
+        CREATE INDEX record_kind ON records(kind,created_at DESC);
+        CREATE TABLE maintenance(id INTEGER PRIMARY KEY CHECK(id=1),json TEXT NOT NULL);
+        PRAGMA user_version=4; COMMIT;")?;
     }
     Ok(c)
 }
@@ -173,6 +180,7 @@ pub fn recover_interrupted(c: &Connection) -> Result<()> {
             crate::developer::save(c, &report)?;
         }
     }
+    c.execute("UPDATE records SET status='interrupted',json=json_set(json,'$.status','interrupted') WHERE status='running'",[])?;
     crate::cleanup::recover_interrupted(c)?;
     Ok(())
 }
@@ -186,11 +194,15 @@ pub fn retain(c: &Connection, days: u32) -> Result<()> {
         "DELETE FROM cleanup_plans WHERE created_at < ?1 AND status != 'running'",
         [&cutoff],
     )?;
+    c.execute(
+        "DELETE FROM records WHERE created_at < ?1 AND status != 'running'",
+        [&cutoff],
+    )?;
     // Keep complete indexes per scope, plus inspectable partial scans until history expiry.
     c.execute("DELETE FROM files WHERE session_id IN (SELECT old.id FROM sessions old WHERE old.status='complete' AND EXISTS(SELECT 1 FROM sessions newer WHERE newer.status='complete' AND newer.scope=old.scope AND newer.started_at>old.started_at))",[])?;
     Ok(())
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM records; DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }

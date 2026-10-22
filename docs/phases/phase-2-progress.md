@@ -1,6 +1,10 @@
 # Phase 2 progress
 
-Current milestone: **approval and verified cleanup for supported project caches/build outputs**, requested by the user on 2026-10-21. Version 0.4.0 adds milestone 2.3; versions 0.3.0 and 0.2.x supplied developer/Git review and individual cache-file approval. This does not claim completion of the full Phase 2 specification.
+Current milestone: **2.4 — remaining supported Phase 2 workflows**, requested 2026-10-22. Version 0.5.0 adds local Ask Coqui, exact duplicate review/keeper verification, PNG/JPEG similarity hints, workload baselines/comparisons, manual settings plans, assumption-based advice, app-open maintenance and qualified resource/leftover/clone review. See [actual capabilities and limits](phase-2-workflows.md). Earlier milestones remain intact; the full Phase 2 vision includes the explicit extensions below.
+
+## Milestone 2.4 — supported workflows
+
+Rust-owned typed records, SQLite schema 4 and working destinations expose the flows above. User confirmed local guided answers first, with no external AI connection. Only exact duplicate copies in ordinary personal folders acquire a separate cleanup review; project, Library and application-native resources retain their existing boundaries. Modern login/power changes remain manual, with requested/previous/observed state and honest verification/recovery limits. Maintenance is opt-in, while-open scans/reminders only. History includes all new diagnostic records.
 
 ## Milestone 2.3 — project-folder approval and verified cleanup
 
@@ -24,23 +28,25 @@ The filesystem checks are point-in-time checks around a pathname-based native AP
 
 ## Validation
 
+Version0.5.0 passes37 frontend and85 Rust standard tests (122 total), the locked native check and release build. A separate new disposable duplicate fixture passed real Foundation Trash/keeper verification and restoration. Native UI exercised local investigations, content/resource review, actual baselines, manual decline, advice and restart/history; see ../status.md and phase-2-workflows.md for limits.
+
 The 0.4.0 standard check suite passes 32 frontend tests and 69 Rust tests. The 0.3.0 suite previously passed 26 frontend and 51 Rust tests. The 0.2.1 suite previously passed 20 frontend and 37 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
 
 Tests cover no-change/decline, missing acknowledgements, expired/replayed approval, index membership, out-of-scope paths, directories, links, hard links, projects, new exclusions, changed file/parent, audit persistence failure, native permission/tool failures, partial results, cancellation, channel loss, interruption recovery, schema migration/reopen and purge. UI tests exercise selection, exact-path confirmation, result/recovery presentation, errors and retained records.
 
 Packaged native validation includes schema migration with existing history, a real scan of named disposable fixtures, eligible-file listing, preview, disabled approval until acknowledgement, Keep files and retained declined history. The actual native mutation path was tested from Rust, rather than by approving existing user files through the GUI. The original macOS 14/device/VoiceOver/Gatekeeper validation limits remain applicable.
 
-## Remaining Phase 2 milestones
+## Explicit Phase 2 extensions / manual boundaries
 
-The full requirements in `phase-2.md` remain authoritative. The following remain outside milestones 2.1–2.3 and have no inactive navigation:
+The full requirements in `phase-2.md` remain authoritative; 0.5.0 provides the bounded workflows in phase-2-workflows.md without claiming unsupported execution. Remaining extensions have no inactive controls:
 
-- Ask Coqui, evidence-bound diagnostic tasks, conversation history and optional explicitly opted-in external models.
-- Exact duplicates with content verification and copy preservation; similar-photo and modified-copy distinctions.
-- Broader developer-artifact execution (dependencies/environments/Xcode/custom outputs), exhaustive Git/tool configurations, Docker/application-native resource management and application leftovers. Milestone 2.3 implements only the bounded supported folder policies above.
-- Supported startup/power adjustments and before/after workload baselines.
-- Sourced workload suitability/upgrade advice, forecasts, compatibility and cost ranges.
-- Maintenance scheduling, reminders and separately authorized rules.
-- Additional action types and programmatic recovery only after each has its own eligibility, approval, verification and recovery design.
+- Optional external AI is intentionally absent by the user's choice. Local investigations are guided rules, not an autonomous general-purpose model.
+- Photo similarity is bounded PNG/JPEG dHash review, not exhaustive HEIC/RAW/library or rotated/cropped matching. Similar/modified candidates never acquire duplicate cleanup authority.
+- Dependencies/environments, unassociated Xcode/custom outputs, Docker and emulator execution remain application-native/manual review. Clone relationships are qualified clues; no repository removal or equivalence claim.
+- Startup/power changes occur manually in System Settings; no public general-purpose API for other apps' modern login toggles is assumed. Baselines observe intervals; no causal benchmark claim.
+- Upgrade scenarios use explicit assumptions and optional user-provided quotes. Future support years, remaining hardware life, independently fetched prices and compatibility guarantees remain unavailable.
+- Maintenance runs while open and coalesces missed occurrences on reopen. Closed-app launch agents and scheduled deletion are unavailable.
+- Additional action types and programmatic recovery require their own eligibility, approval, verification and recovery design.
 
 ## Project-aware user-cache eligibility — 0.2.1
 

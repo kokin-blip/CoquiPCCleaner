@@ -199,7 +199,7 @@ describe('developer artifact reviews', () => {
 });
 
 const projectPlan = {
-  projectCleanup: true,
+  projectCleanup: true, duplicateCleanup:false,
   id: 'project-review',
   sessionId: 'fixture',
   createdAt: '2026-10-21T10:01:00Z',

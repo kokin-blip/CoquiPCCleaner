@@ -40,7 +40,7 @@
         : 'Start with an analysis of your hardware, storage, and startup configuration.'}
     </p>
   </div>
-  <button class="primary" onclick={onScan} disabled={$controller.scanning}
+  <button class="primary" onclick={onScan} disabled={$controller.workRunning || $controller.scanning}
     ><Search size={16} />Analyze System</button
   >
 </div>
@@ -154,7 +154,7 @@
           configuration. Coqui will show what it can verify and where coverage
           is limited.
         </p>
-        <button onclick={onScan} disabled={$controller.scanning}
+        <button onclick={onScan} disabled={$controller.workRunning || $controller.scanning}
           >Start an analysis</button
         >
       </div>{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Advisor from './Advisor.svelte';
   import { tabKeys } from '../keyboard';
   import {
     ShieldAlert,
@@ -33,7 +34,9 @@
       Observations, supporting evidence, and the limits of this scan.
     </p>
   </div>
-  <button onclick={onScan} disabled={$controller.scanning}
+  <button
+    onclick={onScan}
+    disabled={$controller.workRunning || $controller.scanning}
     ><Search size={16} />Analyze again</button
   >
 </div>
@@ -53,7 +56,7 @@
     onkeydown={tabKeys}
     aria-label="Analysis views"
   >
-    {#each ['Overview', 'Findings', 'Coverage', 'Report'] as name}<button
+    {#each ['Overview', 'Findings', 'Coverage', 'Report', 'Workload & Upgrade'] as name}<button
         role="tab"
         tabindex={tab === name ? 0 : -1}
         aria-selected={tab === name}
@@ -64,7 +67,9 @@
           : ''}</button
       >{/each}
   </div>
-  {#if tab === 'Overview'}
+  {#if tab === 'Workload & Upgrade'}<Advisor
+      {controller}
+    />{:else if tab === 'Overview'}
     <section class="panel">
       <div class="section-heading">
         <h2>{session.stage}</h2>

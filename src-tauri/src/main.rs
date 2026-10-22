@@ -109,7 +109,7 @@ fn open_system_settings(destination: String) -> Response<()> {
 }
 #[tauri::command]
 fn cleanup_files(session_id: String, offset: u32) -> Response<CleanupFilePage> {
-    api::cleanup_files(session_id,offset).map_err(error)
+    api::cleanup_files(session_id, offset).map_err(error)
 }
 #[tauri::command]
 fn preview_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
@@ -117,15 +117,18 @@ fn preview_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
 }
 #[tauri::command]
 async fn preview_project_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
-    tauri::async_runtime::spawn_blocking(move || api::preview_project_cleanup(request)).await.map_err(error)?.map_err(error)
+    tauri::async_runtime::spawn_blocking(move || api::preview_project_cleanup(request))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 fn project_cleanup_entries(id: String, offset: u32) -> Response<ProjectCleanupPage> {
-    api::project_cleanup_entries(id,offset).map_err(error)
+    api::project_cleanup_entries(id, offset).map_err(error)
 }
 #[tauri::command]
 fn cleanup_history(offset: u32, limit: u32) -> Response<Vec<CleanupPlan>> {
-    api::cleanup_history(offset,limit).map_err(error)
+    api::cleanup_history(offset, limit).map_err(error)
 }
 #[tauri::command]
 fn get_cleanup_plan(id: String) -> Response<CleanupPlan> {
@@ -136,25 +139,179 @@ fn decline_cleanup(id: String) -> Response<CleanupPlan> {
     api::decline_cleanup(id).map_err(error)
 }
 #[tauri::command]
-fn cancel_cleanup() -> Response<()> {api::cancel_cleanup().map_err(error)}
+fn cancel_cleanup() -> Response<()> {
+    api::cancel_cleanup().map_err(error)
+}
 #[tauri::command]
-async fn execute_cleanup(approval: CleanupApproval, on_event: Channel<CleanupPlan>) -> Response<CleanupPlan> {
-    tauri::async_runtime::spawn_blocking(move || api::execute_cleanup(approval,|e|on_event.send(e).is_ok())).await.map_err(error)?.map_err(error)
+async fn execute_cleanup(
+    approval: CleanupApproval,
+    on_event: Channel<CleanupPlan>,
+) -> Response<CleanupPlan> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::execute_cleanup(approval, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
 }
 #[tauri::command]
 fn developer_report(session_id: String) -> Response<Option<DeveloperReport>> {
     api::developer_report(session_id).map_err(error)
 }
 #[tauri::command]
-fn cancel_developer() -> Response<()> { api::cancel_developer().map_err(error) }
+fn cancel_developer() -> Response<()> {
+    api::cancel_developer().map_err(error)
+}
 #[tauri::command]
-async fn analyze_developer(session_id: String, on_event: Channel<DeveloperReport>) -> Response<DeveloperReport> {
-    tauri::async_runtime::spawn_blocking(move || api::analyze_developer(session_id, |e| on_event.send(e).is_ok())).await.map_err(error)?.map_err(error)
+async fn analyze_developer(
+    session_id: String,
+    on_event: Channel<DeveloperReport>,
+) -> Response<DeveloperReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::analyze_developer(session_id, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+
+#[tauri::command]
+fn cancel_work() -> Response<()> {
+    api::cancel_work().map_err(error)
+}
+#[tauri::command]
+async fn analyze_duplicates(
+    session_id: String,
+    on_event: Channel<DuplicateReport>,
+) -> Response<DuplicateReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::analyze_duplicates(session_id, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn preview_duplicate_cleanup(request: DuplicateCleanupRequest) -> Response<CleanupPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::preview_duplicate_cleanup(request))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn capture_baseline(
+    request: BaselineRequest,
+    on_event: Channel<Baseline>,
+) -> Response<Baseline> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::capture_baseline(request, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+fn compare_baselines(before: String, after: String) -> Response<BaselineComparison> {
+    api::compare_baselines(before, after).map_err(error)
+}
+#[tauri::command]
+async fn create_manual_plan(kind: String, requested: String) -> Response<ManualPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::create_manual_plan(kind, requested))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn verify_manual_plan(id: String, performed: bool) -> Response<ManualPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::verify_manual_plan(id, performed))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+fn ask_coqui(
+    id: Option<String>,
+    session_id: Option<String>,
+    text: String,
+) -> Response<Investigation> {
+    api::ask_coqui(id, session_id, text).map_err(error)
+}
+#[tauri::command]
+fn assess_workload(request: AdviceRequest) -> Response<AdviceReport> {
+    api::assess_workload(request).map_err(error)
+}
+#[tauri::command]
+async fn analyze_resources(session_id: String) -> Response<ResourceReview> {
+    tauri::async_runtime::spawn_blocking(move || api::analyze_resources(session_id))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+fn activity_records(kind: Option<String>, offset: u32) -> Response<Vec<ActivityRecord>> {
+    api::activity_records(kind, offset).map_err(error)
+}
+#[tauri::command]
+fn get_record(kind: String, id: String) -> Response<RetainedRecord> {
+    api::get_record(kind, id).map_err(error)
+}
+#[tauri::command]
+fn maintenance_rule() -> Response<Option<MaintenanceRule>> {
+    api::maintenance_rule().map_err(error)
+}
+#[tauri::command]
+fn save_maintenance(rule: MaintenanceRule) -> Response<()> {
+    api::save_maintenance(rule).map_err(error)
+}
+#[tauri::command]
+async fn maintenance_tick() -> Response<Option<MaintenanceEvent>> {
+    tauri::async_runtime::spawn_blocking(api::maintenance_tick)
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+
+#[tauri::command]
+fn open_reference(url: String) -> Response<()> {
+    let allowed = [
+        "https://support.apple.com/en-us/101613",
+        "https://support.apple.com/en-ie/102328",
+        "https://support.apple.com/macos/upgrade",
+        "https://www.apple.com/mac/compare/",
+    ];
+    if !allowed.contains(&url.as_str()) {
+        return Err("Unknown reference link".into());
+    }
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg(url)
+        .status()
+        .map_err(error)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("Could not open reference in your browser".into())
+    }
 }
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            open_reference,
+            cancel_work,
+            analyze_duplicates,
+            preview_duplicate_cleanup,
+            capture_baseline,
+            compare_baselines,
+            create_manual_plan,
+            verify_manual_plan,
+            ask_coqui,
+            assess_workload,
+            analyze_resources,
+            activity_records,
+            get_record,
+            maintenance_rule,
+            save_maintenance,
+            maintenance_tick,
             developer_report,
             analyze_developer,
             cancel_developer,
@@ -186,6 +343,7 @@ fn main() {
         .expect("Could not initialize CoquiPCCleaner")
         .run(|_app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                let _ = api::cancel_work();
                 let _ = api::cancel_developer();
                 let _ = api::cancel_scan();
                 let _ = api::cancel_cleanup();

@@ -1,6 +1,6 @@
 [package]
 name = "coqui_engine"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.88"
 
@@ -9,6 +9,8 @@ crate-type = ["rlib"]
 
 [dependencies]
 anyhow = "1.0"
+sha2 = "=0.10.9"
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 chrono = { version = "0.4", features = ["serde"] }
 libc = "0.2"
 plist = "1.8"
