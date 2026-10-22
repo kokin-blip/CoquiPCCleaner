@@ -16,3 +16,5 @@
 
 - User selected cleanup approval and verification as the first Phase 2 milestone. Version 0.2.0 is this bounded milestone, not the whole optimization roadmap. Native Trash moves are limited to explicitly selected eligible individual user-cache files. Scanners remain read-only; execution has its own approval, journal and verification boundary.
 - Recovery in milestone 2.1 means exact available Trash locations and manual Finder guidance. No blanket rollback, capacity-reclaimed or performance-improved claim is made.
+
+- User requested project-aware cache cleanup so a home `package.json` does not block everything. Version 0.2.1 grants a narrow dedicated-user-cache exception for a parsed standalone home npm package with no workspace declaration. Repositories, workspace declarations, cache-local projects and ambiguous configuration stay excluded. This does not authorize project-artifact removal or bypass exclusions. Eligibility context is retained with each reviewed file.

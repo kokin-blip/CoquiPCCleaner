@@ -239,9 +239,10 @@
         Scan scope: {session.scope}
       </p>{/if}
     <p class="muted small">
-      Folders, links, cloud-only files, excluded locations and project-managed
-      trees are omitted. No files are selected automatically. Keep everything is
-      a valid choice.
+      Folders, links, cloud-only files, excluded locations and detected project
+      trees are omitted. A standalone home package.json does not exclude these
+      caches; declared workspaces remain protected. No files are selected
+      automatically. Keep everything is a valid choice.
     </p>
   </section>
   {#if !session}<div class="empty-state">
@@ -417,6 +418,7 @@
               item.file.modifiedAt,
             )}</span
           >
+          <p class="muted small">{item.file.origin}</p>
           <p>{item.file.consequences}</p>
         </div>{/each}
     </div>
@@ -454,6 +456,7 @@
             value={item.status}
           />
         </div>
+        <p class="muted small">{item.file.origin}</p>
         <p>{item.detail}</p>
         {#if item.trashPath}<p class="path muted small selectable">
             {item.trashPath}

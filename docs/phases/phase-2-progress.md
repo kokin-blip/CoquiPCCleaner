@@ -1,6 +1,6 @@
 # Phase 2 progress
 
-Current milestone: **cleanup approval and verification**, selected by the user on 2026-10-21. Version 0.2.0 implements this milestone; it does not claim completion of the full Phase 2 specification.
+Current milestone: **cleanup approval and verification**, selected by the user on 2026-10-21. Version 0.2.0 implemented the first milestone; 0.2.1 adds project-aware user-cache eligibility. This does not claim completion of the full Phase 2 specification.
 
 ## Milestone 2.1 — individual cache-file review
 
@@ -16,7 +16,7 @@ The filesystem checks are point-in-time checks around a pathname-based native AP
 
 ## Validation
 
-The standard check suite passes 20 frontend tests and 26 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
+The 0.2.1 standard check suite passes 20 frontend tests and 37 Rust tests. A separate native integration test also passed: a new disposable fixture was previewed, approved, moved by FileManager, verified, journaled, and returned to its fixture location. No existing user cache files were used for mutation testing.
 
 Tests cover no-change/decline, missing acknowledgements, expired/replayed approval, index membership, out-of-scope paths, directories, links, hard links, projects, new exclusions, changed file/parent, audit persistence failure, native permission/tool failures, partial results, cancellation, channel loss, interruption recovery, schema migration/reopen and purge. UI tests exercise selection, exact-path confirmation, result/recovery presentation, errors and retained records.
 
@@ -34,8 +34,16 @@ The full requirements in `phase-2.md` remain authoritative. The following are no
 - Maintenance scheduling, reminders and separately authorized rules.
 - Additional action types and programmatic recovery only after each has its own eligibility, approval, verification and recovery design.
 
-## Conservative ancestor rule
+## Project-aware user-cache eligibility — 0.2.1
 
-Supported project markers are checked through the canonical home directory, including `Library` and home itself. A marker there can exclude every cache descendant. This Mac has a home-level `package.json`, so the final packaged build correctly omits the validation cache files instead of offering an override. Resolving that case needs project-aware eligibility in a subsequent milestone; do not move or ignore a user's manifest merely to enable cleanup.
+The 0.2.0 ancestor rule excluded every cache descendant when home contained a `package.json`. Version 0.2.1 distinguishes the dedicated `~/Library/Caches` namespace from a standalone home package. It does not enable cleanup inside arbitrary project trees.
 
-The finish reviewer scored the sole material fix, ancestor-project exclusion, resolved and returned **ship**. The final native capture demonstrates the conservative no-eligible-files case. Other captures establish the selection/review/history composition from before this policy correction; no UI layout changed in the correction. The documentation handoff confirmed that existing design tokens and components were reused and preserved DESIGN.md and its sidecar.
+- A home-level `package.json` qualifies for the narrow exception only when it is a user-owned, single-link regular file, readable without following a link, not cloud-only, at most 256 KiB, and valid JSON with an object root and **no `workspaces` key**. Any workspace declaration, even an invalid or null declaration, remains excluded. Declared workspaces are conservatively excluded regardless of their patterns; glob resolution is deferred.
+- `.git` (directory or worktree-reference file), `.hg`, `.svn` and `.jj` markers anywhere through home continue to exclude descendants. `Cargo.toml`, `pubspec.yaml`, `pyproject.toml`, `pnpm-workspace.yaml` and `lerna.json` anywhere through home also exclude descendants. Any `package.json` below home, including in `Library`, the cache root or a nested cache project, remains a project boundary.
+- Unknown, unreadable, linked, hard-linked, malformed or oversized home package configuration stays excluded. Metadata is checked before opening, an `O_NOFOLLOW` bounded read checks the opened file identity, and modification/change metadata is compared after reading. Scripts are never run and raw manifest contents are never persisted. The scanner itself remains metadata-only.
+- Candidate listing, preview and execution use the same classifier. Every native move repeats eligibility checks; newly added repository/workspace markers invalidate a pending file. Existing exact-path approval, identity, exclusion, expiry, journal and Trash-verification requirements remain intact.
+- The review and saved action details show the classification in the existing `origin` field, including that the home package was parsed without a workspace declaration. There is no schema/IPC migration and old action records remain historical.
+
+This boundary is a product policy informed by [Apple's user Library/cache organization](https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/FileSystemOverview/FileSystemOverview.html) and [npm's explicit workspace declaration](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/#workspaces). A cache path is a candidate, not proof of junk or confirmed application ownership. Repository dirty-state/worktree resolution and technology-specific cleanup remain separate milestones.
+
+For 0.2.0, the finish reviewer scored the sole material fix, ancestor-project exclusion, resolved and returned **ship**. The final native capture demonstrates the conservative no-eligible-files case. Other captures establish the selection/review/history composition from before this policy correction; no UI layout changed in the correction. The documentation handoff confirmed that existing design tokens and components were reused and preserved DESIGN.md and its sidecar.

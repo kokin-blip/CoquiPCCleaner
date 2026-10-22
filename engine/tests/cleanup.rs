@@ -421,6 +421,12 @@ fn version_one_database_preserves_settings_and_scans_on_upgrade() {
 #[ignore = "Explicit native adapter validation: moves only a newly-created disposable temporary file to Finder Trash and returns it to the fixture"]
 fn native_trash_and_fixture_restore() {
     let f = Fixture::new();
+    let manifest = f.home.join("package.json");
+    fs::write(
+        &manifest,
+        r#"{"name":"standalone-home-fixture","private":true}"#,
+    )
+    .unwrap();
     let p = f.plan();
     let result = cleanup::execute(
         &f.c,
@@ -443,6 +449,14 @@ fn native_trash_and_fixture_restore() {
             .starts_with("useful cached content"));
     }
     assert_eq!(cleanup::get(&f.c, &p.id).unwrap().status, "complete");
+    assert_eq!(
+        fs::read_to_string(manifest).unwrap(),
+        r#"{"name":"standalone-home-fixture","private":true}"#
+    );
+    assert!(result
+        .items
+        .iter()
+        .all(|i| i.file.origin.contains("package.json")));
 }
 
 #[test]
@@ -464,6 +478,7 @@ fn cannot_mutate_when_audit_record_cannot_be_saved() {
 #[test]
 fn directories_and_files_outside_cache_scope_cannot_be_proposed() {
     let mut f = Fixture::new();
+    fs::write(f.home.join("package.json"), "{}").unwrap();
     let outside = f.home.join("document.txt");
     fs::write(&outside, "keep this document").unwrap();
     database::insert_files(
@@ -497,12 +512,12 @@ fn directories_and_files_outside_cache_scope_cannot_be_proposed() {
 }
 
 #[test]
-fn project_ancestors_above_caches_are_never_eligible() {
+fn project_boundaries_above_caches_are_never_eligible() {
     for (relative, marker) in [
         ("Library", ".git"),
         ("", ".git"),
         ("Library", "Cargo.toml"),
-        ("", "package.json"),
+        ("Library", "package.json"),
     ] {
         let f = Fixture::new();
         let marker = f.home.join(relative).join(marker);
@@ -546,4 +561,366 @@ fn project_ancestor_added_after_preview_invalidates_approval() {
         assert!(result.items.iter().all(|i| i.status == "skipped"));
         assert!(f.files.iter().all(|p| p.exists()));
     }
+}
+
+#[test]
+fn standalone_home_package_does_not_own_the_dedicated_cache_namespace() {
+    let f = Fixture::new();
+    let manifest = f.home.join("package.json");
+    let content = r#"{"name":"home-app","private":true,"scripts":{"build":"do not execute this"}}"#;
+    fs::write(&manifest, content).unwrap();
+    let page = cleanup::candidates(&f.c, "scan", 0, &f.policy()).unwrap();
+    assert_eq!(page.files.len(), 2);
+    assert_eq!(page.unavailable_count, 0);
+    let p = f.plan();
+    assert!(p
+        .items
+        .iter()
+        .all(|i| i.file.origin.contains("no workspace declaration")));
+    assert!(f.files.iter().all(|p| p.exists()));
+    assert_eq!(fs::read_to_string(manifest).unwrap(), content);
+}
+
+#[test]
+fn cache_local_projects_and_home_repositories_still_block_with_home_manifest() {
+    for (relative, markers) in [
+        ("", vec![".git", ".hg", ".svn", ".jj"]),
+        ("Library", vec![".git", "package.json", "Cargo.toml"]),
+        ("Library/Caches", vec![".git", "package.json", "Cargo.toml"]),
+        (
+            "Library/Caches/Example",
+            vec![
+                ".git",
+                ".hg",
+                ".svn",
+                ".jj",
+                "package.json",
+                "Cargo.toml",
+                "pubspec.yaml",
+                "pyproject.toml",
+            ],
+        ),
+    ] {
+        for marker in markers {
+            let f = Fixture::new();
+            fs::write(
+                f.home.join("package.json"),
+                r#"{"name":"standalone-home-fixture","private":true}"#,
+            )
+            .unwrap();
+            fs::write(f.home.join(relative).join(marker), "project marker fixture").unwrap();
+            assert!(
+                cleanup::candidates(&f.c, "scan", 0, &f.policy())
+                    .unwrap()
+                    .files
+                    .is_empty(),
+                "{relative}/{marker} was ignored"
+            );
+            assert!(cleanup::preview(
+                &f.c,
+                CleanupRequest {
+                    session_id: "scan".into(),
+                    paths: vec![f.files[0].to_string_lossy().into()]
+                },
+                &f.policy()
+            )
+            .is_err());
+            assert!(f.files.iter().all(|p| p.exists()));
+        }
+    }
+}
+
+#[test]
+fn ambiguous_home_manifests_are_not_treated_as_standalone_files() {
+    for kind in ["directory", "symlink", "dangling symlink"] {
+        let f = Fixture::new();
+        let marker = f.home.join("package.json");
+        match kind {
+            "directory" => fs::create_dir(&marker).unwrap(),
+            "symlink" => std::os::unix::fs::symlink(&f.files[0], &marker).unwrap(),
+            _ => std::os::unix::fs::symlink(f.home.join("missing"), &marker).unwrap(),
+        }
+        assert!(cleanup::candidates(&f.c, "scan", 0, &f.policy())
+            .unwrap()
+            .files
+            .is_empty());
+        assert!(cleanup::preview(
+            &f.c,
+            CleanupRequest {
+                session_id: "scan".into(),
+                paths: vec![f.files[0].to_string_lossy().into()]
+            },
+            &f.policy()
+        )
+        .is_err());
+    }
+}
+
+#[test]
+fn newly_detected_project_invalidates_a_home_manifest_review() {
+    for (relative, marker) in [
+        ("", ".git"),
+        ("", ".hg"),
+        ("", ".svn"),
+        ("", ".jj"),
+        ("Library", "package.json"),
+        ("Library/Caches", "Cargo.toml"),
+        ("Library/Caches/Example", "package.json"),
+    ] {
+        let f = Fixture::new();
+        fs::write(
+            f.home.join("package.json"),
+            r#"{"name":"standalone-home-fixture","private":true}"#,
+        )
+        .unwrap();
+        let p = f.plan();
+        fs::write(f.home.join(relative).join(marker), "new project fixture").unwrap();
+        let r = cleanup::execute(
+            &f.c,
+            Fixture::approval(&p),
+            &f.policy(),
+            &AtomicBool::new(false),
+            |_| panic!("new project boundary must prevent Trash"),
+            |_| true,
+        )
+        .unwrap();
+        assert_eq!(r.status, "partial");
+        assert!(r
+            .items
+            .iter()
+            .all(|i| i.status == "skipped" && i.detail.contains(marker)));
+        assert!(f.files.iter().all(|p| p.exists()));
+    }
+}
+
+#[test]
+fn home_manifest_approval_moves_only_selected_cache_files() {
+    let f = Fixture::new();
+    let marker = f.home.join("package.json");
+    fs::write(
+        &marker,
+        r#"{"name":"standalone-home-fixture","private":true}"#,
+    )
+    .unwrap();
+    let p = cleanup::preview(
+        &f.c,
+        CleanupRequest {
+            session_id: "scan".into(),
+            paths: vec![f.files[0].to_string_lossy().into()],
+        },
+        &f.policy(),
+    )
+    .unwrap();
+    let r = cleanup::execute(
+        &f.c,
+        Fixture::approval(&p),
+        &f.policy(),
+        &AtomicBool::new(false),
+        |p| f.trash(p),
+        |_| true,
+    )
+    .unwrap();
+    assert_eq!(r.status, "complete");
+    assert!(!f.files[0].exists());
+    assert!(f.files[1].exists());
+    assert_eq!(
+        fs::read_to_string(marker).unwrap(),
+        r#"{"name":"standalone-home-fixture","private":true}"#
+    );
+    let retained = cleanup::get(&f.c, &p.id).unwrap();
+    assert!(retained.items[0].file.origin.contains("package.json"));
+}
+
+#[test]
+fn one_cache_local_project_does_not_block_unrelated_cache_files() {
+    let mut f = Fixture::new();
+    fs::write(
+        f.home.join("package.json"),
+        r#"{"name":"standalone-home-fixture","private":true}"#,
+    )
+    .unwrap();
+    let project = f.home.join("Library/Caches/Example/project");
+    fs::create_dir(&project).unwrap();
+    fs::write(project.join(".git"), "gitdir: /fixture/worktree").unwrap();
+    let protected = project.join("important.cache");
+    fs::write(&protected, "keep project data").unwrap();
+    let mut rows = vec![];
+    storage::walk(
+        &[f.home.join("Library/Caches")],
+        &[],
+        &AtomicBool::new(false),
+        |r| {
+            rows.push(r);
+            Ok(())
+        },
+        |_| Ok(()),
+    )
+    .unwrap();
+    database::insert_files(&mut f.c, "scan", &rows).unwrap();
+    let page = cleanup::candidates(&f.c, "scan", 0, &f.policy()).unwrap();
+    assert_eq!(page.files.len(), 2);
+    assert_eq!(page.unavailable_count, 2); // .git reference and its protected sibling
+    assert!(cleanup::preview(
+        &f.c,
+        CleanupRequest {
+            session_id: "scan".into(),
+            paths: vec![protected.to_string_lossy().into()]
+        },
+        &f.policy()
+    )
+    .is_err());
+    let p = f.plan();
+    let r = cleanup::execute(
+        &f.c,
+        Fixture::approval(&p),
+        &f.policy(),
+        &AtomicBool::new(false),
+        |p| f.trash(p),
+        |_| true,
+    )
+    .unwrap();
+    assert_eq!(r.status, "complete");
+    assert_eq!(fs::read_to_string(protected).unwrap(), "keep project data");
+}
+
+#[test]
+fn a_home_manifest_that_becomes_ambiguous_invalidates_the_review() {
+    let f = Fixture::new();
+    let marker = f.home.join("package.json");
+    fs::write(
+        &marker,
+        r#"{"name":"standalone-home-fixture","private":true}"#,
+    )
+    .unwrap();
+    let p = f.plan();
+    fs::remove_file(&marker).unwrap();
+    std::os::unix::fs::symlink(&f.files[0], &marker).unwrap();
+    let r = cleanup::execute(
+        &f.c,
+        Fixture::approval(&p),
+        &f.policy(),
+        &AtomicBool::new(false),
+        |_| panic!("ambiguous home context must prevent Trash"),
+        |_| true,
+    )
+    .unwrap();
+    assert!(r.items.iter().all(|i| i.status == "skipped"));
+    assert!(f.files.iter().all(|p| p.exists()));
+}
+
+#[test]
+fn home_workspace_or_unknown_manifest_scope_remains_protected() {
+    for content in [
+        r#"{"workspaces":["Library/Caches/*"]}"#,
+        r#"{"workspaces":["Projects/*"]}"#,
+        r#"{"workspaces":{"packages":["Library/Caches/*"]}}"#,
+        r#"{"workspaces":null}"#,
+        "[]",
+        "not JSON",
+        "",
+    ] {
+        let f = Fixture::new();
+        fs::write(f.home.join("package.json"), content).unwrap();
+        assert!(cleanup::candidates(&f.c, "scan", 0, &f.policy())
+            .unwrap()
+            .files
+            .is_empty());
+        assert!(cleanup::preview(
+            &f.c,
+            CleanupRequest {
+                session_id: "scan".into(),
+                paths: vec![f.files[0].to_string_lossy().into()]
+            },
+            &f.policy()
+        )
+        .is_err());
+        assert!(f.files.iter().all(|p| p.exists()));
+    }
+    for marker in [
+        "Cargo.toml",
+        "pyproject.toml",
+        "pubspec.yaml",
+        "pnpm-workspace.yaml",
+        "lerna.json",
+    ] {
+        let f = Fixture::new();
+        fs::write(f.home.join("package.json"), "{}").unwrap();
+        fs::write(f.home.join(marker), "workspace fixture").unwrap();
+        assert!(cleanup::candidates(&f.c, "scan", 0, &f.policy())
+            .unwrap()
+            .files
+            .is_empty());
+    }
+}
+
+#[test]
+fn workspace_declaration_added_after_preview_prevents_moves() {
+    let f = Fixture::new();
+    fs::write(f.home.join("package.json"), "{}").unwrap();
+    let p = f.plan();
+    fs::write(
+        f.home.join("package.json"),
+        r#"{"workspaces":["Library/Caches/*"]}"#,
+    )
+    .unwrap();
+    let r = cleanup::execute(
+        &f.c,
+        Fixture::approval(&p),
+        &f.policy(),
+        &AtomicBool::new(false),
+        |_| panic!("workspace declaration must prevent Trash"),
+        |_| true,
+    )
+    .unwrap();
+    assert!(r
+        .items
+        .iter()
+        .all(|i| i.status == "skipped" && i.detail.contains("workspace")));
+    assert!(f.files.iter().all(|p| p.exists()));
+}
+
+#[test]
+fn oversized_or_hard_linked_home_package_is_ambiguous() {
+    for kind in ["oversized", "hard link"] {
+        let f = Fixture::new();
+        let manifest = f.home.join("package.json");
+        fs::write(&manifest, "{}").unwrap();
+        if kind == "oversized" {
+            fs::write(&manifest, vec![b' '; 256 * 1024 + 1]).unwrap();
+        } else {
+            fs::hard_link(&manifest, f.home.join("another-manifest")).unwrap();
+        }
+        assert!(cleanup::candidates(&f.c, "scan", 0, &f.policy())
+            .unwrap()
+            .files
+            .is_empty());
+    }
+}
+
+#[test]
+fn unreadable_home_package_invalidates_an_existing_review() {
+    use std::os::unix::fs::PermissionsExt;
+    if unsafe { libc::geteuid() } == 0 {
+        return; // Root cannot exercise ordinary user permission denial.
+    }
+    let f = Fixture::new();
+    let manifest = f.home.join("package.json");
+    fs::write(&manifest, "{}").unwrap();
+    let p = f.plan();
+    let permissions = fs::metadata(&manifest).unwrap().permissions();
+    fs::set_permissions(&manifest, fs::Permissions::from_mode(0)).unwrap();
+    let page = cleanup::candidates(&f.c, "scan", 0, &f.policy()).unwrap();
+    let r = cleanup::execute(
+        &f.c,
+        Fixture::approval(&p),
+        &f.policy(),
+        &AtomicBool::new(false),
+        |_| panic!("unknown manifest scope must prevent Trash"),
+        |_| true,
+    )
+    .unwrap();
+    fs::set_permissions(&manifest, permissions).unwrap();
+    assert!(page.files.is_empty());
+    assert!(r.items.iter().all(|i| i.status == "skipped"));
+    assert!(f.files.iter().all(|p| p.exists()));
 }

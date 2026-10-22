@@ -1,6 +1,6 @@
 # Delivery and validation
 
-Current build: **0.2.0, Phase 2 milestone 2.1 — cleanup approval and verification.** See [Phase 2 progress](phases/phase-2-progress.md) for the supported action, tests and remaining roadmap. The Phase 1 record below is retained as implementation history.
+Current build: **0.2.1, Phase 2 milestone 2.1 — project-aware cache approval and verification.** See [Phase 2 progress](phases/phase-2-progress.md) for the supported action, tests and remaining roadmap. The Phase 1 record below is retained as implementation history.
 
 ## Phase 1 baseline
 
@@ -73,3 +73,12 @@ Final review found and resolved a project-ancestry eligibility gap. Checks now i
 Applied the user-selected `public/brand/coqui-file-emblem-v1.png` to the sidebar, onboarding, opening state and browser favicon. Generated the macOS ICNS and PNG sizes from that source with the pinned Tauri CLI (`npm run tauri -- icon public/brand/coqui-file-emblem-v1.png --output /private/tmp/coqui-logo-icons`), then copied the ICNS and macOS PNG sizes to `src-tauri/icons/`. The transparent artwork uses the existing wordmark without a colored container. Other logo concepts remain untouched.
 
 `./scripts/check.sh` passes: zero Svelte errors/warnings, 20 frontend tests, 26 standard Rust tests, formatting and locked native check. Rebuilt the ad hoc signed release app and ZIP, verified the archive/checksum and packaged ICNS, relaunched the native app and visually confirmed the new sidebar mark. No scanner or cleanup behavior changed.
+
+
+## Project-aware cache eligibility — 2026-10-21
+
+Version 0.2.1 resolves the blanket exclusion caused by a standalone home `package.json`. Cleanup checks the dedicated user-cache namespace, parses the home package without running scripts, and allows the narrow exception only for a readable, user-owned, single-link, bounded JSON object with no workspace declaration. Repository markers, workspace configuration, cache-local projects, unknown configuration and all existing file/exclusion checks remain protective boundaries. The same policy runs during listing, preview and each move. Details and precise limits are in `phases/phase-2-progress.md`. Review and saved action details now show the file's eligibility context.
+
+`./scripts/check.sh` passes with zero Svelte errors/warnings, **20 frontend tests and 37 Rust tests**, Rust formatting and the locked native check. Eleven added regression tests cover standalone home packages, mixed project/cache trees, new project/workspace declarations after review, ambiguous/oversized/hard-linked/unreadable manifests and unchanged manifest contents. The separate native Trash integration test passed with its own disposable home-package fixture; both newly created files were verified in Trash and restored to the temporary fixture. Total: **58 passing tests**, including that explicit integration run.
+
+The 0.2.1 ad hoc signed macOS app and ZIP were rebuilt and launched. With the actual home manifest untouched, both previously indexed named cache fixtures were listed unselected. Native IPC preview displayed the parsed no-workspace qualification and required acknowledgements. Keep files saved a declined action; reopening that record preserved its eligibility context. No existing user cache files were moved. Visual evidence: `.impeccable/review/project-aware-approval.png`. Existing macOS 14/other-device/VoiceOver/Gatekeeper validation limits remain applicable. This change reuses the existing review layout, design tokens and SQLite schema 2; full developer-artifact and workspace cleanup remains deferred. The 0.2.0 ZIP is retained under `release/phase-2/`.

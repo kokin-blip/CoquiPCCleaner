@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs,
+    io::Read,
     os::unix::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -33,6 +34,112 @@ struct Identity {
 struct Record {
     plan: CleanupPlan,
     identities: Vec<Identity>,
+}
+
+fn standalone_home_package(path: &Path, expected: &fs::Metadata) -> Result<()> {
+    const MAX_BYTES: u64 = 256 * 1024;
+    anyhow::ensure!(
+        expected.is_file()
+            && expected.nlink() == 1
+            && expected.uid() == unsafe { libc::geteuid() }
+            && !storage::placeholder(path, expected)
+            && expected.len() <= MAX_BYTES,
+        "Home package.json is linked, cloud-only, oversized or not a user-owned regular file"
+    );
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .context("Cannot read home package.json to establish cache scope")?;
+    let m = file.metadata()?;
+    anyhow::ensure!(
+        m.is_file()
+            && m.dev() == expected.dev()
+            && m.ino() == expected.ino()
+            && m.uid() == unsafe { libc::geteuid() }
+            && m.nlink() == 1
+            && !storage::placeholder(path, &m)
+            && m.len() <= MAX_BYTES,
+        "Home package.json is changed, linked, oversized or not a user-owned regular file"
+    );
+    let mut bytes = vec![];
+    (&file).take(MAX_BYTES + 1).read_to_end(&mut bytes)?;
+    let after = file.metadata()?;
+    anyhow::ensure!(
+        after.len() == m.len()
+            && after.mtime() == m.mtime()
+            && after.mtime_nsec() == m.mtime_nsec()
+            && after.ctime() == m.ctime()
+            && after.ctime_nsec() == m.ctime_nsec(),
+        "Home package.json changed while establishing cache scope"
+    );
+    anyhow::ensure!(
+        bytes.len() as u64 <= MAX_BYTES,
+        "Home package.json is oversized"
+    );
+    // Parse only configuration; never run scripts, resolve packages, follow
+    // workspace globs, or retain raw manifest contents in the action record.
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| anyhow::anyhow!("Cannot establish scope from invalid home package.json"))?;
+    let object = value
+        .as_object()
+        .context("Home package.json is not an object")?;
+    anyhow::ensure!(
+        !object.contains_key("workspaces"),
+        "Home package.json declares workspace configuration; workspace-aware developer analysis is required"
+    );
+    Ok(())
+}
+
+// This context applies only after inspect establishes the dedicated user-cache
+// namespace. It never authorizes project-local caches elsewhere in the home.
+fn cache_project_context(parent: &Path, home: &Path) -> Result<String> {
+    const REPOSITORIES: &[&str] = &[".git", ".hg", ".svn", ".jj"];
+    const MANIFESTS: &[&str] = &[
+        "Cargo.toml",
+        "package.json",
+        "pubspec.yaml",
+        "pyproject.toml",
+        "pnpm-workspace.yaml",
+        "lerna.json",
+    ];
+    let mut home_package = false;
+    for ancestor in parent.ancestors().take_while(|p| p.starts_with(home)) {
+        for &marker in REPOSITORIES.iter().chain(MANIFESTS) {
+            let marker_path = ancestor.join(marker);
+            match fs::symlink_metadata(&marker_path) {
+                Ok(m) => {
+                    // A standalone package directly at home does not establish
+                    // ownership of ~/Library/Caches. Repositories and workspace
+                    // declarations still protect the entire ancestry.
+                    if ancestor == home
+                        && marker == "package.json"
+                        && m.is_file()
+                        && m.uid() == unsafe { libc::geteuid() }
+                    {
+                        standalone_home_package(&marker_path, &m)?;
+                        home_package = true;
+                        continue;
+                    }
+                    anyhow::bail!(
+                        "Detected project marker {}. Project-managed files require developer-artifact analysis first",
+                        marker_path.display()
+                    );
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    return Err(e).with_context(|| {
+                        format!("Cannot inspect project marker {}", marker_path.display())
+                    });
+                }
+            }
+        }
+    }
+    let mut context = "User Library/Caches · indexed regular file. No supported repository or cache-local project markers detected.".to_string();
+    if home_package {
+        context.push_str(" Home package.json was parsed with no workspace declaration; it does not establish project ownership of this cache namespace.");
+    }
+    Ok(context)
 }
 
 fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
@@ -76,26 +183,7 @@ fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
             "A parent location became a symbolic link"
         );
     }
-    for ancestor in parent.ancestors().take_while(|p| p.starts_with(&home)) {
-        for marker in [
-            ".git",
-            "Cargo.toml",
-            "package.json",
-            "pubspec.yaml",
-            "pyproject.toml",
-        ] {
-            match fs::symlink_metadata(ancestor.join(marker)) {
-                Ok(_) => {
-                    anyhow::bail!("Project-managed files require developer-artifact analysis first")
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => {
-                    return Err(e)
-                        .context("Cannot establish whether this location is project-managed")
-                }
-            }
-        }
-    }
+    let origin = cache_project_context(parent, &home)?;
     let pm = fs::metadata(parent)?;
     let identity = Identity {
         device: m.dev(),
@@ -109,7 +197,7 @@ fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
         parent_device: pm.dev(),
         parent_inode: pm.ino(),
     };
-    let file = CleanupFile {path: path.to_str().context("This filename cannot be represented")?.into(), allocated_bytes:(m.blocks() as f64)*512., logical_bytes:m.len() as f64, modified_at:m.modified().ok().map(|t|chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()).unwrap_or_default(), origin:"User Library/Caches · indexed regular file".into(), consequences:"Close the related application first. Cached data may be useful; the app may need to download or regenerate it and can be slower next time. Moving to Trash does not free disk space until Trash is emptied. Coqui does not empty Trash.".into()};
+    let file = CleanupFile {path: path.to_str().context("This filename cannot be represented")?.into(), allocated_bytes:(m.blocks() as f64)*512., logical_bytes:m.len() as f64, modified_at:m.modified().ok().map(|t|chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()).unwrap_or_default(), origin, consequences:"Close the related application first. Cached data may be useful; the app may need to download or regenerate it and can be slower next time. Moving to Trash does not free disk space until Trash is emptied. Coqui does not empty Trash.".into()};
     Ok((file, identity))
 }
 fn load(c: &Connection, id: &str) -> Result<Record> {

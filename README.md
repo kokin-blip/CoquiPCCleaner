@@ -44,3 +44,5 @@ The scanner remains read-only. Optimization can move individually approved eligi
 ## Project context
 
 Read PRODUCT.md, DESIGN.md and AGENTS.md. `docs/original-brief.md` preserves the request verbatim. `docs/roadmap.md` and `docs/phases/` retain later optimization, firmware, Windows and Intel work. `docs/phases/phase-2-progress.md` records the completed 2.1 milestone and remaining Phase 2 work. `docs/status.md` records actual validation and remaining limits; `docs/figma.md` links the prototype and kit mapping; `docs/figma-*.json` records created design objects.
+
+Project-aware eligibility in 0.2.1 distinguishes a parsed standalone home `package.json` from actual repository/workspace boundaries. Declared workspaces, cache-local projects and ambiguous configuration remain excluded; see [the eligibility rules](docs/phases/phase-2-progress.md#project-aware-user-cache-eligibility--021).

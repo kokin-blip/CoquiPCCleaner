@@ -10,7 +10,8 @@ const file = {
   allocatedBytes: 4096,
   logicalBytes: 25,
   modifiedAt: '2026-10-21T08:00:00Z',
-  origin: 'fixture cache',
+  origin:
+    'User Library/Caches. Home package.json was parsed with no workspace declaration; it does not establish project ownership of this cache namespace.',
   consequences: 'Cached data may need to be regenerated.',
 };
 const plan: CleanupPlan = {
@@ -65,6 +66,7 @@ describe('cleanup approval and verification', () => {
       screen.getByRole('button', { name: 'Review selected files' }),
     ).toBeDisabled();
     await openReview();
+    expect(screen.getByRole('dialog')).toHaveTextContent(file.origin);
     expect(service.executeCleanup).not.toHaveBeenCalled();
     expect(
       screen.getByRole('button', { name: 'Approve and move to Trash' }),
@@ -127,6 +129,7 @@ describe('cleanup approval and verification', () => {
       screen.getByRole('button', { name: 'Inspect per-file results' }),
     );
     expect(screen.getByText('Verified in Trash')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent(file.origin);
     await fireEvent.click(
       screen.getByRole('button', { name: 'Show in Trash' }),
     );

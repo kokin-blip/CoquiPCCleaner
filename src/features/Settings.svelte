@@ -268,7 +268,7 @@
 </section>
 <section class="panel">
   <h2>About CoquiPCCleaner</h2>
-  <p>Version 0.2.0 · Apple Silicon · macOS 14+</p>
+  <p>Version 0.2.1 · Apple Silicon · macOS 14+</p>
   <p class="muted">
     Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
     Optimization can move individually approved cache files to macOS Trash.
