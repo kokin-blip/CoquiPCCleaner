@@ -13,13 +13,17 @@ daemon_root="$stage/payload/Library/LaunchDaemons"
 mkdir -p "$helper_root" "$pair_root" "$daemon_root" "$stage/scripts" release/helper-gate
 cp engine/target/release/coqui_helper "$helper_root/com.coqui.CoquiPCCleaner.Helper"
 /usr/bin/codesign --force --sign - --identifier com.coqui.CoquiPCCleaner.Helper "$helper_root/com.coqui.CoquiPCCleaner.Helper"
-helper_hash=$(/usr/bin/codesign -dvv "$helper_root/com.coqui.CoquiPCCleaner.Helper" 2>&1 | sed -n 's/^CDHash=//p')
+helper_hash=$(/usr/bin/codesign -d --verbose=4 "$helper_root/com.coqui.CoquiPCCleaner.Helper" 2>&1 | sed -n 's/^CDHash=//p')
 python3 - "$pair_root/pairing.json" "$helper_hash" "$daemon_root/com.coqui.CoquiPCCleaner.Helper.plist" <<'PY'
-import json,plistlib,sys
+import json,plistlib,re,sys
+if not re.fullmatch(r'[0-9a-fA-F]{40}',sys.argv[2]):
+    raise SystemExit('Refusing to package an absent or malformed code-directory hash')
 req='identifier "com.coqui.CoquiPCCleaner.Helper" and cdhash H"'+sys.argv[2]+'"'
 with open(sys.argv[1],'w') as f:json.dump({'version':1,'mode':'installationGate','clientRequirement':req,'helperRequirement':req},f)
 with open(sys.argv[3],'wb') as f:plistlib.dump({'Label':'com.coqui.CoquiPCCleaner.Helper','ProgramArguments':['/Library/PrivilegedHelperTools/com.coqui.CoquiPCCleaner.Helper','--serve'],'MachServices':{'com.coqui.CoquiPCCleaner.Helper':True},'AssociatedBundleIdentifiers':['com.coqui.CoquiPCCleaner'],'ProcessType':'Adaptive'},f)
 PY
+requirement="identifier \"com.coqui.CoquiPCCleaner.Helper\" and cdhash H\"$helper_hash\""
+/usr/bin/codesign --verify --strict -R "=$requirement" "$helper_root/com.coqui.CoquiPCCleaner.Helper"
 cat > "$stage/scripts/preinstall" <<'PRE'
 #!/bin/sh
 set -eu
@@ -61,3 +65,4 @@ POST
 chmod 755 "$stage/remove/postinstall"
 /usr/bin/pkgbuild --nopayload --scripts "$stage/remove" --identifier com.coqui.CoquiPCCleaner.HelperGateRemoval --version 0.8.0 release/helper-gate/Remove-Coqui-Helper-Gate.pkg
 /usr/bin/shasum -a 256 release/helper-gate/*.pkg > release/helper-gate/SHA256SUMS
+python3 scripts/verify-helper-gate.py

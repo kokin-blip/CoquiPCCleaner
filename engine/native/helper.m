@@ -9,6 +9,17 @@
 extern char *coqui_helper_dispatch(const char *, unsigned int);
 extern void coqui_helper_free(char *);
 
+int coqui_valid_signing_requirement(const char *text) {
+    @autoreleasepool {
+        if (!text) return 0;
+        NSString *value=[NSString stringWithUTF8String:text];
+        if (!value || value.length > 4096) return 0;
+        SecRequirementRef requirement=NULL;
+        OSStatus status=SecRequirementCreateWithString((__bridge CFStringRef)value,kSecCSDefaultFlags,&requirement);
+        if (requirement) CFRelease(requirement);
+        return status == errSecSuccess;
+    }
+}
 static NSDictionary *pairing(void) {
     struct stat s;
     NSString *parent = [PAIR stringByDeletingLastPathComponent];
@@ -17,7 +28,12 @@ static NSDictionary *pairing(void) {
     if (lstat(PAIR.fileSystemRepresentation,&s) || !S_ISREG(s.st_mode) || s.st_uid != 0 || (s.st_mode & 0022) || s.st_size > 16384) return nil;
     NSData *data=[NSData dataWithContentsOfFile:PAIR];
     id p=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
-    return [p isKindOfClass:NSDictionary.class] ? p : nil;
+    if (![p isKindOfClass:NSDictionary.class] || ![p[@"version"] isEqual:@1] || ![p[@"mode"] isEqual:@"installationGate"]) return nil;
+    for (NSString *key in @[@"clientRequirement", @"helperRequirement"]) {
+        NSString *requirement=p[key];
+        if (![requirement isKindOfClass:NSString.class] || !coqui_valid_signing_requirement(requirement.UTF8String)) return nil;
+    }
+    return p;
 }
 @protocol CoquiHelperProtocol
 - (void)request:(NSData *)request reply:(void (^)(NSData *))reply;
@@ -26,6 +42,7 @@ static NSDictionary *pairing(void) {
 @end
 @implementation CoquiHelper
 - (BOOL)listener:(NSXPCListener *)listener shouldAcceptNewConnection:(NSXPCConnection *)connection {
+    @try {
     NSDictionary *p=pairing();
     NSString *requirement=p[@"clientRequirement"];
     if (![requirement isKindOfClass:NSString.class] || requirement.length > 4096 || !connection.effectiveUserIdentifier) return NO;
@@ -34,6 +51,7 @@ static NSDictionary *pairing(void) {
     connection.exportedObject=self;
     [connection activate];
     return YES;
+    } @catch (NSException *exception) { (void)exception; return NO; }
 }
 - (void)request:(NSData *)request reply:(void (^)(NSData *))reply {
     NSXPCConnection *connection=NSXPCConnection.currentConnection;
@@ -48,20 +66,23 @@ static NSDictionary *pairing(void) {
 @end
 int coqui_helper_listen(void) {
     @autoreleasepool {
+        @try {
         if (geteuid()!=0 || !pairing()) return 77;
         CoquiHelper *delegate=[CoquiHelper new];
         NSXPCListener *listener=[[NSXPCListener alloc] initWithMachServiceName:SERVICE];
         listener.delegate=delegate;
         [listener activate];
         [[NSRunLoop currentRunLoop] run];
+        } @catch (NSException *exception) { (void)exception; return 78; }
     }
     return 0;
 }
 char *coqui_helper_request(const char *payload) {
     @autoreleasepool {
+        @try {
         NSDictionary *p=pairing();
         NSString *requirement=p[@"helperRequirement"];
-        if (![requirement isKindOfClass:NSString.class]) return strdup("{\"error\":\"Administrator helper is not installed\"}");
+        if (![requirement isKindOfClass:NSString.class]) return strdup("{\"error\":\"Administrator helper pairing is absent or invalid; install the matching package\"}");
         NSXPCConnection *connection=[[NSXPCConnection alloc] initWithMachServiceName:SERVICE options:NSXPCConnectionPrivileged];
         [connection setCodeSigningRequirement:requirement];
         connection.remoteObjectInterface=[NSXPCInterface interfaceWithProtocol:@protocol(CoquiHelperProtocol)];
@@ -89,6 +110,10 @@ char *coqui_helper_request(const char *payload) {
         if (waited || !response) return strdup("{\"error\":\"Helper timed out; no automatic retry\"}");
         NSString *json=[[NSString alloc] initWithData:response encoding:NSUTF8StringEncoding];
         return strdup(json.UTF8String ?: "{\"error\":\"Invalid helper response\"}");
+        } @catch (NSException *exception) {
+            (void)exception;
+            return strdup("{\"error\":\"Helper configuration or connection rejected; install the matching package\"}");
+        }
     }
 }
 

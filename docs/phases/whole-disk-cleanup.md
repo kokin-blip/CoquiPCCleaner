@@ -62,6 +62,7 @@ engine/target/debug/native_validation --volumes
 engine/target/debug/native_validation --whole-disk 90
 ./scripts/release.sh
 ./scripts/helper-package.sh
+python3 scripts/verify-helper-gate.py
 # After user-authorized native installation:
 ./release/helper-gate/coqui-helper-probe --health
 ```
@@ -81,3 +82,13 @@ The real packaged IPC inspected a uniquely named disposable application and exac
 Native wide captures are 1440×893 logical because the host clamps the requested 1440×960 height. Minimum captures are 1100×721 logical. Dark/light, wrapping, scroll access, review/restore, replacement inspection and keyboard contents navigation were checked within that scope. The independent finish review found two focus/task-handoff issues; both were fixed with regression tests and native recaptures, and the same reviewer scored both resolved. Its verdict covers those fixes and the supplied portable evidence, not full 0.8 release acceptance. No full VoiceOver walkthrough or exact 1440×960 physical-device run is claimed. Figma has four linked editable structural handoffs with source/component ledger `docs/figma-whole-disk-cleanup.json`; these preserve the kit and are not pixel-parity evidence.
 
 `scripts/release.sh` rebuilt the ad hoc arm64 `.app` and ZIP. Re-extraction verifies version 0.8.0, minimum macOS 14.0, arm64 executable and strict signature. `release/whole-disk/CoquiPCCleaner-0.8.0-portable-candidate-arm64.zip` is **8,637,103 bytes**, SHA-256 **8bbc0f43dca7a018c3d055d2b37679673e2cb4ffb204f22e2b280959f9ed4666**. Gate packages and their checksums are under `release/helper-gate/`; they are unsigned Installer packages containing an ad hoc signed health-only binary. They are not the final app-plus-helper installer. Nothing was published.
+
+## Installed gate verification and repair — 2026-10-23
+
+The user installed the initial diagnostic gate and requested continuation. Native inspection confirms root-owned helper, pairing manifest and launch-daemon plist, with the Mach service registered on demand. The initial manifest contained `cdhash H""`: `codesign -dvv` did not emit the hash that the packaging script expected. The resulting invalid signing requirement threw an Objective-C exception and aborted the probe before any authenticated connection. Launchd reported zero runs. This is a Coqui packaging defect, not an observed macOS rejection of package-installed ad hoc daemons. The connection/removal gate has not passed and production privileged operations remain gated.
+
+The repair extracts the hash using explicit verbosity 4, rejects anything other than a 40-digit hexadecimal hash, and verifies the requirement against the staged binary before packaging. Native pairing validation parses both signing requirements before XPC; invalid configuration returns an error. Objective-C exceptions are contained on the native side rather than unwinding into Rust. A regression test rejects the empty/invalid hashes and accepts a well-formed pin.
+
+`scripts/verify-helper-gate.py` expands the package into disposable temporary storage, checks both manifest pins against the actual payload and identical probe, verifies a mismatched code hash is rejected, and confirms the daemon has only fixed `--serve` arguments/Mach service without RunAtLoad or KeepAlive. This verifier passes and now runs after package creation. The corrected probe returns a qualified error against the old invalid installed manifest instead of aborting. `scripts/check.sh` passes with **53 frontend +125 Rust tests**, zero Svelte errors/warnings, build/format/native checks. No user-file mutation or production-helper operation was performed.
+
+Corrected gate package SHA-256: **55a060abccf59e9c311972ad9afccb252e3b15bc6eed1ecd7a9207a328881934**; removal package: **ff54e25aa0600e85fe6b2c46cd0a03e03243879ea9eaddfd584d7e641af86090**. The repaired payload/probe pin is `d7bcf340bc80dc707071cfa59b9a7ba65292a8c2`. Installer is ready for the repaired 700 KB gate. Automatic approval review rejected initiating this root-helper installation without action-time confirmation; user approval/native administrator authorization is pending. After repair installation, verify authenticated root health, mismatched peers/version behavior and native removal before implementing the production helper. The previous portable candidate is unchanged.

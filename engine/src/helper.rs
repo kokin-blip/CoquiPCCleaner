@@ -89,6 +89,25 @@ pub unsafe extern "C" fn coqui_helper_free(value: *mut libc::c_char) {
 mod tests {
     use super::*;
     #[test]
+    #[cfg(target_os = "macos")]
+    fn invalid_code_hash_is_rejected_before_xpc_and_never_unwinds_into_rust() {
+        unsafe extern "C" {
+            fn coqui_valid_signing_requirement(text: *const libc::c_char) -> i32;
+        }
+        for text in ["", "identifier broken and cdhash H\"\"", "cdhash H\"xyz\""] {
+            let value = CString::new(text).unwrap();
+            assert_eq!(
+                unsafe { coqui_valid_signing_requirement(value.as_ptr()) },
+                0
+            );
+        }
+        let value = CString::new("identifier \"com.coqui.CoquiPCCleaner.Helper\" and cdhash H\"50bae86f32aae7f5af81668d1fc04717cb596f46\"").unwrap();
+        assert_eq!(
+            unsafe { coqui_valid_signing_requirement(value.as_ptr()) },
+            1
+        );
+    }
+    #[test]
     fn gate_denies_unknown_operations_and_protocols() {
         assert!(dispatch(
             r#"{"protocol":1,"operation":"execute","command":"rm"}"#,
