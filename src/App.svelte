@@ -207,12 +207,12 @@
         </div>
         <button
           class="icon-button notification-button"
-          aria-label="Show scan notifications"
+          aria-label="Show notifications"
           aria-expanded={notifications}
           onclick={() => (notifications = !notifications)}
           ><Bell
             size={17}
-          />{#if $controller.session?.findings.some((f) => f.severity === 'attention')}<span
+          />{#if $controller.session?.findings.some((f) => f.severity === 'attention') || $controller.firmwareCenter?.notices.length || $controller.firmwareNoticeError}<span
             ></span>{/if}</button
         >
         <div class="toolbar-divider"></div>
@@ -227,7 +227,7 @@
             ? 'Analyzing…'
             : 'Analyze'}</button
         >{#if notifications}<div class="notification-popover">
-            <h3>Scan notifications</h3>
+            <h3>Notifications</h3>
             {#if $controller.session}<Status
                 value={$controller.session.status}
               />
@@ -238,6 +238,48 @@
                 onclick={() => navigate('System Analysis')}
                 >Inspect findings<ArrowRight size={14} /></button
               >{:else}<p class="muted">No scans recorded yet.</p>{/if}
+            {#if $controller.firmwareNoticeError}<p
+                class="inline-error"
+                role="alert"
+              >
+                {$controller.firmwareNoticeError}<button
+                  onclick={() => controller.refreshFirmwareCenter()}
+                  >Retry notices</button
+                >
+              </p>{/if}
+            {#each $controller.firmwareCenter?.notices ?? [] as notice}<article
+                class="firmware-notice"
+              >
+                <h4>{notice.title}</h4>
+                <p class="muted small">{notice.message}</p>
+                <p class="muted small">{date(notice.observedAt)}</p>
+                <div class="button-row">
+                  <button
+                    onclick={() => {
+                      controller.openFirmwareReport(notice.reportId);
+                      notifications = false;
+                      query = '';
+                    }}
+                    >{notice.reportId
+                      ? 'Open source audit'
+                      : 'Choose an audit'}</button
+                  ><button
+                    disabled={$controller.workRunning}
+                    onclick={() =>
+                      controller.run(async () => {
+                        controller.setFirmwareCenter(
+                          await controller.work(
+                            'Dismiss local firmware notice',
+                            () =>
+                              controller.service.dismissFirmwareNotice(
+                                notice.id,
+                              ),
+                          ),
+                        );
+                      })}>Dismiss notice</button
+                  >
+                </div>
+              </article>{/each}
           </div>{/if}
       </header>
       {#if $controller.scanning}<div class="scan-banner" role="status">

@@ -329,11 +329,31 @@ async fn observe_firmware_plan(
     .map_err(error)?
     .map_err(error)
 }
+#[tauri::command]
+fn compare_firmware(before: String, after: String) -> Response<FirmwareComparison> {
+    api::compare_firmware(before, after).map_err(error)
+}
+#[tauri::command]
+fn firmware_center() -> Response<FirmwareCenter> {
+    api::firmware_center().map_err(error)
+}
+#[tauri::command]
+fn save_firmware_reminder(enabled: bool, days: u32) -> Response<FirmwareCenter> {
+    api::save_firmware_reminder(enabled, days).map_err(error)
+}
+#[tauri::command]
+fn dismiss_firmware_notice(id: String) -> Response<FirmwareCenter> {
+    api::dismiss_firmware_notice(id).map_err(error)
+}
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             open_reference,
+            compare_firmware,
+            firmware_center,
+            save_firmware_reminder,
+            dismiss_firmware_notice,
             audit_firmware,
             firmware_plan,
             acknowledge_firmware_plan,

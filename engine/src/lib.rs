@@ -16,3 +16,5 @@ pub mod records;
 pub mod resources;
 
 pub mod firmware;
+
+pub mod firmware_review;

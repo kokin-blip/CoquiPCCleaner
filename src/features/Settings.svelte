@@ -288,10 +288,11 @@
     ><p>
       This removes stored scans, findings, file indexes, developer reviews, and
       cleanup action records, duplicate reports, conversations, baselines,
-      workload advice, resource reviews and maintenance events from Coqui’s
-      local database. Your files, preferences, maintenance schedule, and system
-      settings are preserved. Disable maintenance separately if you do not want
-      new records.
+      workload advice, resource reviews, firmware audits/comparisons/guidance,
+      evidence notices and maintenance events from Coqui’s local database. Your
+      files, preferences, maintenance and firmware review schedules, and system
+      settings are preserved. Disable schedules separately if you do not want
+      new reminders or records.
     </p>
     <div class="dialog-actions">
       <button onclick={() => (confirmPurge = false)}>Keep history</button

@@ -2056,3 +2056,34 @@ tbody tr:last-child td {
 .firmware-workspace .history-row {
   justify-content: space-between;
 }
+
+.firmware-comparison-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-block: 16px;
+}
+.firmware-comparison-context select {
+  width: 100%;
+}
+.firmware-comparison td {
+  min-width: 180px;
+  max-width: 40ch;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.firmware-comparison .path {
+  overflow-wrap: anywhere;
+}
+.firmware-notice {
+  padding-block: 12px;
+  border-top: 1px solid var(--border);
+}
+.firmware-notice .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.notification-popover .firmware-notice p {
+  white-space: normal;
+}

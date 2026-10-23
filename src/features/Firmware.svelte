@@ -6,6 +6,8 @@
   import type { FirmwarePlan } from '../bindings/FirmwarePlan';
   import type { FirmwarePlanKind } from '../bindings/FirmwarePlanKind';
   import type { ActivityRecord } from '../bindings/ActivityRecord';
+  import FirmwareComparisons from './FirmwareComparisons.svelte';
+  import FirmwareUpdates from './FirmwareUpdates.svelte';
   import FirmwareReportView from '../components/FirmwareReportView.svelte';
   import FirmwarePlanView from '../components/FirmwarePlanView.svelte';
   import Evidence from '../components/Evidence.svelte';
@@ -53,6 +55,18 @@
           'Understand model-specific Revive and Restore procedures. Restore erases the affected Mac.',
       },
     ];
+  let consumedRequest = $state(-1);
+  $effect(() => {
+    const id = $controller.firmwareReportId;
+    const request = $controller.firmwareRequest;
+    if (request !== consumedRequest) {
+      consumedRequest = request;
+      if (id) {
+        tab = 'Overview';
+        void controller.run(() => inspectAudit(id));
+      } else if (request > 0) tab = 'Advanced audit';
+    }
+  });
   onMount(() => {
     void load();
   });
@@ -62,7 +76,9 @@
     try {
       audits = await controller.service.records('firmware', 0);
       plans = await controller.service.records('firmwarePlan', 0);
-      if (!report && audits[0]) await inspectAudit(audits[0].id);
+      if (!report && !$controller.firmwareReportId && audits[0])
+        await inspectAudit(audits[0].id);
+      await controller.refreshFirmwareCenter();
     } catch (e) {
       error = String(e);
     } finally {
@@ -71,7 +87,10 @@
   }
   async function inspectAudit(id: string) {
     const r = await controller.service.record('firmware', id);
-    if (r.kind === 'firmware') report = r.data;
+    if (r.kind === 'firmware') {
+      report = r.data;
+      controller.selectFirmwareReport(id);
+    }
   }
   async function inspectPlan(id: string) {
     error = '';
@@ -100,6 +119,7 @@
     } catch (e) {
       error = String(e);
     } finally {
+      if (report) controller.selectFirmwareReport(report.id);
       networkAck = false;
       updates = false;
       void load(false);
@@ -137,7 +157,7 @@
     onkeydown={tabKeys}
     aria-label="Firmware views"
   >
-    {#each ['Overview', 'Advanced audit', 'Guidance'] as name}<button
+    {#each ['Overview', 'Advanced audit', 'Compare audits', 'Updates & reminders', 'Guidance'] as name}<button
         role="tab"
         tabindex={tab === name ? 0 : -1}
         aria-selected={tab === name}
@@ -152,7 +172,12 @@
   {#if tab === 'Overview'}
     <section class="panel">
       <div class="section-heading">
-        <h2>{report?.platform.model ?? machine?.model ?? 'This Mac'}</h2>
+        <h2>
+          {report?.platform.modelName ||
+            report?.platform.model ||
+            machine?.model ||
+            'This Mac'}
+        </h2>
         <button class="primary" onclick={() => (tab = 'Advanced audit')}
           >Choose an audit</button
         >
@@ -271,6 +296,10 @@
       </div>
     </section>
     {#if report}<FirmwareReportView {report} />{/if}
+  {:else if tab === 'Compare audits'}
+    <FirmwareComparisons {controller} />
+  {:else if tab === 'Updates & reminders'}
+    <FirmwareUpdates {controller} />
   {:else}
     <section class="panel">
       <h2>Separate manual guidance</h2>

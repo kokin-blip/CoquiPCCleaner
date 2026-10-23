@@ -2,6 +2,8 @@
   import type { FirmwarePlan } from '../bindings/FirmwarePlan';
   import type { FirmwareReport } from '../bindings/FirmwareReport';
   import type { createAppStore } from '../state';
+  import type { FirmwareComparison } from '../bindings/FirmwareComparison';
+  import FirmwareComparisonView from './FirmwareComparisonView.svelte';
   import Evidence from './Evidence.svelte';
   import Status from './Status.svelte';
   import { date } from '../format';
@@ -16,6 +18,7 @@
     onUpdate?: (p: FirmwarePlan) => void;
     onReport?: (r: FirmwareReport) => void;
   } = $props();
+  let comparison = $state<FirmwareComparison | null>(null);
   let acknowledged = $state(false),
     performed = $state(false),
     error = $state('');
@@ -28,10 +31,23 @@
   );
   $effect(() => {
     plan.id;
+    comparison = null;
     acknowledged = false;
     performed = false;
     error = '';
   });
+  async function inspectComparison() {
+    error = '';
+    try {
+      const record = await controller.service.record(
+        'firmwareComparison',
+        plan.comparisonId!,
+      );
+      if (record.kind === 'firmwareComparison') comparison = record.data;
+    } catch (e) {
+      error = String(e);
+    }
+  }
   async function accept(accepted: boolean) {
     error = '';
     try {
@@ -134,6 +150,10 @@
       New audit: {plan.afterReportId}. Open it in Firmware & Security or History
       → Activity.
     </p>{/if}
+  {#if plan.comparisonId}<button onclick={inspectComparison}
+      >Inspect before and after evidence</button
+    >{/if}
+  {#if comparison}<FirmwareComparisonView {comparison} />{/if}
   <details>
     <summary>Previous local observations</summary><Evidence
       items={plan.previous}

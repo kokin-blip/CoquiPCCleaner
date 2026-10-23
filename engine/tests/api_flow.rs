@@ -248,6 +248,26 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
             RetainedRecord::FirmwarePlan(_)
         ));
     }
+    let second = api::audit_firmware(
+        FirmwareRequest {
+            inventory: true,
+            security: false,
+            updates: false,
+            network_acknowledged: false,
+        },
+        |_| true,
+    )
+    .unwrap();
+    let comparison = api::compare_firmware(audit.id.clone(), second.id).unwrap();
+    assert_eq!(comparison.rows.len(), 9);
+    assert!(!api::firmware_center().unwrap().preferences.reminder_enabled);
+    api::save_firmware_reminder(true, 9).unwrap();
+    api::init_engine(data.path().to_string_lossy().into()).unwrap();
+    assert!(matches!(
+        api::get_record("firmwareComparison".into(), comparison.id).unwrap(),
+        RetainedRecord::FirmwareComparison(_)
+    ));
+    assert!(api::firmware_center().unwrap().preferences.reminder_enabled);
     let cancelled = api::audit_firmware(
         FirmwareRequest {
             inventory: true,
@@ -272,6 +292,7 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     assert!(api::scan_history(0, 10).unwrap().is_empty());
     assert!(api::activity_records(None, 0).unwrap().is_empty());
     assert!(api::maintenance_rule().unwrap().unwrap().enabled);
+    assert!(api::firmware_center().unwrap().preferences.reminder_enabled);
     assert!(api::get_cleanup_plan(plan.id).is_err());
     assert!(api::developer_report(id).unwrap().is_none());
     assert!(fixture.path().join("keep.txt").exists());

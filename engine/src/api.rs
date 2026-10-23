@@ -505,6 +505,9 @@ pub fn activity_records(kind: Option<String>, offset: u32) -> Result<Vec<Activit
 pub fn get_record(kind: String, id: String) -> Result<RetainedRecord> {
     let c = database::open(&engine()?.path)?;
     Ok(match kind.as_str() {
+        "firmwareComparison" => {
+            RetainedRecord::FirmwareComparison(crate::records::get(&c, &kind, &id)?)
+        }
         "firmware" => RetainedRecord::Firmware(crate::records::get(&c, &kind, &id)?),
         "firmwarePlan" => RetainedRecord::FirmwarePlan(crate::records::get(&c, &kind, &id)?),
         "duplicates" => RetainedRecord::Duplicates(crate::records::get(&c, &kind, &id)?),
@@ -575,4 +578,17 @@ pub fn observe_firmware_plan(
     send: impl FnMut(FirmwareReport) -> bool,
 ) -> Result<FirmwarePlan> {
     with_work(|e, c| crate::firmware::observe(c, &id, performed, &e.cancel_work, send))
+}
+
+pub fn compare_firmware(before: String, after: String) -> Result<FirmwareComparison> {
+    with_work(|_, c| crate::firmware_review::compare(c, &before, &after))
+}
+pub fn firmware_center() -> Result<FirmwareCenter> {
+    crate::firmware_review::center(&database::open(&engine()?.path)?)
+}
+pub fn save_firmware_reminder(enabled: bool, days: u32) -> Result<FirmwareCenter> {
+    with_work(|_, c| crate::firmware_review::save_reminder(c, enabled, days))
+}
+pub fn dismiss_firmware_notice(id: String) -> Result<FirmwareCenter> {
+    with_work(|_, c| crate::firmware_review::dismiss(c, &id))
 }

@@ -396,7 +396,7 @@ fn migration_reopen_and_interruption_do_not_retry_uncertain_actions() {
         reopened
             .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
             .unwrap(),
-        4
+        5
     );
     database::purge(&reopened).unwrap();
     assert!(cleanup::history(&reopened, 0, 10).unwrap().is_empty());

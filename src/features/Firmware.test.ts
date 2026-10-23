@@ -3,6 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../state';
 import { fakeBackend } from '../testing/fake-backend';
 import Firmware from './Firmware.svelte';
+import FirmwareUpdates from './FirmwareUpdates.svelte';
+import FirmwareComparisons from './FirmwareComparisons.svelte';
+import { firmwareCenter } from '../testing/fake-backend';
+import type { FirmwareComparison } from '../bindings/FirmwareComparison';
 import FirmwarePlanView from '../components/FirmwarePlanView.svelte';
 import ActivityHistory from './ActivityHistory.svelte';
 import type { FirmwareReport } from '../bindings/FirmwareReport';
@@ -20,6 +24,7 @@ const report: FirmwareReport = {
     networkAcknowledged: false,
   },
   platform: {
+    modelName: 'MacBook Pro',
     manufacturer: 'Apple',
     model: 'Mac16,8',
     chip: 'Apple M4 Pro',
@@ -70,6 +75,7 @@ const plan: FirmwarePlan = {
   acknowledgedAt: null,
   outcome: 'No action performed.',
   afterReportId: null,
+  comparisonId: null,
   recovery: 'No rollback guarantee.',
 };
 async function setup(overrides: Parameters<typeof fakeBackend>[0] = {}) {
@@ -236,6 +242,187 @@ describe('Phase 3 firmware workflows', () => {
     );
     await screen.findByText('Fixture platform, not a device measurement.');
     expect(service.auditFirmware).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+});
+
+const comparison: FirmwareComparison = {
+  id: 'comparison',
+  createdAt: report.createdAt,
+  status: 'complete',
+  beforeReportId: 'earlier',
+  afterReportId: report.id,
+  beforeObservedAt: '2026-10-21T10:00:00Z',
+  afterObservedAt: report.createdAt,
+  beforePlatform: report.platform,
+  afterPlatform: report.platform,
+  comparablePlatform: true,
+  rows: [
+    {
+      property: 'FileVault',
+      before: report.evidence[0],
+      after: report.evidence[0],
+      state: 'notComparable',
+      explanation: 'Permission gaps are not confirmed changes.',
+    },
+  ],
+  qualification: 'Saved comparison; installation remains unverified.',
+};
+describe('Phase 3 retained comparisons and local notices', () => {
+  it('opens the exact notice source and can reopen the same audit from another tab without collecting', async () => {
+    const record = vi.fn(async (_kind: string, id: string) => ({
+      kind: 'firmware' as const,
+      data: { ...report, id },
+    }));
+    const { controller, service } = await setup({ record });
+    render(Firmware, { controller });
+    controller.openFirmwareReport('source-audit');
+    await waitFor(() =>
+      expect(record).toHaveBeenCalledWith('firmware', 'source-audit'),
+    );
+    await screen.findByText('Fixture platform, not a device measurement.');
+    await fireEvent.click(screen.getByRole('tab', { name: 'Compare audits' }));
+    controller.openFirmwareReport('source-audit');
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    );
+    expect(service.auditFirmware).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+  it('saves disabled-by-default reminder preferences only after an explicit action and dismisses qualified notices locally', async () => {
+    const listing = {
+      ...structuredClone(firmwareCenter),
+      notices: [
+        {
+          id: 'source',
+          kind: 'offeredUpdates',
+          title: 'Saved offerings',
+          message: 'A later check failed; review older evidence.',
+          reportId: 'source',
+          observedAt: report.createdAt,
+          stale: true,
+        },
+      ],
+    };
+    const { controller, service } = await setup({
+      firmwareCenter: vi.fn(async () => listing),
+      saveFirmwareReminder: vi.fn(async (enabled, days) => ({
+        ...listing,
+        preferences: {
+          ...listing.preferences,
+          reminderEnabled: enabled,
+          intervalDays: days,
+        },
+      })),
+      dismissFirmwareNotice: vi.fn(async () => structuredClone(firmwareCenter)),
+    });
+    render(FirmwareUpdates, { controller });
+    await screen.findByText('Saved offerings');
+    expect(
+      screen.getByLabelText('Remind me to review firmware and update evidence'),
+    ).not.toBeChecked();
+    await waitFor(() => expect(screen.getByRole('button', {name:'Save review reminder'})).not.toBeDisabled());
+    expect(service.saveFirmwareReminder).not.toHaveBeenCalled();
+    await fireEvent.click(
+      screen.getByLabelText('Remind me to review firmware and update evidence'),
+    );
+    await fireEvent.input(
+      screen.getByLabelText('Firmware review interval in days'),
+      { target: { value: '9' } },
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Save review reminder' }),
+    );
+    await waitFor(() =>
+      expect(service.saveFirmwareReminder).toHaveBeenCalledWith(true, 9),
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Dismiss notice' }),
+    );
+    await waitFor(() =>
+      expect(service.dismissFirmwareNotice).toHaveBeenCalledWith('source'),
+    );
+    expect(service.auditFirmware).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+  it('compares selected retained audits, renders permission gaps and reopens saved comparison records', async () => {
+    const records = vi.fn(async (kind: string | null) =>
+      kind === 'firmware'
+        ? [
+            {
+              id: 'earlier',
+              kind: 'firmware',
+              createdAt: '2026-10-21T10:00:00Z',
+              status: 'complete',
+              title: 'Earlier',
+            },
+            {
+              id: report.id,
+              kind: 'firmware',
+              createdAt: report.createdAt,
+              status: 'partial',
+              title: 'Later',
+            },
+          ]
+        : [],
+    );
+    const { controller, service } = await setup({
+      records,
+      compareFirmware: vi.fn(async () => comparison),
+    });
+    render(FirmwareComparisons, { controller });
+    await waitFor(() =>
+      expect(
+        screen
+          .getByLabelText('Before firmware audit')
+          .querySelectorAll('option'),
+      ).toHaveLength(3),
+    );
+    await fireEvent.change(screen.getByLabelText('Before firmware audit'), {
+      target: { value: 'earlier' },
+    });
+    await fireEvent.change(screen.getByLabelText('After firmware audit'), {
+      target: { value: report.id },
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Compare observations' }),
+    );
+    await screen.findByText('Permission gaps are not confirmed changes.');
+    expect(service.compareFirmware).toHaveBeenCalledWith('earlier', report.id);
+    expect(
+      screen.getByText(/installation remains unverified/),
+    ).toBeInTheDocument();
+    controller.dispose();
+  });
+  it('opens the comparison attached to a manual outcome without claiming verified installation', async () => {
+    const { controller, service } = await setup({
+      record: vi.fn(async () => ({
+        kind: 'firmwareComparison' as const,
+        data: comparison,
+      })),
+    });
+    render(FirmwarePlanView, {
+      controller,
+      plan: {
+        ...plan,
+        status: 'unverified',
+        comparisonId: comparison.id,
+        outcome: 'Manual outcome remains unverified.',
+      },
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Inspect before and after evidence' }),
+    );
+    await screen.findByText(
+      'Saved comparison; installation remains unverified.',
+    );
+    expect(service.record).toHaveBeenCalledWith(
+      'firmwareComparison',
+      comparison.id,
+    );
     controller.dispose();
   });
 });

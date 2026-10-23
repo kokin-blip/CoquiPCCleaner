@@ -2,6 +2,7 @@
   import type { createAppStore } from '../state';
   import type { RetainedRecord } from '../bindings/RetainedRecord';
   import Evidence from './Evidence.svelte';
+  import FirmwareComparisonView from './FirmwareComparisonView.svelte';
   import FirmwareReportView from './FirmwareReportView.svelte';
   import FirmwarePlanView from './FirmwarePlanView.svelte';
   import Status from './Status.svelte';
@@ -32,7 +33,7 @@
 </script>
 
 {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
-{#if record.kind === 'firmware'}<FirmwareReportView
+{#if record.kind === 'firmwareComparison'}<FirmwareComparisonView comparison={record.data}/>{:else if record.kind === 'firmware'}<FirmwareReportView
     report={record.data}
   />{:else if record.kind === 'firmwarePlan'}<FirmwarePlanView
     {controller}

@@ -8,6 +8,7 @@ import type { CleanupPlan } from './bindings/CleanupPlan';
 import type { CleanupApproval } from './bindings/CleanupApproval';
 import type { CleanupRequest } from './bindings/CleanupRequest';
 
+import type { FirmwareCenter } from './bindings/FirmwareCenter';
 export type Page =
   | 'Ask Coqui'
   | 'Maintenance'
@@ -21,6 +22,10 @@ export type Page =
   | 'History'
   | 'Settings';
 export interface AppState {
+  firmwareCenter: FirmwareCenter | null;
+  firmwareNoticeError: string | null;
+  firmwareReportId: string | null;
+  firmwareRequest: number;
   loading: boolean;
   settings: AppSettings | null;
   session: DiagnosticSession | null;
@@ -43,6 +48,10 @@ export interface AppState {
 }
 export function createAppStore(service: Backend = nativeBackend) {
   const store = writable<AppState>({
+    firmwareCenter: null,
+    firmwareNoticeError: null,
+    firmwareReportId: null,
+    firmwareRequest: 0,
     loading: true,
     settings: null,
     session: null,
@@ -65,6 +74,7 @@ export function createAppStore(service: Backend = nativeBackend) {
   });
   let monitoring: Promise<void> | null = null;
   let disposed = false;
+  let firmwareRevision = 0;
   let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
   let saves: Promise<void> = Promise.resolve();
   const fail = (e: unknown) =>
@@ -117,6 +127,29 @@ export function createAppStore(service: Backend = nativeBackend) {
         monitoring = null;
       });
   }
+  function setFirmwareCenter(center: FirmwareCenter) {
+    firmwareRevision++;
+    store.update((s) => ({
+      ...s,
+      firmwareCenter: center,
+      firmwareNoticeError: null,
+    }));
+  }
+  async function refreshFirmwareCenter() {
+    const revision = ++firmwareRevision;
+    try {
+      const center = await service.firmwareCenter();
+      if (!disposed && revision === firmwareRevision)
+        store.update((s) => ({
+          ...s,
+          firmwareCenter: center,
+          firmwareNoticeError: null,
+        }));
+    } catch (e) {
+      if (!disposed && revision === firmwareRevision)
+        store.update((s) => ({ ...s, firmwareNoticeError: String(e) }));
+    }
+  }
   async function initialize() {
     store.update((s) => ({ ...s, loading: true, error: null }));
     try {
@@ -130,9 +163,13 @@ export function createAppStore(service: Backend = nativeBackend) {
         session: history[0] ?? null,
       }));
       if (!maintenanceTimer) {
-        maintenanceTimer = setInterval(() => void checkMaintenance(), 30000);
+        maintenanceTimer = setInterval(() => {
+          void checkMaintenance();
+          void refreshFirmwareCenter();
+        }, 30000);
         void checkMaintenance();
       }
+      await refreshFirmwareCenter();
       if (settings.onboardingComplete && settings.monitoringEnabled)
         startMonitoring();
     } catch (e) {
@@ -226,11 +263,14 @@ export function createAppStore(service: Backend = nativeBackend) {
       session: null,
       history: [],
       cleanupPlan: null,
+      firmwareCenter: null,
+      firmwareReportId: null,
       developerReport: null,
       samples: [],
       notice:
-        'Local scans, file indexes, reviews, investigations, measurements and action history removed. Files, preferences and the maintenance schedule were preserved.',
+        'Local diagnostic records and evidence notices removed. Files, preferences, maintenance and firmware review schedules were preserved; disable schedules separately.',
     }));
+    await refreshFirmwareCenter();
   }
   async function executeCleanup(approval: CleanupApproval) {
     if (
@@ -360,6 +400,17 @@ export function createAppStore(service: Backend = nativeBackend) {
   return {
     ...store,
     initialize,
+    setFirmwareCenter,
+    refreshFirmwareCenter,
+    selectFirmwareReport: (id: string) =>
+      store.update((s) => ({ ...s, firmwareReportId: id })),
+    openFirmwareReport: (id: string | null) =>
+      store.update((s) => ({
+        ...s,
+        firmwareReportId: id,
+        firmwareRequest: s.firmwareRequest + 1,
+        page: 'Firmware & Security',
+      })),
     work,
     executeCleanup,
     previewProjectCleanup,

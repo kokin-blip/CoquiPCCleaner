@@ -3,4 +3,4 @@ import type { DiagnosticEvidence } from "./DiagnosticEvidence";
 import type { FirmwarePlanKind } from "./FirmwarePlanKind";
 import type { PlatformCompatibility } from "./PlatformCompatibility";
 
-export type FirmwarePlan = { id: string, createdAt: string, reportId: string, kind: FirmwarePlanKind, status: string, title: string, before: PlatformCompatibility, previous: Array<DiagnosticEvidence>, steps: Array<string>, cautions: Array<string>, sourceUrl: string, sourceReviewedAt: string, acknowledgedAt: string | null, outcome: string, afterReportId: string | null, recovery: string, };
+export type FirmwarePlan = { id: string, createdAt: string, reportId: string, kind: FirmwarePlanKind, status: string, title: string, before: PlatformCompatibility, previous: Array<DiagnosticEvidence>, steps: Array<string>, cautions: Array<string>, sourceUrl: string, sourceReviewedAt: string, acknowledgedAt: string | null, outcome: string, afterReportId: string | null, comparisonId: string | null, recovery: string, };

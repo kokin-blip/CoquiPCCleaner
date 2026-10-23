@@ -43,6 +43,18 @@ export const session: DiagnosticSession = {
   candidates: [],
   errors: [],
 };
+export const firmwareCenter = {
+  preferences: {
+    reminderEnabled: false,
+    intervalDays: 7,
+    nextDueAt: null,
+    dismissedReportId: null,
+  },
+  notices: [],
+  latestAttemptAt: null,
+  latestAttemptState: 'notRequested',
+  qualification: 'Local fixture; no network check.',
+};
 export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
   const missing = async (): Promise<never> => {
     throw new Error('No phase 2 fixture configured');
@@ -52,6 +64,10 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     firmwarePlan: vi.fn(missing),
     acknowledgeFirmwarePlan: vi.fn(missing),
     observeFirmwarePlan: vi.fn(missing),
+    firmwareCenter: vi.fn(async () => structuredClone(firmwareCenter)),
+    saveFirmwareReminder: vi.fn(missing),
+    dismissFirmwareNotice: vi.fn(missing),
+    compareFirmware: vi.fn(missing),
     reference: vi.fn(async () => {}),
     analyzeDuplicates: vi.fn(missing),
     previewDuplicates: vi.fn(missing),

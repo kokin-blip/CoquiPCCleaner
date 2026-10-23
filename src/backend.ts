@@ -32,7 +32,13 @@ import type { FirmwareRequest } from './bindings/FirmwareRequest';
 import type { FirmwareReport } from './bindings/FirmwareReport';
 import type { FirmwarePlan } from './bindings/FirmwarePlan';
 import type { FirmwarePlanKind } from './bindings/FirmwarePlanKind';
+import type { FirmwareCenter } from './bindings/FirmwareCenter';
+import type { FirmwareComparison } from './bindings/FirmwareComparison';
 export interface Backend {
+  firmwareCenter(): Promise<FirmwareCenter>;
+  saveFirmwareReminder(enabled: boolean, days: number): Promise<FirmwareCenter>;
+  dismissFirmwareNotice(id: string): Promise<FirmwareCenter>;
+  compareFirmware(before: string, after: string): Promise<FirmwareComparison>;
   auditFirmware(
     request: FirmwareRequest,
     onEvent: (r: FirmwareReport) => void,
@@ -109,6 +115,12 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  firmwareCenter: () => invoke('firmware_center'),
+  saveFirmwareReminder: (enabled, days) =>
+    invoke('save_firmware_reminder', { enabled, days }),
+  dismissFirmwareNotice: (id) => invoke('dismiss_firmware_notice', { id }),
+  compareFirmware: (before, after) =>
+    invoke('compare_firmware', { before, after }),
   auditFirmware: (request, onEvent) => {
     const channel = new Channel<FirmwareReport>();
     channel.onmessage = onEvent;

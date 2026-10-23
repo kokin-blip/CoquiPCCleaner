@@ -55,10 +55,12 @@ Version 0.3.0 adds Optimization → Developer artifacts: recognized outputs, ind
 
 Supported project-folder approval, verification, recovery and disposable fixture commands: [Phase 2.3](docs/phases/project-cleanup.md).
 
-Version 0.6.0 remaining supported workflows, operation bounds, manual capabilities and persistence: [Phase 2.4](docs/phases/phase-2-workflows.md). Native disposable duplicate/keeper Trash verification (explicit, then restores its fixture):
+Version 0.5.0 remaining supported Phase 2 workflows, operation bounds, manual capabilities and persistence: [Phase 2.4](docs/phases/phase-2-workflows.md). Native disposable duplicate/keeper Trash verification (explicit, then restores its fixture):
 
 ```sh
 cargo test --manifest-path engine/Cargo.toml --locked --test phase2 native_duplicate_trash -- --ignored
 ```
 
 Phase 3.1 adds **Firmware & Security → Advanced audit**: individually select firmware inventory, readable security status and an optional macOS update check. Update checks require network consent each run and never download or install. The Guidance tab prepares separate Apple manual checklists with interruption/recovery disclosures; observations after a manual step remain qualified. Audits and plans are retained in History → Activity and follow Settings retention/purge. See [capabilities, compatibility and validation](docs/phases/phase-3-implementation.md).
+
+Phase 3.2 (0.7.0) adds **Compare audits** and **Updates & reminders**. Compare two chronological saved audits, inspect scope/permission gaps, open exact source audits from local notices, or enable a 1–365 day review reminder. Reminders appear only inside Coqui while open/reopened; they never start an audit, contact Apple or request macOS notification permission. Manual follow-up links its before/after evidence while remaining unverified. Schema 5 preserves reminder preferences through diagnostic purge. See [implementation and validation](docs/phases/phase-3-completion.md).

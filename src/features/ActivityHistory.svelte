@@ -38,6 +38,7 @@
     }
   }
   const names: Record<string, string> = {
+    firmwareComparison: 'Firmware audit comparisons',
     firmware: 'Firmware & security audits',
     firmwarePlan: 'Apple manual guidance plans',
     duplicates: 'Duplicate reports',

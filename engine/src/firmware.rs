@@ -201,7 +201,7 @@ fn compatibility(h: Option<&Value>, version: &str, build: &str) -> PlatformCompa
             .next()
             .and_then(|s| s.parse::<u32>().ok())
             .is_some_and(|v| v >= 14);
-    PlatformCompatibility { manufacturer:if chip.starts_with("Apple "){"Apple"}else{"Unconfirmed"}.into(),model,chip,architecture:std::env::consts::ARCH.into(),os_version:version.into(),os_build:build.into(),eligible,qualification:if eligible {"Apple Silicon/macOS 14+ adapter match from this run. Model-family compatibility is not proof that every property is exposed or physically tested; only Mac16,8 has local hardware validation."} else {"Model, Apple Silicon target or macOS 14+ eligibility could not be established. Advanced audits and update checks are withheld; use the model-appropriate Apple tools."}.into() }
+    PlatformCompatibility { model_name:h.and_then(|h|field(h,"machine_name")).unwrap_or_default(), manufacturer:if chip.starts_with("Apple "){"Apple"}else{"Unconfirmed"}.into(),model,chip,architecture:std::env::consts::ARCH.into(),os_version:version.into(),os_build:build.into(),eligible,qualification:if eligible {"Apple Silicon/macOS 14+ adapter match from this run. Model-family compatibility is not proof that every property is exposed or physically tested; only Mac16,8 has local hardware validation."} else {"Model, Apple Silicon target or macOS 14+ eligibility could not be established. Advanced audits and update checks are withheld; use the model-appropriate Apple tools."}.into() }
 }
 fn capabilities(p: &PlatformCompatibility) -> Vec<SystemCapability> {
     [
@@ -544,7 +544,7 @@ pub fn plan(c: &Connection, report_id: &str, kind: FirmwarePlanKind) -> Result<F
         FirmwarePlanKind::StartupPolicyReview=>("Inspect startup security in Recovery",POLICY_GUIDE,vec!["Save work and read Apple's instructions for this Mac. Arrange administrator/owner assistance for managed devices.","Use the Apple guide to enter Recovery manually and inspect the policy for the intended startup disk.","Record your observations outside Coqui if needed. This is an inspection plan; no lowering of security is recommended or authorized.","Restart normally using Apple's interface and return for readable local status observations."],vec!["Entering Recovery interrupts the current session. Coqui does not initiate shutdown or authenticate for you.","Full/Reduced Security cannot be verified by Coqui after return. SIP is a different property."]),
         FirmwarePlanKind::RecoveryReview=>("Review Apple firmware recovery requirements",RECOVERY_GUIDE,vec!["Use this guide only for the firmware/startup symptoms Apple describes; a version number alone is not a reason to revive or restore.","Consult the current Apple guide for the exact model, DFU port, compatible cable, power, host Mac and network requirements.","Apple distinguishes Revive from Restore. Review the effects and consult support before any operation.","Coqui provides this reading checklist only. Any recovery operation and consent occur separately in Apple's tools."],vec!["Restore erases the affected Mac. Revive is a different procedure; neither is executed or verified by Coqui.","Recovery can require another Mac and model-specific steps. Do not interrupt Apple's process; recovery or data restoration is not guaranteed."]),
     };
-    let p=FirmwarePlan{id:uuid::Uuid::new_v4().to_string(),created_at:now(),report_id:r.id,kind,status:"awaitingAcknowledgement".into(),title:title.into(),before:r.platform,previous:r.evidence,steps:steps.into_iter().map(str::to_owned).collect(),cautions:cautions.into_iter().map(str::to_owned).collect(),source_url:source.into(),source_reviewed_at:SOURCE_REVIEWED.into(),acknowledged_at:None,outcome:"No action performed by Coqui. Guidance is a bundled snapshot; verify current instructions at Apple before proceeding.".into(),after_report_id:None,recovery:"If an update or startup fails, use current Apple support and recovery instructions. Restore can erase data. Coqui cannot promise rollback, initiate recovery, or establish a successful reboot/firmware operation from a user acknowledgement.".into()};
+    let p=FirmwarePlan{id:uuid::Uuid::new_v4().to_string(),created_at:now(),report_id:r.id,kind,status:"awaitingAcknowledgement".into(),title:title.into(),before:r.platform,previous:r.evidence,steps:steps.into_iter().map(str::to_owned).collect(),cautions:cautions.into_iter().map(str::to_owned).collect(),source_url:source.into(),source_reviewed_at:SOURCE_REVIEWED.into(),acknowledged_at:None,outcome:"No action performed by Coqui. Guidance is a bundled snapshot; verify current instructions at Apple before proceeding.".into(),after_report_id:None,comparison_id:None,recovery:"If an update or startup fails, use current Apple support and recovery instructions. Restore can erase data. Coqui cannot promise rollback, initiate recovery, or establish a successful reboot/firmware operation from a user acknowledgement.".into()};
     save_plan(c, &p)?;
     Ok(p)
 }
@@ -617,6 +617,10 @@ pub fn observe(
     } else {
         format!("User reports completing a manual step. OS build before: {}; after: {}. New local readings are retained in audit {}. These observations do not verify a successful installation, reboot, restore or startup security policy. Firmware versions may be unchanged after a software update.",p.before.os_build,after.platform.os_build,after.id)
     };
+    match crate::firmware_review::compare(c,&p.report_id,&after.id) {
+        Ok(comparison) => p.comparison_id=Some(comparison.id),
+        Err(_) => p.outcome.push_str(" A saved comparison could not be created; inspect the retained observations separately."),
+    }
     save_plan(c, &p)?;
     Ok(p)
 }
@@ -643,9 +647,7 @@ mod tests {
         })
     }
     fn db() -> Connection {
-        let c = Connection::open_in_memory().unwrap();
-        c.execute_batch("CREATE TABLE records(id TEXT PRIMARY KEY,kind TEXT,created_at TEXT,status TEXT,title TEXT,json TEXT);").unwrap();
-        c
+        crate::database::open(std::path::Path::new(":memory:")).unwrap()
     }
     fn fixture_report(c: &Connection) -> FirmwareReport {
         audit_with(

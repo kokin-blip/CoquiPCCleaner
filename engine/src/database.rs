@@ -9,7 +9,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
     let version: u32 = c.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
-        version <= 4,
+        version <= 5,
         "This diagnostic database was created by a newer version of CoquiPCCleaner."
     );
     if version == 0 {
@@ -40,6 +40,9 @@ pub fn open(path: &Path) -> Result<Connection> {
         CREATE INDEX record_kind ON records(kind,created_at DESC);
         CREATE TABLE maintenance(id INTEGER PRIMARY KEY CHECK(id=1),json TEXT NOT NULL);
         PRAGMA user_version=4; COMMIT;")?;
+    }
+    if version < 5 {
+        c.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS firmware_preferences(id INTEGER PRIMARY KEY CHECK(id=1),json TEXT NOT NULL); PRAGMA user_version=5; COMMIT;")?;
     }
     Ok(c)
 }
@@ -203,6 +206,6 @@ pub fn retain(c: &Connection, days: u32) -> Result<()> {
     Ok(())
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM records; DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }

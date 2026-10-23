@@ -617,6 +617,7 @@ pub enum RetainedRecord {
     Resources(ResourceReview),
     Firmware(FirmwareReport),
     FirmwarePlan(FirmwarePlan),
+    FirmwareComparison(FirmwareComparison),
 }
 
 /// Scope is explicit for every run; no capability is enabled by a saved default.
@@ -631,6 +632,8 @@ pub struct FirmwareRequest {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformCompatibility {
+    #[serde(default)]
+    pub model_name: String,
     pub manufacturer: String,
     pub model: String,
     pub chip: String,
@@ -693,5 +696,71 @@ pub struct FirmwarePlan {
     pub acknowledged_at: Option<String>,
     pub outcome: String,
     pub after_report_id: Option<String>,
+    #[serde(default)]
+    pub comparison_id: Option<String>,
     pub recovery: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareDelta {
+    pub property: String,
+    pub before: Option<DiagnosticEvidence>,
+    pub after: Option<DiagnosticEvidence>,
+    pub state: String,
+    pub explanation: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareComparison {
+    pub id: String,
+    pub created_at: String,
+    pub status: String,
+    pub before_report_id: String,
+    pub after_report_id: String,
+    pub before_observed_at: String,
+    pub after_observed_at: String,
+    pub before_platform: PlatformCompatibility,
+    pub after_platform: PlatformCompatibility,
+    pub comparable_platform: bool,
+    pub rows: Vec<FirmwareDelta>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwarePreferences {
+    pub reminder_enabled: bool,
+    pub interval_days: u32,
+    pub next_due_at: Option<String>,
+    pub dismissed_report_id: Option<String>,
+}
+impl Default for FirmwarePreferences {
+    fn default() -> Self {
+        Self {
+            reminder_enabled: false,
+            interval_days: 7,
+            next_due_at: None,
+            dismissed_report_id: None,
+        }
+    }
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareNotice {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub message: String,
+    pub report_id: Option<String>,
+    pub observed_at: String,
+    pub stale: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareCenter {
+    pub preferences: FirmwarePreferences,
+    pub notices: Vec<FirmwareNotice>,
+    pub latest_attempt_at: Option<String>,
+    pub latest_attempt_state: String,
+    pub qualification: String,
 }
