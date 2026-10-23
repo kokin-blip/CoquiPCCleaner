@@ -29,6 +29,53 @@ fn engine() -> Result<Arc<Engine>> {
         .context("Engine not initialized")
 }
 
+#[cfg(test)]
+#[test]
+fn internal_scan_database_is_the_journal_database() {
+    let fixture = tempfile::tempdir().unwrap();
+    let data = fixture.path().join("state");
+    std::fs::create_dir(&data).unwrap();
+    let root = fixture.path().join("files");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("disposable.txt"), "fixture").unwrap();
+    let path = data.join("diagnostics.sqlite3");
+    init_engine_database(path.clone()).unwrap();
+    scan(
+        ScanRequest {
+            mode: "selected".into(),
+            roots: vec![root.to_string_lossy().into_owned()],
+            excluded_paths: vec![],
+            plan_id: None,
+        },
+        |_| true,
+    )
+    .unwrap();
+    let c = database::open(&path).unwrap();
+    let sessions = database::history(&c, 0, 10).unwrap();
+    assert_eq!(sessions.len(), 1);
+    let count: u32 = c
+        .query_row("SELECT count(*) FROM files", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 2); // The selected directory and its one file.
+    assert!(!data.join("coqui.sqlite3").exists());
+    let mut elevated = sessions[0].clone();
+    elevated.id = uuid::Uuid::new_v4().to_string();
+    save_administrator_session(&c, &elevated).unwrap();
+    assert_eq!(
+        c.query_row(
+            "SELECT count(*) FROM administrator_records WHERE kind='scan'",
+            [],
+            |r| r.get::<_, u32>(0)
+        )
+        .unwrap(),
+        1
+    );
+    purge_administrator_mirrors(&c).unwrap();
+    let kept = database::history(&c, 0, 10).unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].id, sessions[0].id);
+}
+
 pub fn init_engine(data_directory: String) -> Result<AppSettings> {
     let dir = PathBuf::from(data_directory);
     anyhow::ensure!(
@@ -36,6 +83,12 @@ pub fn init_engine(data_directory: String) -> Result<AppSettings> {
         "Application data directory must be absolute"
     );
     std::fs::create_dir_all(&dir)?;
+    init_engine_database(dir.join("coqui.sqlite3"))
+}
+
+// The helper uses the same validated per-user database for scans and journals.
+// This is internal Rust API, never a caller-selected IPC database path.
+pub(crate) fn init_engine_database(path: PathBuf) -> Result<AppSettings> {
     let mut guard = ENGINE
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -46,7 +99,6 @@ pub fn init_engine(data_directory: String) -> Result<AppSettings> {
             "Stop scan and monitoring before changing engine location"
         );
     }
-    let path = dir.join("coqui.sqlite3");
     let c = database::open(&path)?;
     database::recover_interrupted(&c)?;
     let settings = database::settings(&c)?;
@@ -76,7 +128,31 @@ pub fn update_settings(settings: AppSettings) -> Result<()> {
     );
     let _guard = ActiveGuard(&e.active);
     let c = database::open(&e.path)?;
+    if settings.administrator_enabled && !database::settings(&c)?.administrator_enabled {
+        anyhow::ensure!(
+            administrator_status()?.compatible,
+            "A matching installed administrator helper is required"
+        );
+        e.cancel_work.store(false, Ordering::SeqCst);
+        crate::helper::begin_authorization(&e.cancel_work)?;
+    }
+    if crate::helper::protocol() == 2
+        && (settings.administrator_enabled || database::settings(&c)?.administrator_enabled)
+    {
+        let preferences = crate::privileged::Preferences {
+            excluded_paths: settings.excluded_paths.clone(),
+            protected_paths: crate::applications::preferences(&c)?.protected_paths,
+            retention_days: settings.retention_days,
+        };
+        crate::helper::production(
+            crate::privileged::Operation::SetPreferences { preferences },
+            false,
+        )?;
+    }
     database::save_settings(&c, &settings)?;
+    if !settings.administrator_enabled {
+        crate::helper::clear_authorization();
+    }
     database::retain(&c, settings.retention_days)
 }
 pub fn scan_history(offset: u32, limit: u32) -> Result<Vec<DiagnosticSession>> {
@@ -86,7 +162,20 @@ pub fn get_session(id: String) -> Result<DiagnosticSession> {
     database::session(&database::open(&engine()?.path)?, &id)
 }
 pub fn storage_entries(query: StorageQuery) -> Result<Vec<FileEntry>> {
-    database::files(&database::open(&engine()?.path)?, &query)
+    let c = database::open(&engine()?.path)?;
+    if database::settings(&c)?.administrator_enabled
+        && c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM administrator_records WHERE id=?1 AND kind='scan')",
+            [&query.session_id],
+            |r| r.get::<_, bool>(0),
+        )?
+    {
+        return Ok(serde_json::from_value(crate::helper::production(
+            crate::privileged::Operation::Files { query },
+            false,
+        )?)?);
+    }
+    database::files(&c, &query)
 }
 pub fn clear_diagnostic_data() -> Result<()> {
     let e = engine()?;
@@ -640,7 +729,20 @@ pub fn disk_scan_plan() -> Result<DiskScanPlan> {
     crate::volumes::plan(&database::open(&engine()?.path)?)
 }
 pub fn scan_coverage(id: String, offset: u32) -> Result<Vec<CoverageGap>> {
-    database::coverage(&database::open(&engine()?.path)?, &id, offset)
+    let c = database::open(&engine()?.path)?;
+    if database::settings(&c)?.administrator_enabled
+        && c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM administrator_records WHERE id=?1 AND kind='scan')",
+            [&id],
+            |r| r.get::<_, bool>(0),
+        )?
+    {
+        return Ok(serde_json::from_value(crate::helper::production(
+            crate::privileged::Operation::Coverage { id, offset },
+            false,
+        )?)?);
+    }
+    database::coverage(&c, &id, offset)
 }
 
 fn removal_policy(e: &Engine) -> Result<crate::removal::Policy> {
@@ -660,6 +762,7 @@ fn removal_policy(e: &Engine) -> Result<crate::removal::Policy> {
         home: p.home,
         exclusions: p.exclusions,
         self_app,
+        administrator_uid: None,
     })
 }
 pub fn application_page(
@@ -702,30 +805,123 @@ pub fn application_preferences() -> Result<crate::applications::ApplicationPrefe
     crate::applications::preferences(&database::open(&engine()?.path)?)
 }
 pub fn save_application_preferences(p: crate::applications::ApplicationPreferences) -> Result<()> {
-    with_work(|_, c| crate::applications::save_preferences(c, &p))
+    with_work(|_, c| {
+        let s = database::settings(c)?;
+        if s.administrator_enabled && crate::helper::protocol() == 2 {
+            crate::helper::production(
+                crate::privileged::Operation::SetPreferences {
+                    preferences: crate::privileged::Preferences {
+                        excluded_paths: s.excluded_paths,
+                        protected_paths: p.protected_paths.clone(),
+                        retention_days: s.retention_days,
+                    },
+                },
+                false,
+            )?;
+        }
+        crate::applications::save_preferences(c, &p)
+    })
 }
 pub fn preview_removal(r: crate::removal::RemovalRequest) -> Result<crate::removal::RemovalPlan> {
     with_work(|e, c| crate::removal::preview(c, r, &removal_policy(e)?, &e.cancel_work))
 }
 pub fn preview_restore(id: String, paths: Vec<String>) -> Result<crate::removal::RemovalPlan> {
     with_work(|e, c| {
+        if is_administrator_plan(c, &id)? {
+            let preferences = administrator_preferences(e)?;
+            let job = wait_administrator(
+                crate::privileged::Operation::PreviewRestore {
+                    id,
+                    paths,
+                    preferences,
+                },
+                &e.cancel_work,
+                |_| true,
+            )?;
+            let p = job.plan.context("No administrator restore review")?;
+            mirror_administrator(c, &p)?;
+            return Ok(p);
+        }
         crate::removal::preview_restore(c, &id, &paths, &removal_policy(e)?, &e.cancel_work)
     })
 }
 pub fn execute_removal(
     a: crate::removal::RemovalApproval,
-    send: impl FnMut(crate::removal::RemovalPlan) -> bool,
+    mut send: impl FnMut(crate::removal::RemovalPlan) -> bool,
 ) -> Result<crate::removal::RemovalPlan> {
     with_work(|e, c| {
+        if is_administrator_plan(c, &a.id)? {
+            let preferences = administrator_preferences(e)?;
+            let job = wait_administrator(
+                crate::privileged::Operation::Execute {
+                    approval: a,
+                    preferences,
+                },
+                &e.cancel_work,
+                |j| {
+                    j.plan
+                        .as_ref()
+                        .is_none_or(|p| mirror_administrator(c, p).is_ok() && send(p.clone()))
+                },
+            )?;
+            let p = job.plan.context("No administrator removal result")?;
+            mirror_administrator(c, &p)?;
+            // Refresh authoritative public records so restored originals cannot retain stale offers.
+            let mut offset = 0;
+            loop {
+                let plans: Vec<crate::removal::RemovalPlan> =
+                    serde_json::from_value(crate::helper::production(
+                        crate::privileged::Operation::History { offset },
+                        false,
+                    )?)?;
+                if plans.is_empty() {
+                    break;
+                }
+                for p in &plans {
+                    mirror_administrator(c, p)?;
+                }
+                offset += plans.len() as u32;
+            }
+            return Ok(p);
+        }
         crate::removal::native_execute(c, a, &removal_policy(e)?, &e.cancel_work, send)
     })
 }
 pub fn removal_history(offset: u32) -> Result<Vec<crate::removal::RemovalPlan>> {
-    crate::removal::history(&database::open(&engine()?.path)?, offset)
+    let e = engine()?;
+    let c = database::open(&e.path)?;
+    if database::settings(&c)?.administrator_enabled {
+        // Refresh retained private records as well as plans started by this app.
+        // A connection failure must not erase previously imported recovery data.
+        for page in (0..=offset / 50).map(|page| page * 50) {
+            let value = crate::helper::production(
+                crate::privileged::Operation::History { offset: page },
+                false,
+            )?;
+            let records: Vec<crate::removal::RemovalPlan> = serde_json::from_value(value)?;
+            let count = records.len();
+            for record in records {
+                mirror_administrator(&c, &record)?;
+            }
+            if count < 50 {
+                break;
+            }
+        }
+    }
+    let mut q=c.prepare("SELECT payload FROM (SELECT json_extract(json,'$.plan') payload,created_at FROM removal_plans UNION ALL SELECT json payload,created_at FROM administrator_records WHERE kind='removal') ORDER BY created_at DESC LIMIT 50 OFFSET ?1")?;
+    let rows = q.query_map([offset], |r| r.get::<_, String>(0))?;
+    rows.map(|r| Ok(serde_json::from_str(&r?)?)).collect()
 }
 
 pub fn removal_entries(id: String, index: u32, offset: u32) -> Result<Vec<FileEntry>> {
     with_work(|e, c| {
+        if is_administrator_plan(c, &id)? {
+            let _ = administrator_preferences(e)?;
+            return Ok(serde_json::from_value(crate::helper::production(
+                crate::privileged::Operation::Entries { id, index, offset },
+                false,
+            )?)?);
+        }
         crate::removal::entries(c, &id, index, offset, &removal_policy(e)?, &e.cancel_work)
     })
 }
@@ -737,4 +933,308 @@ pub fn application_leftovers(
 }
 pub fn application_notices() -> Result<u32> {
     crate::applications::notices(&database::open(&engine()?.path)?)
+}
+
+pub fn administrator_status() -> Result<crate::privileged::HelperStatus> {
+    use crate::privileged::{HelperStatus, Operation};
+    if crate::helper::protocol() != 2 {
+        return Ok(HelperStatus{authorization_seconds:0,installed:std::path::Path::new("/Library/PrivilegedHelperTools/com.coqui.CoquiPCCleaner.Helper").exists(),compatible:false,version:String::new(),protocol:crate::helper::protocol(),qualification:"Install the matching optional Coqui app-and-helper package. Portable builds and the health gate do not provide production administrator access.".into()});
+    }
+    let mut status: HelperStatus =
+        serde_json::from_value(crate::helper::production(Operation::Health, false)?)?;
+    status.authorization_seconds = crate::helper::authorization_remaining();
+    Ok(status)
+}
+pub fn administrator_lock() -> Result<()> {
+    with_work(|_, _| {
+        crate::helper::clear_authorization();
+        Ok(())
+    })
+}
+fn administrator_preferences(e: &Engine) -> Result<crate::privileged::Preferences> {
+    let c = database::open(&e.path)?;
+    let s = database::settings(&c)?;
+    anyhow::ensure!(
+        s.administrator_enabled,
+        "Enable the optional matching administrator helper in Settings first"
+    );
+    Ok(crate::privileged::Preferences {
+        excluded_paths: s.excluded_paths,
+        protected_paths: crate::applications::preferences(&c)?.protected_paths,
+        retention_days: s.retention_days,
+    })
+}
+fn wait_administrator(
+    operation: crate::privileged::Operation,
+    cancel: &AtomicBool,
+    mut event: impl FnMut(&crate::privileged::Job) -> bool,
+) -> Result<crate::privileged::Job> {
+    use crate::privileged::{Job, Operation};
+    anyhow::ensure!(
+        !cancel.load(Ordering::SeqCst),
+        "Operation cancelled before authorization"
+    );
+    let mut job: Job = serde_json::from_value(crate::helper::production_with_cancel(
+        operation, true, cancel,
+    )?)?;
+    if job.status == "authorized" {
+        if cancel.load(Ordering::SeqCst) {
+            crate::helper::production(Operation::Cancel { id: job.id.clone() }, false)?;
+            anyhow::bail!("Operation cancelled before start");
+        }
+        job = serde_json::from_value(crate::helper::production(
+            Operation::Start { id: job.id.clone() },
+            false,
+        )?)?;
+    }
+    let mut cancelled = false;
+    loop {
+        if !event(&job) {
+            cancel.store(true, Ordering::SeqCst);
+        }
+        if job.status != "running" {
+            break;
+        }
+        if cancel.load(Ordering::SeqCst) && !cancelled {
+            crate::helper::production(Operation::Cancel { id: job.id.clone() }, false)?;
+            cancelled = true;
+        }
+        std::thread::sleep(Duration::from_millis(350));
+        match crate::helper::production(Operation::Status { id: job.id.clone() }, false) {
+            Ok(value) => job = serde_json::from_value(value)?,
+            Err(error) => {
+                let _ = crate::helper::production(Operation::Cancel { id: job.id.clone() }, false);
+                return Err(error.context("Administrator transport failed; inspect retained records before another review"));
+            }
+        }
+    }
+    if let Some(error) = &job.error {
+        anyhow::bail!("{error}");
+    }
+    Ok(job)
+}
+fn mirror_administrator(c: &rusqlite::Connection, p: &crate::removal::RemovalPlan) -> Result<()> {
+    anyhow::ensure!(p.administrator, "Expected an administrator journal result");
+    c.execute("INSERT INTO administrator_records VALUES(?1,'removal',?2,?3) ON CONFLICT(id) DO UPDATE SET json=excluded.json",rusqlite::params![p.id,p.created_at,serde_json::to_string(p)?])?;
+    Ok(())
+}
+fn save_administrator_session(c: &rusqlite::Connection, s: &DiagnosticSession) -> Result<()> {
+    let tx = c.unchecked_transaction()?;
+    database::save_session(&tx, s)?;
+    tx.execute(
+        "INSERT INTO administrator_records VALUES(?1,'scan',?2,'{}') ON CONFLICT(id) DO NOTHING",
+        rusqlite::params![s.id, s.started_at],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+fn purge_administrator_mirrors(c: &rusqlite::Connection) -> Result<()> {
+    let tx = c.unchecked_transaction()?;
+    tx.execute(
+        "DELETE FROM sessions WHERE id IN (SELECT id FROM administrator_records WHERE kind='scan')",
+        [],
+    )?;
+    tx.execute("DELETE FROM administrator_records", [])?;
+    tx.commit()?;
+    Ok(())
+}
+fn is_administrator_plan(c: &rusqlite::Connection, id: &str) -> Result<bool> {
+    Ok(c.query_row(
+        "SELECT EXISTS(SELECT 1 FROM administrator_records WHERE id=?1 AND kind='removal')",
+        [id],
+        |r| r.get(0),
+    )?)
+}
+pub fn administrator_inspect_application(
+    path: String,
+) -> Result<crate::applications::ApplicationFootprint> {
+    with_work(|e, _| {
+        let preferences = administrator_preferences(e)?;
+        let job = wait_administrator(
+            crate::privileged::Operation::InspectApplication { path, preferences },
+            &e.cancel_work,
+            |_| true,
+        )?;
+        job.application
+            .context("No administrator application result")
+    })
+}
+pub fn administrator_preview_removal(
+    request: crate::removal::RemovalRequest,
+) -> Result<crate::removal::RemovalPlan> {
+    with_work(|e, c| {
+        let preferences = administrator_preferences(e)?;
+        let job = wait_administrator(
+            crate::privileged::Operation::PreviewRemoval {
+                request,
+                preferences,
+            },
+            &e.cancel_work,
+            |_| true,
+        )?;
+        let p = job.plan.context("No administrator preview")?;
+        mirror_administrator(c, &p)?;
+        Ok(p)
+    })
+}
+pub fn administrator_lifecycle(action: crate::privileged::Lifecycle) -> Result<()> {
+    with_work(|e, c| {
+        crate::helper::production_with_cancel(
+            crate::privileged::Operation::Lifecycle { action },
+            true,
+            &e.cancel_work,
+        )?;
+        if matches!(action, crate::privileged::Lifecycle::Purge) {
+            purge_administrator_mirrors(c)?;
+        }
+        if matches!(
+            action,
+            crate::privileged::Lifecycle::Stop | crate::privileged::Lifecycle::Uninstall
+        ) {
+            let mut s = database::settings(c)?;
+            s.administrator_enabled = false;
+            database::save_settings(c, &s)?;
+        }
+        Ok(())
+    })
+}
+pub fn administrator_scan(
+    request: ScanRequest,
+    plan: DiskScanPlan,
+    mut send: impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
+    use crate::privileged::Operation;
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active operation"
+    );
+    let _guard = ActiveGuard(&e.active);
+    e.cancel.store(false, Ordering::SeqCst);
+    let preferences = administrator_preferences(&e)?;
+    let mut c = database::open(&e.path)?;
+    let mut latest = None;
+    let job = wait_administrator(
+        Operation::Scan {
+            request,
+            plan,
+            preferences,
+        },
+        &e.cancel,
+        |j| {
+            let Some(session) = &j.session else {
+                return true;
+            };
+            let mut s = session.clone();
+            if s.status != "running" {
+                s.status = "running".into();
+                s.stage = "Importing administrator scan results".into();
+            }
+            if save_administrator_session(&c, &s).is_err() {
+                return false;
+            }
+            latest = Some(session.clone());
+            // A bounded current page supplies real partial results while traversal continues.
+            let q = StorageQuery {
+                session_id: s.id.clone(),
+                parent: None,
+                category: None,
+                search: None,
+                sort: "size".into(),
+                descending: true,
+                offset: 0,
+                limit: 100,
+                files_only: false,
+            };
+            if let Ok(value) = crate::helper::production(Operation::Files { query: q }, false) {
+                if let Ok(files) = serde_json::from_value::<Vec<FileEntry>>(value) {
+                    let _ = database::insert_files(&mut c, &s.id, &files);
+                }
+            }
+            send(ScanEvent { session: s })
+        },
+    );
+    let job = match job {
+        Ok(j) => j,
+        Err(error) => {
+            if let Some(mut s) = latest {
+                s.status = "partial".into();
+                s.stage = "Administrator scan interrupted".into();
+                s.errors.push(error.to_string());
+                save_administrator_session(&c, &s)?;
+                let _ = send(ScanEvent { session: s });
+            }
+            return Err(error);
+        }
+    };
+    let mut s = job
+        .session
+        .or(latest)
+        .context("Administrator scan returned no session")?;
+    // Preserve real partial pages already imported. Cancellation stops collection; saving the resulting index is a separate stage.
+    let collection_cancelled = e.cancel.swap(false, Ordering::SeqCst);
+    if collection_cancelled {
+        s.stage = "Saving partial administrator results".into();
+    }
+    let mut after = String::new();
+    let mut imported_files = 0u32;
+    loop {
+        if e.cancel.load(Ordering::SeqCst) {
+            s.status = "cancelled".into();
+            s.errors.push("Index import cancelled; local results contain the imported subset. The helper retains its own scan until retention or explicit purge.".into());
+            break;
+        }
+        let files: Vec<FileEntry> = serde_json::from_value(crate::helper::production(
+            Operation::ExportFiles {
+                id: s.id.clone(),
+                after: after.clone(),
+            },
+            false,
+        )?)?;
+        if files.is_empty() {
+            break;
+        }
+        imported_files += files.iter().filter(|f| !f.is_directory).count() as u32;
+        after = files.last().unwrap().path.clone();
+        database::insert_files(&mut c, &s.id, &files)?;
+        let mut progress = s.clone();
+        progress.status = "running".into();
+        progress.stage = format!(
+            "Saving administrator metadata: {imported_files} of {} files",
+            s.file_count
+        );
+        if !send(ScanEvent { session: progress }) {
+            e.cancel.store(true, Ordering::SeqCst);
+        }
+    }
+    if !e.cancel.load(Ordering::SeqCst) && imported_files != s.file_count {
+        s.status = "partial".into();
+        s.errors.push("The helper index changed or was unavailable during import. Retained imported results are partial; review scope and retry.".into());
+    }
+    c.execute("DELETE FROM scan_gaps WHERE session_id=?1", [&s.id])?;
+    let mut offset = 0;
+    loop {
+        let gaps: Vec<CoverageGap> = serde_json::from_value(crate::helper::production(
+            Operation::Coverage {
+                id: s.id.clone(),
+                offset,
+            },
+            false,
+        )?)?;
+        if gaps.is_empty() {
+            break;
+        }
+        database::insert_gaps(&mut c, &s.id, &gaps)?;
+        offset += gaps.len() as u32;
+    }
+    s.stage = format!(
+        "{} • administrator metadata; TCC/SIP access gaps remain qualified",
+        s.stage
+    );
+    save_administrator_session(&c, &s)?;
+    database::retain(&c, database::settings(&c)?.retention_days)?;
+    let _ = send(ScanEvent { session: s });
+    Ok(())
 }

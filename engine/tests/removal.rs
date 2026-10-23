@@ -26,6 +26,7 @@ impl Fixture {
             home: home.clone(),
             exclusions: vec![],
             self_app: None,
+            administrator_uid: None,
         };
         Self {
             _dir: d,
@@ -359,6 +360,7 @@ fn native_file_folder_and_application_trash_and_verified_restore() {
         home,
         exclusions: vec![],
         self_app: None,
+        administrator_uid: None,
     };
     let cancel = AtomicBool::new(false);
     let file = root.join("Disposable file.txt");
@@ -651,4 +653,45 @@ fn reviewed_folder_allocation_counts_hard_linked_objects_once() {
     let p = f.preview(&[dir]);
     assert_eq!(p.items[0].entry_count, 3);
     assert_eq!(p.items[0].logical_bytes, 10.);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn administrator_reviews_use_fd_seals_and_remain_bound_to_exclusions_and_authority() {
+    let mut f = Fixture::new();
+    f.policy.administrator_uid = Some(unsafe { libc::geteuid() });
+    let dir = f.home.join("Downloads/Reviewed folder");
+    fs::create_dir(&dir).unwrap();
+    fs::write(dir.join("a"), b"fixture").unwrap();
+    let plan = f.preview(&[dir.clone()]);
+    assert!(plan.administrator);
+    f.policy.exclusions.push(dir.join("a"));
+    let mut moved = false;
+    let result = removal::execute(
+        &f.c,
+        f.approval(&plan),
+        &f.policy,
+        &f.cancel,
+        |_| {
+            moved = true;
+            anyhow::bail!("must not move")
+        },
+        |_| true,
+    )
+    .unwrap();
+    assert!(!moved);
+    assert_eq!(result.items[0].status, "blocked");
+    f.policy.exclusions.clear();
+    let second = f.preview(&[dir.clone()]);
+    f.policy.administrator_uid = None;
+    assert!(removal::execute(
+        &f.c,
+        f.approval(&second),
+        &f.policy,
+        &f.cancel,
+        |_| anyhow::bail!("must not move"),
+        |_| true
+    )
+    .is_err());
+    assert!(dir.exists());
 }

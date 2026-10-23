@@ -6,6 +6,19 @@ fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+use coqui_engine::privileged::{HelperStatus,Lifecycle};
+#[tauri::command]
+async fn administrator_lock()->Response<()>{tauri::async_runtime::spawn_blocking(api::administrator_lock).await.map_err(error)?.map_err(error)}
+#[tauri::command]
+async fn administrator_status()->Response<HelperStatus>{tauri::async_runtime::spawn_blocking(api::administrator_status).await.map_err(error)?.map_err(error)}
+#[tauri::command]
+async fn administrator_inspect_application(path:String)->Response<ApplicationFootprint>{tauri::async_runtime::spawn_blocking(move||api::administrator_inspect_application(path)).await.map_err(error)?.map_err(error)}
+#[tauri::command]
+async fn administrator_preview_removal(request:RemovalRequest)->Response<RemovalPlan>{tauri::async_runtime::spawn_blocking(move||api::administrator_preview_removal(request)).await.map_err(error)?.map_err(error)}
+#[tauri::command]
+async fn administrator_lifecycle(action:Lifecycle)->Response<()>{tauri::async_runtime::spawn_blocking(move||api::administrator_lifecycle(action)).await.map_err(error)?.map_err(error)}
+#[tauri::command]
+async fn administrator_scan(request:ScanRequest,plan:DiskScanPlan,events:Channel<ScanEvent>)->Response<()>{tauri::async_runtime::spawn_blocking(move||api::administrator_scan(request,plan,|event|events.send(event).is_ok())).await.map_err(error)?.map_err(error)}
 use coqui_engine::{applications::*, removal::*};
 #[tauri::command]
 fn application_leftovers(offset: u32) -> Response<Vec<ApplicationFootprint>> {
@@ -30,8 +43,8 @@ async fn disk_scan_plan() -> Response<DiskScanPlan> {
         .map_err(error)
 }
 #[tauri::command]
-fn scan_coverage(id: String, offset: u32) -> Response<Vec<CoverageGap>> {
-    api::scan_coverage(id, offset).map_err(error)
+async fn scan_coverage(id: String, offset: u32) -> Response<Vec<CoverageGap>> {
+    tauri::async_runtime::spawn_blocking(move || api::scan_coverage(id, offset)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 async fn application_page(
@@ -61,8 +74,8 @@ fn application_preferences() -> Response<ApplicationPreferences> {
     api::application_preferences().map_err(error)
 }
 #[tauri::command]
-fn save_application_preferences(p: ApplicationPreferences) -> Response<()> {
-    api::save_application_preferences(p).map_err(error)
+async fn save_application_preferences(p: ApplicationPreferences) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || api::save_application_preferences(p)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 async fn preview_removal(r: RemovalRequest) -> Response<RemovalPlan> {
@@ -79,8 +92,8 @@ async fn preview_restore(id: String, paths: Vec<String>) -> Response<RemovalPlan
         .map_err(error)
 }
 #[tauri::command]
-fn removal_history(offset: u32) -> Response<Vec<RemovalPlan>> {
-    api::removal_history(offset).map_err(error)
+async fn removal_history(offset: u32) -> Response<Vec<RemovalPlan>> {
+    tauri::async_runtime::spawn_blocking(move||api::removal_history(offset)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 async fn execute_removal(
@@ -108,8 +121,8 @@ fn get_settings() -> Response<AppSettings> {
     api::get_settings().map_err(error)
 }
 #[tauri::command]
-fn update_settings(settings: AppSettings) -> Response<()> {
-    api::update_settings(settings).map_err(error)
+async fn update_settings(settings: AppSettings) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || api::update_settings(settings)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 fn scan_history(offset: u32, limit: u32) -> Response<Vec<DiagnosticSession>> {
@@ -120,8 +133,8 @@ fn get_session(id: String) -> Response<DiagnosticSession> {
     api::get_session(id).map_err(error)
 }
 #[tauri::command]
-fn storage_entries(query: StorageQuery) -> Response<Vec<FileEntry>> {
-    api::storage_entries(query).map_err(error)
+async fn storage_entries(query: StorageQuery) -> Response<Vec<FileEntry>> {
+    tauri::async_runtime::spawn_blocking(move || api::storage_entries(query)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 fn clear_diagnostic_data() -> Response<()> {
@@ -437,6 +450,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            administrator_status,administrator_lock,administrator_inspect_application,administrator_preview_removal,administrator_lifecycle,administrator_scan,
             refresh_application_inventory,
             application_leftovers,
             application_notices,
@@ -511,6 +525,7 @@ fn main() {
                 let _ = api::cancel_scan();
                 let _ = api::cancel_cleanup();
                 let _ = api::stop_monitoring();
+                std::thread::spawn(coqui_engine::helper::clear_authorization);
             }
         });
 }

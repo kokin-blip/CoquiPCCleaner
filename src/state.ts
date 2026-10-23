@@ -1,3 +1,4 @@
+import type { DiskScanPlan } from './bindings/DiskScanPlan';
 import { get, writable } from 'svelte/store';
 import { backend as nativeBackend, type Backend } from './backend';
 import type { AppSettings } from './bindings/AppSettings';
@@ -217,7 +218,11 @@ export function createAppStore(service: Backend = nativeBackend) {
     }
   }
 
-  async function scan(planId: string | null = null, roots?: string[]) {
+  async function scan(
+    planId: string | null = null,
+    roots?: string[],
+    administratorPlan: DiskScanPlan | null = null,
+  ) {
     const s = get(store);
     if (!s.settings || s.scanning) return;
     if (
@@ -250,6 +255,7 @@ export function createAppStore(service: Backend = nativeBackend) {
           receivedEvent = true;
           store.update((s) => ({ ...s, session: e.session }));
         },
+        administratorPlan,
       );
       await refresh();
     } catch (e) {

@@ -54,6 +54,7 @@ pub fn open(path: &Path) -> Result<Connection> {
         CREATE TABLE IF NOT EXISTS application_preferences(id INTEGER PRIMARY KEY CHECK(id=1),json TEXT NOT NULL);
         PRAGMA user_version=6; COMMIT;")?;
     }
+    c.execute_batch("CREATE TABLE IF NOT EXISTS administrator_records(id TEXT PRIMARY KEY,kind TEXT NOT NULL,created_at TEXT NOT NULL,json TEXT NOT NULL);")?;
     Ok(c)
 }
 
@@ -221,6 +222,10 @@ pub fn retain(c: &Connection, days: u32) -> Result<()> {
         "DELETE FROM application_observations WHERE json_extract(json,'$.observedAt') < ?1",
         [&cutoff],
     )?;
+    c.execute(
+        "DELETE FROM administrator_records WHERE created_at < ?1",
+        [&cutoff],
+    )?;
     // Keep the latest complete and latest unfinished index per scope; summaries remain retained.
     c.execute("DELETE FROM files WHERE session_id IN (SELECT old.id FROM sessions old WHERE old.status!='running' AND EXISTS(SELECT 1 FROM sessions newer WHERE newer.status!='running' AND (newer.status='complete')=(old.status='complete') AND newer.scope=old.scope AND (newer.started_at>old.started_at OR (newer.started_at=old.started_at AND newer.rowid>old.rowid))))",[])?;
     c.execute(
@@ -230,7 +235,7 @@ pub fn retain(c: &Connection, days: u32) -> Result<()> {
     Ok(())
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM application_observations; DELETE FROM removal_plans; DELETE FROM scan_plans; DELETE FROM scan_gaps; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM application_observations; DELETE FROM removal_plans;DELETE FROM administrator_records; DELETE FROM scan_plans; DELETE FROM scan_gaps; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }
 
@@ -252,6 +257,25 @@ pub fn coverage(c: &Connection, id: &str, offset: u32) -> Result<Vec<CoverageGap
             root: r.get(0)?,
             path: r.get(1)?,
             reason: r.get(2)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Keyset export for transferring a completed helper index without growing offset costs.
+pub fn files_after(c: &Connection, id: &str, after: &str) -> Result<Vec<FileEntry>> {
+    let mut q=c.prepare("SELECT path,parent,name,category,logical,allocated,directory,modified,qualification FROM files WHERE session_id=?1 AND path>?2 ORDER BY path LIMIT 500")?;
+    let rows = q.query_map(rusqlite::params![id, after], |r| {
+        Ok(FileEntry {
+            path: r.get(0)?,
+            parent: r.get(1)?,
+            name: r.get(2)?,
+            category: r.get(3)?,
+            logical_bytes: r.get(4)?,
+            allocated_bytes: r.get(5)?,
+            is_directory: r.get(6)?,
+            modified_at: r.get(7)?,
+            qualification: r.get(8)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

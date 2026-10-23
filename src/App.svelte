@@ -44,6 +44,7 @@
     $props();
   let query = $state('');
   let deepConfirm = $state(false);
+  let administratorScan = $state(false);
   let volumePlan = $state<DiskScanPlan | null>(null),
     volumeError = $state(''),
     volumeLoading = $state(false),
@@ -100,8 +101,10 @@
     document.querySelector('main.content')?.scrollTo(0, 0);
   }
   function scan() {
+    administratorScan = false;
     if ($controller.settings?.scanMode === 'deep') {
       deepConfirm = true;
+      administratorScan = false;
       volumePlan = null;
       volumeError = '';
       volumeLoading = true;
@@ -306,7 +309,9 @@
           <LoaderCircle class="spin" size={17} />
           <div>
             <strong
-              >{$controller.session?.stage ?? 'Preparing analysis…'}</strong
+              >{$controller.session?.stage ?? (administratorScan
+                ? 'Preparing administrator scan; check macOS authorization if prompted…'
+                : 'Preparing analysis…')}</strong
             ><span
               >{$controller.session?.fileCount.toLocaleString() ?? 0} files inspected
               · {$controller.cancelling
@@ -433,6 +438,14 @@
     {#if volumeLoading}<p role="status">Enumerating mounted volumes…</p>{/if}
     {#if volumeError}<p class="inline-error" role="alert">{volumeError}</p>
       <button onclick={scan}>Retry volume inventory</button>{/if}
+    {#if $controller.settings?.administratorEnabled}<label class="check-row"
+        ><input type="checkbox" bind:checked={administratorScan} />Use
+        administrator metadata collection for this scan</label
+      >
+      <p class="muted small">
+        macOS authorization is required. Access restrictions still appear in
+        Coverage.
+      </p>{/if}
     {#if volumePlan}<div class="table-scroll">
         <table>
           <thead
@@ -476,7 +489,7 @@
         onclick={() => {
           const p = volumePlan!;
           deepConfirm = false;
-          void controller.scan(p.id, volumeRoots);
+          void controller.scan(p.id, volumeRoots, administratorScan ? p : null);
         }}>Scan selected volumes</button
       >
     </div>

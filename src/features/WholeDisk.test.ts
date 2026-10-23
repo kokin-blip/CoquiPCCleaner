@@ -39,6 +39,7 @@ const footprint: ApplicationFootprint = {
   qualification: 'Test fixture; no device measurements.',
 };
 const plan: RemovalPlan = {
+  administrator: false,
   id: 'removal',
   createdAt: '2026-10-23T00:00:00Z',
   expiresAt: '2026-10-23T00:10:00Z',

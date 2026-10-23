@@ -1,3 +1,4 @@
+import type { HelperStatus } from './bindings/HelperStatus';
 import type { DiskScanPlan } from './bindings/DiskScanPlan';
 import type { CoverageGap } from './bindings/CoverageGap';
 import type { ApplicationPage } from './bindings/ApplicationPage';
@@ -43,6 +44,11 @@ import type { FirmwarePlanKind } from './bindings/FirmwarePlanKind';
 import type { FirmwareCenter } from './bindings/FirmwareCenter';
 import type { FirmwareComparison } from './bindings/FirmwareComparison';
 export interface Backend {
+  administratorStatus(): Promise<HelperStatus>;
+  administratorLock(): Promise<void>;
+  administratorInspectApplication(path: string): Promise<ApplicationFootprint>;
+  administratorPreviewRemoval(request: RemovalRequest): Promise<RemovalPlan>;
+  administratorLifecycle(action: 'purge' | 'stop' | 'uninstall'): Promise<void>;
   applicationLeftovers(offset: number): Promise<ApplicationFootprint[]>;
   applicationNotices(): Promise<number>;
   diskScanPlan(): Promise<DiskScanPlan>;
@@ -139,6 +145,7 @@ export interface Backend {
   scan(
     request: ScanRequest,
     onEvent: (event: ScanEvent) => void,
+    administratorPlan?: DiskScanPlan | null,
   ): Promise<void>;
   cancel(): Promise<void>;
   monitor(onEvent: (metrics: LiveMetrics) => void): Promise<void>;
@@ -150,6 +157,14 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  administratorStatus: () => invoke('administrator_status'),
+  administratorLock: () => invoke('administrator_lock'),
+  administratorInspectApplication: (path) =>
+    invoke('administrator_inspect_application', { path }),
+  administratorPreviewRemoval: (request) =>
+    invoke('administrator_preview_removal', { request }),
+  administratorLifecycle: (action) =>
+    invoke('administrator_lifecycle', { action }),
   applicationLeftovers: (offset) => invoke('application_leftovers', { offset }),
   applicationNotices: () => invoke('application_notices'),
   diskScanPlan: () => invoke('disk_scan_plan'),
@@ -261,10 +276,16 @@ export const backend: Backend = {
   save: (settings) => invoke('update_settings', { settings }),
   history: (offset, limit) => invoke('scan_history', { offset, limit }),
   files: (query) => invoke('storage_entries', { query }),
-  scan: (request, onEvent) => {
+  scan: (request, onEvent, administratorPlan) => {
     const channel = new Channel<ScanEvent>();
     channel.onmessage = onEvent;
-    return invoke('scan', { request, onEvent: channel });
+    return administratorPlan
+      ? invoke('administrator_scan', {
+          request,
+          plan: administratorPlan,
+          events: channel,
+        })
+      : invoke('scan', { request, onEvent: channel });
   },
   cancel: () => invoke('cancel_scan'),
   monitor: (onEvent) => {

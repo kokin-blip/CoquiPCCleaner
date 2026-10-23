@@ -8,7 +8,7 @@ UI extends the existing Operate/native macOS system, logo, themes and evidence/r
 
 Validation must use disposable fixtures only, including an explicitly installed administrator-owned fixture. No existing user application or personal file is removed for testing. Tests cover coverage/aliases/scalability, stale seals, permissions, mixed results, authenticated helper boundaries, restart/migrations, native Trash/restore and UI accessibility/layout. Final release requires native app/ZIP/package validation; other hardware/macOS and Gatekeeper limits must be reported rather than inferred.
 
-Progress: portable implementation and local validation are complete within the boundary below. The mandatory helper installation gate is still pending, so the full 0.8.0 plan is incomplete. Local artifacts are labeled portable candidates.
+Progress: portable validation and the corrected diagnostic installation/connection/removal gate passed. The production helper and app-plus-helper packages are implemented; native administrator-owned fixture validation is in progress. See [production helper boundary and current results](administrator-helper.md). The historical checkpoints below retain their original validation limits.
 
 ## Direction contract
 
@@ -40,7 +40,9 @@ Restore uses only retained verified Trash references, fresh source/parent/conten
 
 `applications` reads bounded, no-follow local bundle metadata and qualifies running state through public NSWorkspace APIs. Inventory refresh is separate from SQLite search/sort/pagination. Exact bundle-ID cache/preferences/saved-state/support conventions plus filesystem ownership are candidates for explicit review, not proof of disposability. Group/sandbox containers remain unconfirmed; another installed bundle declaring the same identity blocks shared-data removal. Related data starts unselected. Running/self/macOS/user-protected bundles, project boundaries, services/extensions and vendor requirements receive protection/guidance. Missing-path notices are default off and checked only at app open; missing does not establish uninstall success.
 
-## Administrator installation gate — pending
+## Historical health-only installation checkpoint
+
+These paragraphs describe the original pending gate. The corrected gate subsequently passed and was removed; current production authority and validation are in administrator-helper.md.
 
 `scripts/helper-package.sh` builds an ad hoc signed health-only XPC daemon, a matching probe, `Coqui-Helper-Gate.pkg` and its removal package. The package checks fixed root-owned installation paths for symlinks/unsafe ownership, uses `/Library/LaunchDaemons` with `ProgramArguments`, and registers only its own Mach service. It has no RunAtLoad scan, cleanup or arbitrary command endpoint. A root-owned pairing manifest pins exact code hashes using public NSXPCConnection code-signing requirements. The health request is typed, denies unknown fields/operations/protocols and root/noninteractive callers; client response completion is synchronized. The diagnostic gate pairs its probe, not a production GUI mutation client.
 
@@ -92,3 +94,12 @@ The repair extracts the hash using explicit verbosity 4, rejects anything other 
 `scripts/verify-helper-gate.py` expands the package into disposable temporary storage, checks both manifest pins against the actual payload and identical probe, verifies a mismatched code hash is rejected, and confirms the daemon has only fixed `--serve` arguments/Mach service without RunAtLoad or KeepAlive. This verifier passes and now runs after package creation. The corrected probe returns a qualified error against the old invalid installed manifest instead of aborting. `scripts/check.sh` passes with **53 frontend +125 Rust tests**, zero Svelte errors/warnings, build/format/native checks. No user-file mutation or production-helper operation was performed.
 
 Corrected gate package SHA-256: **55a060abccf59e9c311972ad9afccb252e3b15bc6eed1ecd7a9207a328881934**; removal package: **ff54e25aa0600e85fe6b2c46cd0a03e03243879ea9eaddfd584d7e641af86090**. The repaired payload/probe pin is `d7bcf340bc80dc707071cfa59b9a7ba65292a8c2`. Installer is ready for the repaired 700 KB gate. Automatic approval review rejected initiating this root-helper installation without action-time confirmation; user approval/native administrator authorization is pending. After repair installation, verify authenticated root health, mismatched peers/version behavior and native removal before implementing the production helper. The previous portable candidate is unchanged.
+
+
+## Production helper continuation — 2026-10-23
+
+The corrected gate authenticated root health, denied different-identifier/mismatched clients and was removed with user approval. Production packaging and protocol now implement the optional administrator path; see [administrator-helper.md](administrator-helper.md) for exact authority, bounds, privacy and lifecycle. Default-off Settings and separate per-run administrator choices preserve the existing review flow.
+
+The first production fixture package installed through native Installer. Its paired installed diagnostic client and GUI authenticated. Both root-owned fixture moves were blocked before rename with `Operation not permitted` while opening the requesting user's Trash; the private journal records blocked outcomes and no Trash destination. A read-only fixture report confirmed both originals still present. No approval was replayed. Full Disk Access for the exact installed helper was separately explained and approved by the user; the macOS authentication step is in progress. This is neither complete root cleanup validation nor a failed verification after a move.
+
+Review also caught and corrected a split scan/journal database path: internal engine initialization now uses the same root-owned per-user database queried by helper result operations. Its real-scan regression checks the retained session/file index there. The fixed Trash worker clears supplementary groups and drops UID/GID in its separate process before Foundation resolves the user's Trash. Source checks now pass **57 frontend +135 Rust =192 standard tests**. Production package payload verification still does not substitute for the remaining native fixture, restart and lifecycle validation.

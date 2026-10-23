@@ -19,6 +19,7 @@
   --warning: #f2c483;
   --warning-wash: #493b2b;
   --danger: #ee9399;
+  --on-danger: #351015;
   --category-0: #275f56;
   --category-1: #3b5c7b;
   --category-2: #625580;
@@ -48,6 +49,7 @@
   --warning: #83540b;
   --warning-wash: #fff0d8;
   --danger: #ad2f3b;
+  --on-danger: #fff;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
@@ -71,5 +73,6 @@
     --warning: #83540b;
     --warning-wash: #fff0d8;
     --danger: #ad2f3b;
+    --on-danger: #fff;
   }
 }

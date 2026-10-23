@@ -3,6 +3,7 @@ use ts_rs::TS;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings");
     AppSettings::export_all_to(&path)?;
+    coqui_engine::privileged::HelperStatus::export_all_to(&path)?;
     coqui_engine::applications::ApplicationPage::export_all_to(&path)?;
     coqui_engine::applications::ApplicationPreferences::export_all_to(&path)?;
     coqui_engine::removal::RemovalRequest::export_all_to(&path)?;

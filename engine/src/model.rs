@@ -116,6 +116,8 @@ pub struct WorkloadProfile {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
+    #[serde(default)]
+    pub administrator_enabled: bool,
     pub onboarding_complete: bool,
     pub workload: WorkloadProfile,
     pub appearance: String,
@@ -129,6 +131,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            administrator_enabled: false,
             onboarding_complete: false,
             workload: WorkloadProfile {
                 workloads: vec!["General productivity".into()],

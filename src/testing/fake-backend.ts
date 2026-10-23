@@ -15,6 +15,7 @@ export const metric: LiveMetrics = {
   qualification: 'fixture',
 };
 export const settings: AppSettings = {
+  administratorEnabled: false,
   onboardingComplete: true,
   workload: { workloads: ['Software development'], preference: 'Balanced' },
   appearance: 'system',
@@ -62,6 +63,18 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     throw new Error('No phase 2 fixture configured');
   };
   return {
+    administratorLock: vi.fn(async () => {}),
+    administratorStatus: vi.fn(async () => ({
+      authorizationSeconds: 0,
+      installed: false,
+      compatible: false,
+      version: '',
+      protocol: 0,
+      qualification: 'Test fixture: helper absent',
+    })),
+    administratorInspectApplication: vi.fn(),
+    administratorPreviewRemoval: vi.fn(),
+    administratorLifecycle: vi.fn(async () => {}),
     applicationLeftovers: vi.fn(async () => []),
     applicationNotices: vi.fn(async () => 0),
     diskScanPlan: vi.fn(missing),

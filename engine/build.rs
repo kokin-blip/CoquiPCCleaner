@@ -7,6 +7,7 @@ fn main() {
             .flag("-fblocks")
             .flag("-mmacosx-version-min=14.0")
             .compile("coqui_helper_native");
+        println!("cargo:rustc-link-lib=proc");
         for f in ["Foundation", "Security", "AppKit"] {
             println!("cargo:rustc-link-lib=framework={f}");
         }

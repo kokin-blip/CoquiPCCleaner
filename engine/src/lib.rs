@@ -25,3 +25,10 @@ pub mod volumes;
 
 pub mod applications;
 pub mod removal;
+
+#[cfg(target_os = "macos")]
+mod safe_fs;
+
+pub mod privileged;
+
+pub mod helper_validation;

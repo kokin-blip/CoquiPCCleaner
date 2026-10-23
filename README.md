@@ -67,6 +67,15 @@ Phase 3.1 adds **Firmware & Security → Advanced audit**: individually select f
 
 Phase 3.2 (0.7.0) adds **Compare audits** and **Updates & reminders**. Compare two chronological saved audits, inspect scope/permission gaps, open exact source audits from local notices, or enable a 1–365 day review reminder. Reminders appear only inside Coqui while open/reopened; they never start an audit, contact Apple or request macOS notification permission. Manual follow-up links its before/after evidence while remaining unverified. Schema 5 preserves reminder preferences through diagnostic purge. See [implementation and validation](docs/phases/phase-3-completion.md).
 
-## 0.8 implementation gate
+## 0.8 whole-disk and administrator extension
 
-The portable 0.8 candidate adds whole-internal scope/coverage, Applications and reviewed recoverable removal. The complete approved plan is **not yet finished**: the optional administrator helper currently has only a health gate, with native installation/connection/removal still requiring user authorization. `scripts/helper-package.sh` produces the diagnostic gate and removal packages, not the final app+helper installer. See [scope, commands and validation limits](docs/phases/whole-disk-cleanup.md) and [reference feature map](docs/reference-feature-map.md). No elevated cleanup support or comprehensive disk access is claimed by this gate.
+Whole internal disk reviews mounted scopes and persists omissions; it never promises comprehensive access. Applications and Storage use exact-path Trash approval, verification and separate no-overwrite restore. The optional administrator helper is off by default. Its corrected installation gate passed; production native fixture validation is in progress. See [helper authority, recovery and validation](docs/phases/administrator-helper.md), [whole-disk scope](docs/phases/whole-disk-cleanup.md) and [reference feature map](docs/reference-feature-map.md).
+
+After the portable release build, create the optional app-plus-helper installer:
+
+```sh
+./scripts/administrator-package.sh
+python3 scripts/verify-administrator-package.py
+```
+
+Install the matching package and open `/Applications/CoquiPCCleaner.app`. In Settings, explicitly check its connection before enabling administrator choices. Enabling administrator choices authenticates a short native session, reused for up to 15 minutes. Each scan/review/action still requires its own scope or approval; Lock, turning the option off and app exit end the session. Installation and Full Disk Access are separate macOS setup steps and can require their own authentication. Root access cannot bypass TCC/SIP, and private helper journals have separate removal controls. Elevated Trash uses the requesting user's location; Finder Put Back metadata and full app recovery are not promised. No production installer/operation acceptance is inferred from packaging alone.

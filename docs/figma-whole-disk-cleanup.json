@@ -82,5 +82,32 @@
     "156:69"
   ],
   "appearanceCollection": "VariableCollectionId:155:94",
-  "qualification": "Editable illustrative structural handoffs; incumbent Inter fallback, native runtime system font. No pixel parity or elevated implementation completion claim."
+  "qualification": "Editable illustrative structural handoffs; incumbent Inter fallback, native runtime system font. No pixel parity or elevated implementation completion claim.",
+  "administratorExtension": {
+    "frame": {
+      "id": "185:1933",
+      "name": "Settings / Optional administrator helper / 0.8",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 15,
+        "TEXT": 24,
+        "INSTANCE": 23,
+        "VECTOR": 40
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "imageNodes": []
+    },
+    "action": "185:1960",
+    "sourcePreserved": "183:2017",
+    "updatedQualificationNodes": [
+      "183:1992",
+      "183:2120"
+    ],
+    "script": "scripts/figma/administrator-helper.js",
+    "visualCheck": "Full composition checked at 1440 \u00d7 960; editable structural handoff, incumbent Inter fallback. Native system font remains different; no pixel parity claim.",
+    "authorizationSession": "Up to 15 minutes in the current process, explicit Lock/off/exit; per-operation reviews retained. Installer and Full Disk Access remain separate macOS setup."
+  }
 }

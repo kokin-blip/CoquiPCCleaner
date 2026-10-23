@@ -4,8 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    io::Read,
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -46,41 +45,49 @@ pub struct ApplicationPage {
     pub qualification: String,
 }
 fn info(path: &Path) -> Result<plist::Value> {
-    let contents = fs::symlink_metadata(path.join("Contents"))?;
-    anyhow::ensure!(
-        contents.is_dir() && !contents.file_type().is_symlink(),
-        "Linked bundle Contents is not eligible"
-    );
-    let p = path.join("Contents/Info.plist");
-    let before = fs::symlink_metadata(&p)?;
-    anyhow::ensure!(
-        before.is_file()
-            && !before.file_type().is_symlink()
-            && before.len() <= 1024 * 1024
-            && !storage::placeholder(&p, &before),
-        "Bundle metadata unavailable, linked or cloud-only"
-    );
-    let mut f = fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-        .open(&p)?;
-    let m = f.metadata()?;
-    anyhow::ensure!(
-        m.dev() == before.dev() && m.ino() == before.ino() && !storage::placeholder(&p, &m),
-        "Bundle metadata changed"
-    );
-    let mut bytes = vec![];
-    (&mut f).take(1024 * 1024 + 1).read_to_end(&mut bytes)?;
-    let after = f.metadata()?;
-    anyhow::ensure!(
-        bytes.len() <= 1024 * 1024
-            && after.len() == m.len()
-            && after.mtime() == m.mtime()
-            && after.mtime_nsec() == m.mtime_nsec()
-            && after.ctime() == m.ctime()
-            && after.ctime_nsec() == m.ctime_nsec(),
-        "Bundle metadata changed or exceeds the read limit"
-    );
+    #[cfg(target_os = "macos")]
+    let bytes = crate::safe_fs::read_bundle_info(path)?;
+    #[cfg(not(target_os = "macos"))]
+    let bytes = {
+        use std::{io::Read, os::unix::fs::OpenOptionsExt};
+
+        let contents = fs::symlink_metadata(path.join("Contents"))?;
+        anyhow::ensure!(
+            contents.is_dir() && !contents.file_type().is_symlink(),
+            "Linked bundle Contents is not eligible"
+        );
+        let p = path.join("Contents/Info.plist");
+        let before = fs::symlink_metadata(&p)?;
+        anyhow::ensure!(
+            before.is_file()
+                && !before.file_type().is_symlink()
+                && before.len() <= 1024 * 1024
+                && !storage::placeholder(&p, &before),
+            "Bundle metadata unavailable, linked or cloud-only"
+        );
+        let mut f = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(&p)?;
+        let m = f.metadata()?;
+        anyhow::ensure!(
+            m.dev() == before.dev() && m.ino() == before.ino() && !storage::placeholder(&p, &m),
+            "Bundle metadata changed"
+        );
+        let mut bytes = vec![];
+        (&mut f).take(1024 * 1024 + 1).read_to_end(&mut bytes)?;
+        let after = f.metadata()?;
+        anyhow::ensure!(
+            bytes.len() <= 1024 * 1024
+                && after.len() == m.len()
+                && after.mtime() == m.mtime()
+                && after.mtime_nsec() == m.mtime_nsec()
+                && after.ctime() == m.ctime()
+                && after.ctime_nsec() == m.ctime_nsec(),
+            "Bundle metadata changed or exceeds the read limit"
+        );
+        bytes
+    };
     Ok(plist::Value::from_reader(std::io::Cursor::new(bytes))?)
 }
 #[cfg(target_os = "macos")]
@@ -135,10 +142,33 @@ pub fn inspect(path: &Path, policy: &Policy) -> Result<ApplicationFootprint> {
     let bundle_id = string("CFBundleIdentifier");
     anyhow::ensure!(id_safe(&bundle_id), "Bundle identity is missing or invalid");
     let mut protection = vec![];
+    if crate::volumes::mounted_identity(path).ok()
+        != path
+            .parent()
+            .and_then(|parent| crate::volumes::mounted_identity(parent).ok())
+    {
+        protection.push(
+            "Application is a mounted filesystem root; use native volume/vendor guidance".into(),
+        );
+    }
+    if d.get("SMPrivilegedExecutables")
+        .and_then(plist::Value::as_dictionary)
+        .is_some_and(|items| !items.is_empty())
+    {
+        protection
+            .push("Declares privileged services; use the vendor's documented uninstaller".into());
+    }
     if let Some(parent) = path.parent() {
         let home = policy.home.canonicalize()?;
         let project = if parent.starts_with(&home) {
-            crate::cleanup::cache_project_context(parent, &home).is_err()
+            crate::cleanup::cache_project_context_as(
+                parent,
+                &home,
+                policy
+                    .administrator_uid
+                    .unwrap_or_else(|| unsafe { libc::geteuid() }),
+            )
+            .is_err()
         } else {
             parent.ancestors().any(crate::removal::project_marker)
         };
@@ -147,7 +177,7 @@ pub fn inspect(path: &Path, policy: &Policy) -> Result<ApplicationFootprint> {
         }
     }
 
-    if bundle_id.starts_with("com.apple.")
+    if bundle_id.to_ascii_lowercase().starts_with("com.apple.")
         || path.starts_with("/System")
         || path.starts_with("/Library/Apple")
     {
@@ -160,7 +190,10 @@ pub fn inspect(path: &Path, policy: &Policy) -> Result<ApplicationFootprint> {
     }
     match running() {
         Ok(paths) => {
-            if paths.iter().any(|p| Path::new(p) == path) {
+            if paths
+                .iter()
+                .any(|p| crate::volumes::friendly(Path::new(p)) == path)
+            {
                 protection.push("Application is running; quit it and inspect again".into())
             }
         }
@@ -168,7 +201,11 @@ pub fn inspect(path: &Path, policy: &Policy) -> Result<ApplicationFootprint> {
             protection.push("Running application state is unavailable; retry before removal".into())
         }
     }
-    if m.uid() != unsafe { libc::geteuid() } {
+    if !policy
+        .administrator_uid
+        .is_some_and(|uid| m.uid() == uid || m.uid() == 0)
+        && m.uid() != unsafe { libc::geteuid() }
+    {
         protection.push(
             "Administrator-owned bundle; removal is unavailable in this portable build".into(),
         );
@@ -225,9 +262,17 @@ pub fn inspect(path: &Path, policy: &Policy) -> Result<ApplicationFootprint> {
   (format!("Library/Containers/{bundle_id}"),"Unconfirmed container","Sandbox containers may contain unique or shared data. No automatic removal authority."),
  ] {
   let p=policy.home.join(relative);let Ok(m)=fs::symlink_metadata(&p) else{continue};
-  let eligible=confidence=="Bundle identity" && m.uid()==unsafe{libc::geteuid()} && !m.file_type().is_symlink() && !storage::placeholder(&p,&m);
+  let eligible=confidence=="Bundle identity" && (m.uid()==policy.administrator_uid.unwrap_or_else(||unsafe{libc::geteuid()}) || (policy.administrator_uid.is_some() && m.uid()==0)) && !m.file_type().is_symlink() && !storage::placeholder(&p,&m);
   related.push(ApplicationData{path:p.to_string_lossy().into_owned(),association:format!("Exact path component equals {bundle_id}"),confidence:confidence.into(),logical_bytes:if m.is_file(){m.len() as f64}else{0.},allocated_bytes:if m.is_file(){m.blocks() as f64*512.}else{0.},eligible,consequences:format!("{consequences} Folder totals are measured during removal review.")});
  }
+    if let Some(uid) = policy.administrator_uid {
+        for (base,consequences) in [("/Library/Caches","Shared application cache; affects every user and may require regeneration."),("/Library/Application Support","Shared application data may include unique databases, licenses and user documents.")] {
+            let p=Path::new(base).join(&bundle_id);
+            if let Ok(m)=fs::symlink_metadata(&p) {
+                related.push(ApplicationData{path:p.to_string_lossy().into_owned(),association:format!("Exact shared path component equals {bundle_id}"),confidence:"Bundle identity".into(),logical_bytes:if m.is_file(){m.len() as f64}else{0.},allocated_bytes:if m.is_file(){m.blocks() as f64*512.}else{0.},eligible:(m.uid()==0||m.uid()==uid)&&!m.file_type().is_symlink()&&!storage::placeholder(&p,&m),consequences:consequences.into()});
+            }
+        }
+    }
     // Group containers and names alone are deliberately never assigned to an app.
     let name = string("CFBundleDisplayName");
     let name = if name.is_empty() {

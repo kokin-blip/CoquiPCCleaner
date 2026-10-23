@@ -60,7 +60,7 @@ button.primary:hover {
 }
 button.danger {
   background: var(--danger);
-  color: white;
+  color: var(--on-danger);
   border-color: transparent;
 }
 button.danger-outline {

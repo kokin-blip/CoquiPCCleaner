@@ -10,6 +10,7 @@
   import type { createAppStore } from '../state';
   import { workloads } from '../format';
   import Dialog from '../components/Dialog.svelte';
+  import HelperSettings from '../components/HelperSettings.svelte';
   let { controller }: { controller: ReturnType<typeof createAppStore> } =
     $props();
   let settings = $derived($controller.settings!);
@@ -203,15 +204,16 @@
       excluded.
     </p>{/each}
 </section>
+<HelperSettings {controller} />
 <section class="panel settings-panel">
   <div class="section-heading">
     <h2>Privacy & permissions</h2>
     <ShieldCheck size={20} />
   </div>
   <p>
-    Scanning respects macOS protections. Coqui does not request administrator
-    privileges or bypass restricted folders. Full Disk Access can expand
-    coverage; some protected locations remain unavailable.
+    Scanning respects macOS protections. Optional administrator work requires
+    separate approval and does not bypass restricted folders. Full Disk Access
+    can expand coverage; some protected locations remain unavailable.
   </p>
   <button
     onclick={() =>
@@ -287,13 +289,14 @@
     title="Remove local diagnostic history?"
     onclose={() => (confirmPurge = false)}
     ><p>
-      This removes stored scans, findings, file indexes, developer reviews, and
-      cleanup/removal action records, recovery references, application
-      observations, duplicate reports, conversations, baselines, workload
-      advice, resource reviews, firmware audits/comparisons/guidance, evidence
-      notices and maintenance events from Coqui’s local database. Your files,
-      preferences, maintenance and firmware review schedules, and system
-      settings are preserved. Disable schedules separately if you do not want
+      This removes this app’s local scans, findings, file indexes, developer
+      reviews, and cleanup/removal action records, recovery references,
+      application observations, duplicate reports, conversations, baselines,
+      workload advice, resource reviews, firmware audits/comparisons/guidance,
+      evidence notices and maintenance events from Coqui’s local database. Your
+      files, preferences, maintenance and firmware review schedules, and system
+      settings are preserved. Helper-owned journals have a separate Remove
+      helper records control. Disable schedules separately if you do not want
       new reminders or records.
     </p>
     <div class="dialog-actions">

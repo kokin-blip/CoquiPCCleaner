@@ -70,10 +70,16 @@ fn dispatch(request: &str, uid: u32) -> Result<Value> {
 pub unsafe extern "C" fn coqui_helper_dispatch(
     value: *const libc::c_char,
     uid: u32,
+    pid: i32,
+    production: i32,
 ) -> *mut libc::c_char {
     let result = std::panic::catch_unwind(|| {
         let text = unsafe { CStr::from_ptr(value) }.to_str()?;
-        dispatch(text, uid)
+        if production != 0 {
+            crate::privileged::dispatch(text, uid, pid)
+        } else {
+            dispatch(text, uid)
+        }
     })
     .unwrap_or_else(|_| Err(anyhow::anyhow!("Helper request failed")));
     let response = result.unwrap_or_else(|e| json!({"error":e.to_string()}));
@@ -108,6 +114,17 @@ mod tests {
         );
     }
     #[test]
+    #[cfg(target_os = "macos")]
+    fn forged_authorization_forms_fail_without_interaction() {
+        unsafe extern "C" {
+            fn coqui_authorization_valid(form: *const libc::c_char) -> i32;
+        }
+        for form in ["not-base64", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="] {
+            let form = CString::new(form).unwrap();
+            assert_eq!(unsafe { coqui_authorization_valid(form.as_ptr()) }, 0);
+        }
+    }
+    #[test]
     fn gate_denies_unknown_operations_and_protocols() {
         assert!(dispatch(
             r#"{"protocol":1,"operation":"execute","command":"rm"}"#,
@@ -126,4 +143,130 @@ mod tests {
             501
         );
     }
+}
+
+/// Only typed operations reach this client; authorization forms never cross the webview boundary.
+pub fn production(operation: crate::privileged::Operation, authorized: bool) -> Result<Value> {
+    production_with_cancel(
+        operation,
+        authorized,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+}
+pub fn production_with_cancel(
+    operation: crate::privileged::Operation,
+    authorized: bool,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<Value> {
+    let mut envelope =
+        serde_json::json!({"protocol":2,"version":env!("CARGO_PKG_VERSION"),"request":operation});
+    if authorized {
+        let challenge = production(
+            crate::privileged::Operation::Challenge {
+                request: Box::new(operation),
+            },
+            false,
+        )?;
+        envelope["challenge"] = challenge;
+    }
+    #[cfg(target_os = "macos")]
+    let result = if authorized {
+        unsafe {
+            unsafe extern "C" {
+                fn coqui_helper_authorized_request(
+                    payload: *const libc::c_char,
+                    cancel: *const std::ffi::c_void,
+                ) -> *mut libc::c_char;
+            }
+            let text = CString::new(envelope.to_string())?;
+            let raw = coqui_helper_authorized_request(
+                text.as_ptr(),
+                (cancel as *const std::sync::atomic::AtomicBool).cast(),
+            );
+            anyhow::ensure!(!raw.is_null(), "Authorization unavailable");
+            let text = CStr::from_ptr(raw).to_string_lossy().into_owned();
+            libc::free(raw.cast());
+            serde_json::from_str::<Value>(&text)?
+        }
+    } else {
+        request(&envelope)?
+    };
+    #[cfg(not(target_os = "macos"))]
+    let result = request(&envelope)?;
+    if let Some(error) = result.get("error") {
+        anyhow::bail!("{}", error.as_str().unwrap_or("Helper request failed"));
+    }
+    anyhow::ensure!(
+        result["protocol"] == 2 && result["version"] == env!("CARGO_PKG_VERSION"),
+        "Helper response version mismatch"
+    );
+    result
+        .get("result")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Incomplete helper response"))
+}
+pub fn protocol() -> u32 {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe extern "C" {
+            fn coqui_helper_protocol() -> i32;
+        }
+        unsafe { coqui_helper_protocol() as u32 }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
+pub fn begin_authorization(cancel: &std::sync::atomic::AtomicBool) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe extern "C" {
+            fn coqui_authorization_begin(cancel: *const std::ffi::c_void) -> u32;
+        }
+        anyhow::ensure!(
+            unsafe {
+                coqui_authorization_begin((cancel as *const std::sync::atomic::AtomicBool).cast())
+            } > 0,
+            "Administrator authorization was cancelled, declined or unavailable"
+        );
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = cancel;
+        anyhow::bail!("Administrator authorization requires macOS")
+    }
+}
+pub fn clear_authorization() {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        unsafe extern "C" {
+            fn coqui_authorization_clear();
+        }
+        coqui_authorization_clear();
+    }
+}
+pub fn authorization_remaining() -> u32 {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        unsafe extern "C" {
+            fn coqui_authorization_remaining() -> u32;
+        }
+        coqui_authorization_remaining()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn coqui_is_cancelled(pointer: *const std::ffi::c_void) -> i32 {
+    if pointer.is_null() {
+        return 0;
+    }
+    unsafe { &*pointer.cast::<std::sync::atomic::AtomicBool>() }
+        .load(std::sync::atomic::Ordering::SeqCst) as i32
 }

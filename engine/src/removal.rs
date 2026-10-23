@@ -19,6 +19,7 @@ pub enum RemovalKind {
     AppBundle,
     AssociatedAppData,
     Restore,
+    ApprovedCleanupRule,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +44,8 @@ pub struct RemovalItem {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RemovalPlan {
+    #[serde(default)]
+    pub administrator: bool,
     pub id: String,
     pub created_at: String,
     pub expires_at: String,
@@ -59,7 +62,7 @@ pub struct RemovalApproval {
     pub acknowledged: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-struct Seal {
+pub(crate) struct Seal {
     root_changed: i64,
     root_changed_ns: i64,
     dev: u64,
@@ -87,6 +90,7 @@ pub struct Policy {
     pub home: PathBuf,
     pub exclusions: Vec<PathBuf>,
     pub self_app: Option<PathBuf>,
+    pub administrator_uid: Option<u32>,
 }
 fn canonical(path: &Path) -> Result<PathBuf> {
     anyhow::ensure!(
@@ -124,7 +128,56 @@ pub(crate) fn project_marker(dir: &Path) -> bool {
 fn scope(path: &Path, app: Option<&str>, policy: &Policy) -> Result<(RemovalKind, String, String)> {
     anyhow::ensure!(!excluded(path, policy), "This location is excluded");
     let home = policy.home.canonicalize()?;
+    if policy.administrator_uid.is_some()
+        && app.is_none()
+        && path.starts_with("/Library/Caches")
+        && path != Path::new("/Library/Caches")
+    {
+        anyhow::ensure!(
+            !path
+                .components()
+                .any(|c| c.as_os_str().to_string_lossy().starts_with("com.apple.")),
+            "Apple-managed caches remain protected"
+        );
+        anyhow::ensure!(
+            !path.components().any(|c| [
+                ".git",
+                ".hg",
+                ".svn",
+                ".jj",
+                "node_modules",
+                "target",
+                ".dart_tool",
+                ".venv",
+                "DerivedData"
+            ]
+            .iter()
+            .any(|name| c.as_os_str() == *name)),
+            "Developer-managed data requires its existing project/cache workflow"
+        );
+        for ancestor in path
+            .parent()
+            .into_iter()
+            .flat_map(Path::ancestors)
+            .take_while(|p| p.starts_with("/Library/Caches"))
+        {
+            anyhow::ensure!(
+                !project_marker(ancestor),
+                "A shared-cache ancestor is project-managed; use developer-artifact review"
+            );
+        }
+        let parent = path.parent().context("Mounted roots are protected")?;
+        anyhow::ensure!(
+            volumes::mounted_identity(path)? == volumes::mounted_identity(parent)?,
+            "Mounted filesystem roots are protected; select their contents"
+        );
+        return Ok((RemovalKind::ApprovedCleanupRule,"Reviewed shared-cache rule: individual /Library/Caches contents".into(),"Shared cached data may require regeneration or downloading and can affect every user of the application. Close applications first; unique data is not inferred disposable.".into()));
+    }
     if let Some(app) = app {
+        if policy.administrator_uid.is_some() {
+            let a = Path::new(app);
+            anyhow::ensure!(a.starts_with("/Applications")||a.starts_with(&home)||a.starts_with("/Volumes"),"Administrator app removal is restricted to shared, personal or explicitly selected volume applications");
+        }
         let footprint = applications::inspect(Path::new(app), policy)?;
         anyhow::ensure!(
             footprint.protection.is_empty(),
@@ -204,7 +257,13 @@ fn scope(path: &Path, app: Option<&str>, policy: &Policy) -> Result<(RemovalKind
         "Project-managed, cloud-provider or recovery data requires its dedicated workflow"
     );
     if path.starts_with(&home) {
-        cleanup::cache_project_context(path.parent().context("Missing parent")?, &home)?;
+        cleanup::cache_project_context_as(
+            path.parent().context("Missing parent")?,
+            &home,
+            policy
+                .administrator_uid
+                .unwrap_or_else(|| unsafe { libc::geteuid() }),
+        )?;
     } else {
         for parent in path.parent().into_iter().flat_map(Path::ancestors) {
             anyhow::ensure!(
@@ -222,6 +281,10 @@ fn scope(path: &Path, app: Option<&str>, policy: &Policy) -> Result<(RemovalKind
 }
 fn seal(path: &Path, policy: &Policy, cancel: &AtomicBool, opaque_bundle: bool) -> Result<Seal> {
     let path = canonical(path)?;
+    #[cfg(target_os = "macos")]
+    if let Some(uid) = policy.administrator_uid {
+        return administrator_seal(&path, policy, cancel, opaque_bundle, uid);
+    }
     let parent = fs::symlink_metadata(
         path.parent()
             .context("A filesystem root cannot be removed")?,
@@ -379,7 +442,7 @@ pub fn preview(
         });
         seals.push(s);
     }
-    let plan=RemovalPlan{id:uuid::Uuid::new_v4().to_string(),created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),status:"review".into(),items,finished_at:None,qualification:"Metadata review only. APFS shared allocation is not guaranteed recoverable space. Coqui never empties Trash. Approval expires after ten minutes; changes require a new review.".into()};
+    let plan=RemovalPlan{administrator:policy.administrator_uid.is_some(),id:uuid::Uuid::new_v4().to_string(),created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),status:"review".into(),items,finished_at:None,qualification:"Metadata review only. APFS shared allocation is not guaranteed recoverable space. Coqui never empties Trash. Approval expires after ten minutes; changes require a new review.".into()};
     save(
         c,
         &Record {
@@ -415,6 +478,10 @@ pub fn execute(
     mut emit: impl FnMut(RemovalPlan) -> bool,
 ) -> Result<RemovalPlan> {
     let mut r = load(c, &a.id)?;
+    anyhow::ensure!(
+        r.plan.administrator == policy.administrator_uid.is_some(),
+        "This plan requires its original execution authority"
+    );
     fresh(&r.plan)?;
     anyhow::ensure!(
         a.acknowledged
@@ -480,6 +547,18 @@ pub fn execute(
                     parent.is_dir() && p.parent().unwrap().canonicalize()? == p.parent().unwrap(),
                     "Original parent changed or is no longer a canonical directory"
                 );
+                #[cfg(target_os = "macos")]
+                if policy.administrator_uid.is_some() {
+                    crate::safe_fs::exclusive_move(
+                        &source,
+                        &p,
+                        (r.seals[i].dev, r.seals[i].ino, r.seals[i].uid),
+                        r.restore_parents.get(i).copied(),
+                    )?;
+                } else {
+                    native_restore(&source, &p)?;
+                }
+                #[cfg(not(target_os = "macos"))]
                 native_restore(&source, &p)?;
                 Ok(p.clone())
             } else {
@@ -572,17 +651,23 @@ fn validate_trash(path: &Path, policy: &Policy) -> Result<()> {
     let home = policy.home.canonicalize()?;
     let parent = path.parent().context("Missing Trash parent")?;
     let personal = parent == home.join(".Trash");
-    let volume = parent
-        .file_name()
-        .is_some_and(|n| n == unsafe { libc::geteuid() }.to_string().as_str())
-        && parent
-            .parent()
-            .and_then(Path::file_name)
-            .is_some_and(|n| n == ".Trashes");
+    let volume = parent.file_name().is_some_and(|n| {
+        n == policy
+            .administrator_uid
+            .unwrap_or_else(|| unsafe { libc::geteuid() })
+            .to_string()
+            .as_str()
+    }) && parent
+        .parent()
+        .and_then(Path::file_name)
+        .is_some_and(|n| n == ".Trashes");
     anyhow::ensure!(
         (personal || volume)
             && parent.canonicalize()? == parent
-            && fs::symlink_metadata(parent)?.uid() == unsafe { libc::geteuid() },
+            && fs::symlink_metadata(parent)?.uid()
+                == policy
+                    .administrator_uid
+                    .unwrap_or_else(|| unsafe { libc::geteuid() }),
         "Only retained items in the requesting user's Trash support restore"
     );
     Ok(())
@@ -603,6 +688,10 @@ pub fn preview_restore(
     let mut seals = vec![];
     let mut parents = vec![];
     for p in paths {
+        anyhow::ensure!(
+            !excluded(Path::new(p), policy),
+            "The restore destination is now excluded or protected"
+        );
         let i = original
             .plan
             .items
@@ -639,7 +728,7 @@ pub fn preview_restore(
         seals.push(s);
         parents.push((original.seals[i].parent_dev, original.seals[i].parent_ino));
     }
-    let plan=RemovalPlan{id:uuid::Uuid::new_v4().to_string(),created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),status:"review".into(),items,finished_at:None,qualification:"Restore requires the same Trash identity and an absent original destination. No full application recovery is promised.".into()};
+    let plan=RemovalPlan{administrator:policy.administrator_uid.is_some(),id:uuid::Uuid::new_v4().to_string(),created_at:now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(10)).to_rfc3339(),status:"review".into(),items,finished_at:None,qualification:"Restore requires the same Trash identity and an absent original destination. No full application recovery is promised.".into()};
     save(
         c,
         &Record {
@@ -730,7 +819,28 @@ pub fn native_execute(
     cancel: &AtomicBool,
     emit: impl FnMut(RemovalPlan) -> bool,
 ) -> Result<RemovalPlan> {
-    execute(c, a, policy, cancel, cleanup::native_trash, emit)
+    let retained = load(c, &a.id)?;
+    execute(
+        c,
+        a,
+        policy,
+        cancel,
+        |path| {
+            #[cfg(target_os = "macos")]
+            if let Some(uid) = policy.administrator_uid {
+                let expected = retained
+                    .plan
+                    .items
+                    .iter()
+                    .position(|item| Path::new(&item.path) == path)
+                    .and_then(|i| retained.seals.get(i))
+                    .context("Missing retained move identity")?;
+                return administrator_trash(path, uid, expected);
+            }
+            cleanup::native_trash(path)
+        },
+        emit,
+    )
 }
 
 pub fn entries(
@@ -760,6 +870,52 @@ pub fn entries(
         current == r.seals[i],
         "Reviewed contents changed; close this plan and review again"
     );
+    #[cfg(target_os = "macos")]
+    if let Some(uid) = policy.administrator_uid {
+        return administrator_snapshot(
+            path,
+            policy,
+            cancel,
+            matches!(item.kind, RemovalKind::AppBundle | RemovalKind::Restore),
+            uid,
+        )?
+        .into_iter()
+        .skip(offset as usize)
+        .take(100)
+        .map(|(relative, m)| {
+            let p = crate::safe_fs::path_of(&relative, path);
+            Ok(crate::model::FileEntry {
+                path: p.to_string_lossy().into_owned(),
+                parent: p.parent().unwrap_or(path).to_string_lossy().into_owned(),
+                name: p
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+                category: if m.st_mode & libc::S_IFMT == libc::S_IFLNK {
+                    "Opaque bundle link".into()
+                } else {
+                    storage::category(&p).into()
+                },
+                logical_bytes: if m.st_mode & libc::S_IFMT == libc::S_IFREG {
+                    m.st_size as f64
+                } else {
+                    0.
+                },
+                allocated_bytes: if m.st_mode & libc::S_IFMT == libc::S_IFREG {
+                    m.st_blocks as f64 * 512.
+                } else {
+                    0.
+                },
+                is_directory: m.st_mode & libc::S_IFMT == libc::S_IFDIR,
+                modified_at: String::new(),
+                qualification:
+                    "Descriptor-relative metadata; links are opaque, contents are not downloaded."
+                        .into(),
+            })
+        })
+        .collect();
+    }
     walkdir::WalkDir::new(path)
         .follow_links(false)
         .max_open(8)
@@ -798,4 +954,232 @@ pub fn entries(
             })
         })
         .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn administrator_snapshot(
+    path: &Path,
+    policy: &Policy,
+    cancel: &AtomicBool,
+    opaque: bool,
+    uid: u32,
+) -> Result<Vec<(String, libc::stat)>> {
+    use crate::safe_fs;
+    use std::os::fd::AsRawFd;
+    fn visit(
+        dir: &std::fs::File,
+        name: &std::ffi::CStr,
+        relative: String,
+        base: &Path,
+        policy: &Policy,
+        cancel: &AtomicBool,
+        opaque: bool,
+        uid: u32,
+        rows: &mut Vec<(String, libc::stat)>,
+        name_bytes: &mut usize,
+        depth: usize,
+        mount: &Option<([libc::c_char; 1024], [libc::c_char; 1024])>,
+    ) -> Result<()> {
+        anyhow::ensure!(!cancel.load(Ordering::Relaxed), "Review cancelled");
+        anyhow::ensure!(
+            rows.len() < 20_000 && depth < 128,
+            "Administrator review exceeds 20,000 entries or 128 levels; select smaller folders"
+        );
+        *name_bytes += relative.len();
+        anyhow::ensure!(
+            *name_bytes <= 8 * 1024 * 1024,
+            "Reviewed path data exceeds 8 MiB; select smaller folders"
+        );
+        let m = safe_fs::stat(dir, name)?;
+        let p = safe_fs::path_of(&relative, base);
+        anyhow::ensure!(!excluded(&p, policy), "A reviewed descendant is excluded");
+        anyhow::ensure!(
+            m.st_uid == 0 || m.st_uid == uid,
+            "Other users' data is protected from removal"
+        );
+        anyhow::ensure!(
+            m.st_flags & (0x40000000 | 0x80000 | 0x2 | 0x20000) == 0
+                && !p
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().ends_with(".icloud")),
+            "Cloud-only, immutable or system-protected items cannot be removed"
+        );
+        let kind = m.st_mode & libc::S_IFMT;
+        anyhow::ensure!(
+            kind == libc::S_IFDIR || kind == libc::S_IFREG || (opaque && kind == libc::S_IFLNK),
+            "Links and special objects require separate review"
+        );
+        rows.push((relative.clone(), m));
+        if kind == libc::S_IFDIR {
+            let child = safe_fs::open_child(dir, name, &m)?;
+            let mut fs: libc::statfs = unsafe { std::mem::zeroed() };
+            anyhow::ensure!(
+                unsafe { libc::fstatfs(child.as_raw_fd(), &mut fs) } == 0,
+                "Mount identity unavailable"
+            );
+            let identity = (fs.f_mntfromname, fs.f_mntonname);
+            anyhow::ensure!(
+                mount.as_ref().is_none_or(|root| *root == identity),
+                "A reviewed folder crosses a mounted filesystem"
+            );
+            let root_mount = Some(identity);
+            safe_fs::names(&child, |name| {
+                let text = name
+                    .to_str()
+                    .context("Unrepresentable filename cannot be approved")?;
+                if !opaque {
+                    anyhow::ensure!(
+                        ![
+                            ".git",
+                            ".hg",
+                            ".svn",
+                            ".jj",
+                            "Cargo.toml",
+                            "package.json",
+                            "pubspec.yaml",
+                            "pyproject.toml",
+                            "pnpm-workspace.yaml"
+                        ]
+                        .contains(&text),
+                        "Project-managed data requires its existing Git/artifact workflow"
+                    );
+                }
+                let next = if relative.is_empty() {
+                    text.to_owned()
+                } else {
+                    format!("{relative}/{text}")
+                };
+                visit(
+                    &child,
+                    &name,
+                    next,
+                    base,
+                    policy,
+                    cancel,
+                    opaque,
+                    uid,
+                    rows,
+                    name_bytes,
+                    depth + 1,
+                    &root_mount,
+                )
+            })?;
+        }
+        Ok(())
+    }
+    let (parent, name) = safe_fs::parent(path)?;
+    let mut rows = vec![];
+    visit(
+        &parent,
+        &name,
+        String::new(),
+        path,
+        policy,
+        cancel,
+        opaque,
+        uid,
+        &mut rows,
+        &mut 0,
+        0,
+        &None,
+    )?;
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(rows)
+}
+#[cfg(target_os = "macos")]
+fn administrator_seal(
+    path: &Path,
+    policy: &Policy,
+    cancel: &AtomicBool,
+    opaque: bool,
+    uid: u32,
+) -> Result<Seal> {
+    let (parent, name) = crate::safe_fs::parent(path)?;
+    let root = crate::safe_fs::stat(&parent, &name)?;
+    let parent = parent.metadata()?;
+    let mut hash = Sha256::new();
+    let mut counted = std::collections::HashSet::new();
+    let (mut logical, mut allocated) = (0u64, 0u64);
+    let rows = administrator_snapshot(path, policy, cancel, opaque, uid)?;
+    for (relative, m) in &rows {
+        hash.update((relative.len() as u64).to_le_bytes());
+        hash.update(relative.as_bytes());
+        for value in [
+            m.st_dev as u64,
+            m.st_ino,
+            m.st_mode as u64,
+            m.st_uid as u64,
+            m.st_gid as u64,
+            m.st_size as u64,
+            m.st_blocks as u64,
+            m.st_mtime as u64,
+            m.st_mtime_nsec as u64,
+            if relative.is_empty() {
+                0
+            } else {
+                m.st_ctime as u64
+            },
+            if relative.is_empty() {
+                0
+            } else {
+                m.st_ctime_nsec as u64
+            },
+            m.st_nlink as u64,
+            m.st_flags as u64,
+        ] {
+            hash.update(value.to_le_bytes());
+        }
+        if m.st_mode & libc::S_IFMT == libc::S_IFREG && counted.insert((m.st_dev, m.st_ino)) {
+            logical = logical.saturating_add(m.st_size as u64);
+            allocated = allocated.saturating_add(m.st_blocks as u64 * 512);
+        }
+    }
+    Ok(Seal {
+        root_changed: root.st_ctime,
+        root_changed_ns: root.st_ctime_nsec,
+        dev: root.st_dev as u64,
+        ino: root.st_ino,
+        uid: root.st_uid,
+        parent_dev: parent.dev(),
+        parent_ino: parent.ino(),
+        digest: format!("{:x}", hash.finalize()),
+        entries: rows.len() as u32,
+        logical,
+        allocated,
+    })
+}
+#[cfg(target_os = "macos")]
+fn administrator_trash(path: &Path, uid: u32, expected: &Seal) -> Result<PathBuf> {
+    let trash = crate::privileged::user_trash_directory(path, uid)?;
+    let dir = crate::safe_fs::directory(&trash).context(
+        "Cannot open the requesting user's Trash. If macOS reports Operation not permitted, review Full Disk Access for /Library/PrivilegedHelperTools/com.coqui.CoquiPCCleaner.Helper, then prepare a new review",
+    )?;
+    let m = dir.metadata()?;
+    anyhow::ensure!(
+        m.uid() == uid && m.mode() & 0o077 == 0,
+        "The requesting user's Trash must be private and owned by that user"
+    );
+    let (source, name) = crate::safe_fs::parent(path)?;
+    let before = crate::safe_fs::stat(&source, &name)?;
+    anyhow::ensure!(
+        m.dev() == before.st_dev as u64,
+        "Cross-filesystem Trash copies are unsupported"
+    );
+    let base = path
+        .file_name()
+        .context("Missing filename")?
+        .to_str()
+        .context("Unrepresentable filename")?;
+    let mut end = base.len().min(160);
+    while !base.is_char_boundary(end) {
+        end -= 1;
+    }
+    let destination = trash.join(format!("{}-Coqui-{}", &base[..end], uuid::Uuid::new_v4()));
+    crate::safe_fs::exclusive_move(
+        path,
+        &destination,
+        (expected.dev, expected.ino, expected.uid),
+        Some((m.dev(), m.ino())),
+    )?;
+    Ok(destination)
 }

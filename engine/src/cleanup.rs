@@ -40,12 +40,12 @@ struct Record {
     identities: Vec<Identity>,
 }
 
-fn standalone_home_package(path: &Path, expected: &fs::Metadata) -> Result<()> {
+fn standalone_home_package(path: &Path, expected: &fs::Metadata, uid: u32) -> Result<()> {
     const MAX_BYTES: u64 = 256 * 1024;
     anyhow::ensure!(
         expected.is_file()
             && expected.nlink() == 1
-            && expected.uid() == unsafe { libc::geteuid() }
+            && expected.uid() == uid
             && !storage::placeholder(path, expected)
             && expected.len() <= MAX_BYTES,
         "Home package.json is linked, cloud-only, oversized or not a user-owned regular file"
@@ -60,7 +60,7 @@ fn standalone_home_package(path: &Path, expected: &fs::Metadata) -> Result<()> {
         m.is_file()
             && m.dev() == expected.dev()
             && m.ino() == expected.ino()
-            && m.uid() == unsafe { libc::geteuid() }
+            && m.uid() == uid
             && m.nlink() == 1
             && !storage::placeholder(path, &m)
             && m.len() <= MAX_BYTES,
@@ -98,6 +98,9 @@ fn standalone_home_package(path: &Path, expected: &fs::Metadata) -> Result<()> {
 // This context applies only after inspect establishes the dedicated user-cache
 // namespace. It never authorizes project-local caches elsewhere in the home.
 pub(crate) fn cache_project_context(parent: &Path, home: &Path) -> Result<String> {
+    cache_project_context_as(parent, home, unsafe { libc::geteuid() })
+}
+pub(crate) fn cache_project_context_as(parent: &Path, home: &Path, uid: u32) -> Result<String> {
     const REPOSITORIES: &[&str] = &[".git", ".hg", ".svn", ".jj"];
     const MANIFESTS: &[&str] = &[
         "Cargo.toml",
@@ -116,12 +119,9 @@ pub(crate) fn cache_project_context(parent: &Path, home: &Path) -> Result<String
                     // A standalone package directly at home does not establish
                     // ownership of ~/Library/Caches. Repositories and workspace
                     // declarations still protect the entire ancestry.
-                    if ancestor == home
-                        && marker == "package.json"
-                        && m.is_file()
-                        && m.uid() == unsafe { libc::geteuid() }
+                    if ancestor == home && marker == "package.json" && m.is_file() && m.uid() == uid
                     {
-                        standalone_home_package(&marker_path, &m)?;
+                        standalone_home_package(&marker_path, &m, uid)?;
                         home_package = true;
                         continue;
                     }

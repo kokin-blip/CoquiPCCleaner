@@ -1,0 +1,48 @@
+{
+  "approvalReplay": "rejected",
+  "authenticatedInstalledPeer": true,
+  "fixtureId": "f5aa2ab4-b210-4c11-a062-0bfd80c63954",
+  "helperRestart": "retained records reopened",
+  "missingAuthorization": "rejected",
+  "qualification": "Disposable administrator fixture validation only; no existing app/user files removed. Full hardware, TCC and Gatekeeper acceptance remain separately qualified.",
+  "restoredRecord": "a1188d13-9427-4e8d-aa4e-4e3d52ac8717",
+  "rootOwnedTrashAndRestore": "verified",
+  "scan": {
+    "id": "5f158cdd-1755-4d61-b7bc-300cd648ad00",
+    "status": "cancelled",
+    "stage": "Scan cancelled; partial results retained",
+    "fileCount": 0,
+    "coverage": [
+      {
+        "examples": [],
+        "files": 0,
+        "root": "/",
+        "skips": {},
+        "state": "notStarted",
+        "visited": 0
+      }
+    ],
+    "errors": [
+      "Hardware inventory could not be completed."
+    ]
+  },
+  "uninstalledAndImpostorPeers": "rejected",
+  "versionMismatch": "rejected",
+  "physicalHost": {
+    "model": "Mac16,8",
+    "processor": "Apple M4 Pro",
+    "macOS": "26.6.1",
+    "qualification": "One local Mac; no other-model/macOS14 or Gatekeeper acceptance inferred."
+  },
+  "privacy": {
+    "initialResult": "Both moves blocked before rename; macOS refused user Trash access.",
+    "consent": "User explicitly approved helper Full Disk Access and completed native authentication.",
+    "repair": "Replacing an ad hoc build revoked the previous grant; enabled the final installed helper entry after installation."
+  },
+  "pending": [
+    "GUI administrator metadata import/pagination/restart",
+    "Production helper uninstall/reinstall",
+    "Final ordinary package fixture teardown",
+    "Final UI/theme review"
+  ]
+}

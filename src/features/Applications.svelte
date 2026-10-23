@@ -32,6 +32,7 @@
   let returnControl: HTMLElement | null = null;
   let returnPath: string | undefined;
   let removalCompleted = false;
+  let administratorInspection = $state(false);
   let leftovers = $state<ApplicationFootprint[]>([]);
   let leftoverOffset = $state(0);
   let prefs = $state<ApplicationPreferences>({
@@ -115,16 +116,25 @@
       .catch((e) => (error = String(e)));
   });
   let visible = $derived(rows);
-  async function inspect(path: string, origin: HTMLElement = chooseButton) {
+  async function inspect(
+    path: string,
+    origin: HTMLElement = chooseButton,
+    administrator = false,
+  ) {
     error = '';
-    const originTab = tab;
+    const originTab = selected ? returnTab : tab;
+    const originControl = selected ? returnControl : origin;
+    const originPath = selected ? returnPath : origin?.dataset.applicationPath;
     try {
       const app = await controller.work('Inspecting application', () =>
-        controller.service.inspectApplication(path),
+        administrator
+          ? controller.service.administratorInspectApplication(path)
+          : controller.service.inspectApplication(path),
       );
       returnTab = originTab;
-      returnControl = origin;
-      returnPath = origin?.dataset.applicationPath;
+      returnControl = originControl;
+      returnPath = originPath;
+      administratorInspection = administrator;
       tab = 'Installed Apps';
       selected = app;
       paths = [];
@@ -374,6 +384,15 @@
         ? 'Remove user protection'
         : 'Protect this application'}</button
     >
+    {#if $controller.settings?.administratorEnabled && !administratorInspection}<button
+        disabled={$controller.workRunning || $controller.scanning}
+        onclick={(e) => inspect(selected!.path, e.currentTarget, true)}
+        >Inspect with administrator</button
+      >{/if}
+    {#if administratorInspection}<p class="muted small">
+        Administrator inspection. Selection and removal approval remain
+        separate.
+      </p>{/if}
     <h3>Selected bundle and related data</h3>
     <label class="check-row"
       ><input
@@ -430,6 +449,7 @@
 {#if request}<RemovalReview
     {controller}
     {request}
+    administrator={administratorInspection}
     onclose={() => {
       request = null;
       if (removalCompleted) void leaveInspection();

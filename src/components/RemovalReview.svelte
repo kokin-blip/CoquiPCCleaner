@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import type { createAppStore } from '../state';
   import type { RemovalRequest } from '../bindings/RemovalRequest';
   import type { RemovalPlan } from '../bindings/RemovalPlan';
@@ -9,16 +9,19 @@
   let {
     controller,
     request = null,
+    administrator = false,
     initial = null,
     onclose,
     oncomplete = () => {},
   }: {
     controller: ReturnType<typeof createAppStore>;
     request?: RemovalRequest | null;
+    administrator?: boolean;
     initial?: RemovalPlan | null;
     onclose: () => void;
     oncomplete?: () => void;
   } = $props();
+  let authority = $state(untrack(() => administrator));
   let plan = $state<RemovalPlan | null>(null),
     error = $state(''),
     pending = $state(false),
@@ -42,6 +45,7 @@
   );
   $effect(() => {
     const r = request;
+    const elevated = authority;
     const saved = initial;
     let alive = true;
     accepted = false;
@@ -51,7 +55,9 @@
     pending = true;
     controller
       .work('Preparing removal review', () =>
-        controller.service.previewRemoval(r),
+        elevated
+          ? controller.service.administratorPreviewRemoval(r)
+          : controller.service.previewRemoval(r),
       )
       .then((p) => {
         if (alive) plan = p;
@@ -113,6 +119,14 @@
 </script>
 
 <Dialog title={restore ? 'Review restore' : 'Review removal'} {onclose}>
+  {#if request && $controller.settings?.administratorEnabled && !authority && !pending}<button
+      onclick={() => (authority = true)}>Prepare administrator review</button
+    >{/if}
+  {#if authority || plan?.administrator}<p class="muted small">
+      Administrator review uses a separate helper journal. Moving or restoring
+      requires fresh macOS authorization; protected locations can remain
+      unavailable.
+    </p>{/if}
   {#if pending}<p role="status">Inspecting identities and folder contents…</p>
     <button
       onclick={() => controller.run(() => controller.service.cancelWork())}

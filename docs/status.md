@@ -1,6 +1,6 @@
 # Delivery and validation
 
-Current build: **0.8.0 portable candidate — whole-internal-disk coverage and reviewed application/file Trash and restore.** The full plan remains incomplete at the optional administrator helper’s installation gate. See [capabilities, validation and remaining work](phases/whole-disk-cleanup.md) and the 0.8 checkpoint below. Earlier milestone records are retained.
+Current build: **0.8.0 production candidate — whole-internal coverage, reviewed application/file Trash/restore and default-off administrator helper.** The corrected diagnostic gate passed; production native fixture validation is in progress. See [capabilities, validation and remaining work](phases/whole-disk-cleanup.md) and the 0.8 checkpoint below. Earlier milestone records are retained.
 
 ## Phase 1 baseline
 
@@ -193,3 +193,23 @@ On 2026-10-23 the user installed the gate and requested continuation. The root-o
 The corrected package extracts and validates a nonempty 40-digit hash, verifies it against the staged executable, and now passes an independent payload/probe/pairing/on-demand metadata verifier. Native requirement parsing and exception containment make the corrected probe fail closed with an error against the old manifest. A new regression test covers malformed/empty and valid signing requirements. `scripts/check.sh` passes: **53 frontend +125 Rust =178 standard tests**, zero Svelte errors/warnings and build/format/locked native checks. No inspected user files were modified and no elevated scan/removal operation was exposed.
 
 Installer is ready for the corrected 700 KB diagnostic gate. Automatic approval review rejected the Install click because replacing the root LaunchDaemon requires action-time confirmation; approval/native administrator authorization is pending. Corrected package and removal hashes plus exact next steps are in [the gate repair record](phases/whole-disk-cleanup.md#installed-gate-verification-and-repair--2026-10-23). The complete plan and production helper remain pending the authenticated connection/removal gate. The portable candidate and its prior checksum remain unchanged.
+
+
+### Production administrator checkpoint — 2026-10-23
+
+The user installed the corrected diagnostic gate. Authenticated root health passed, different-identifier and mismatched-build clients were rejected, and the user explicitly approved gate removal. Its daemon/helper/manifest disappeared, launchd no longer registered it, and a later probe failed closed. The mandatory first gate is complete; the earlier pending-install notes above describe historical checkpoints.
+
+Production code now supplies matched installed-path/hardened-runtime signing pins, strict typed operations, native Authorization Services consent, one-use UID/operation-bound challenges, inert reservations and process-bound starts, progress acknowledgements, cancellation/lost-client recovery, bounded independent descriptor-based previews, user-specific Trash/no-overwrite restore and durable per-user journals. Settings is default-off, makes no automatic helper contact, and separates private-journal removal from local history and service removal. Full design/security/data semantics: [administrator-helper.md](phases/administrator-helper.md).
+
+The standard check passed with **57 frontend +134 Rust tests =191 standard tests**, zero Svelte/TypeScript warnings/errors, frontend build, Rust formatting and locked native check. Release and ordinary/fixture package payload verifiers passed: arm64, macOS 14 minimum, strict hardened-runtime ad hoc signatures, literal matched pins and fixed on-demand service. The user approved the concrete validation cycle and Installer successfully installed its 28 MB payload. The first root-owned disposable move cycle stopped because not all moves completed; both named original fixture paths exist. Retained records are being inspected before any new review. No approval was replayed and no existing app/personal file was used for mutation testing. Production release acceptance remains pending this native diagnosis and remaining lifecycle checks.
+
+The Figma handoff adds editable Settings / Optional administrator helper / 0.8 (`185:1933`) and updates the earlier gate qualifications, preserving original kit/components/variables and the established Inter fallback. Its 1440×960 composition was checked; this is structural evidence, not native pixel parity. The source/IDs are in figma-whole-disk-cleanup.json.
+
+
+### Release authorization refinement — 2026-10-23
+
+The user requested fewer password prompts. The release candidate now obtains a native authorization session when administrator choices are enabled, reuses it for up to 15 minutes in that process, and offers explicit Lock. Off/app exit also discard authority. A continuous monotonic clock includes sleep. Independent helper authorization, one-use operation challenges, fresh scope/policy checks and exact removal/restore approval remain mandatory. Installer and Full Disk Access stay separate macOS-controlled setup steps; one total setup prompt is not promised.
+
+`./scripts/check.sh` passed: **58 frontend +135 Rust =193 standard tests**, zero Svelte/TypeScript warnings/errors, production frontend build, Rust formatting and locked native check. Release and ordinary/validation package payload checks passed. The new native fixture validator asserts one interactive Authorization Services request across inspection, previews, Trash, restore, scan cancellation and helper restart, then verifies Lock. That assertion has not yet run against the installed new build.
+
+The preceding production build already passed the fixed root-owned fixture Trash/restore cycle and retained-history restart. Its GUI VM-volume scan retained two files and truthful coverage/drill-down, with unavailable headless inventory. Exact production helper removal passed after specific user approval: service, binary and pairing absent; app, restored fixtures and private journal preserved. The new package is at Install. Automatic approval review requires confirmation at this actual installation step; no alternate installer path was used.
