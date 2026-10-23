@@ -74,6 +74,8 @@ impl Fixture {
     }
     fn index(&mut self) {
         let mut s = DiagnosticSession {
+            volume_plan: None,
+            coverage: vec![],
             id: "scan".into(),
             started_at: now(),
             finished_at: Some(now()),

@@ -9,7 +9,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
     let version: u32 = c.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
-        version <= 5,
+        version <= 6,
         "This diagnostic database was created by a newer version of CoquiPCCleaner."
     );
     if version == 0 {
@@ -43,6 +43,16 @@ pub fn open(path: &Path) -> Result<Connection> {
     }
     if version < 5 {
         c.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS firmware_preferences(id INTEGER PRIMARY KEY CHECK(id=1),json TEXT NOT NULL); PRAGMA user_version=5; COMMIT;")?;
+    }
+    if version < 6 {
+        c.execute_batch("BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS scan_plans(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS scan_gaps(session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,root TEXT NOT NULL,path TEXT NOT NULL,reason TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS scan_gap_page ON scan_gaps(session_id,root,path);
+        CREATE TABLE IF NOT EXISTS removal_plans(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,status TEXT NOT NULL,json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS application_observations(path TEXT PRIMARY KEY,json TEXT NOT NULL,missing_at TEXT);
+        CREATE TABLE IF NOT EXISTS application_preferences(id INTEGER PRIMARY KEY CHECK(id=1),json TEXT NOT NULL);
+        PRAGMA user_version=6; COMMIT;")?;
     }
     Ok(c)
 }
@@ -131,7 +141,7 @@ pub fn files(c: &Connection, q: &StorageQuery) -> Result<Vec<FileEntry>> {
         _ => "allocated",
     };
     let dir = if q.descending { "DESC" } else { "ASC" };
-    let sql=format!("SELECT path,parent,name,category,logical,allocated,directory,modified,qualification FROM files WHERE session_id=?1 AND (?2 IS NULL OR parent=?2) AND (?3 IS NULL OR category=?3) AND (?4=0 OR directory=0) ORDER BY {order} {dir},path ASC LIMIT ?5 OFFSET ?6");
+    let sql=format!("SELECT path,parent,name,category,logical,allocated,directory,modified,qualification FROM files WHERE session_id=?1 AND (?2 IS NULL OR parent=?2) AND (?3 IS NULL OR category=?3) AND (?4=0 OR directory=0) AND (?7 IS NULL OR instr(lower(path),lower(?7))>0) ORDER BY {order} {dir},path ASC LIMIT ?5 OFFSET ?6");
     let mut s = c.prepare(&sql)?;
     let rows = s.query_map(
         params![
@@ -140,7 +150,8 @@ pub fn files(c: &Connection, q: &StorageQuery) -> Result<Vec<FileEntry>> {
             q.category,
             q.files_only,
             q.limit.clamp(1, 500),
-            q.offset
+            q.offset,
+            q.search
         ],
         |r| {
             Ok(FileEntry {
@@ -185,6 +196,7 @@ pub fn recover_interrupted(c: &Connection) -> Result<()> {
     }
     c.execute("UPDATE records SET status='interrupted',json=json_set(json,'$.status','interrupted') WHERE status='running'",[])?;
     crate::cleanup::recover_interrupted(c)?;
+    crate::removal::recover(c)?;
     Ok(())
 }
 pub fn retain(c: &Connection, days: u32) -> Result<()> {
@@ -201,11 +213,46 @@ pub fn retain(c: &Connection, days: u32) -> Result<()> {
         "DELETE FROM records WHERE created_at < ?1 AND status != 'running'",
         [&cutoff],
     )?;
-    // Keep complete indexes per scope, plus inspectable partial scans until history expiry.
-    c.execute("DELETE FROM files WHERE session_id IN (SELECT old.id FROM sessions old WHERE old.status='complete' AND EXISTS(SELECT 1 FROM sessions newer WHERE newer.status='complete' AND newer.scope=old.scope AND newer.started_at>old.started_at))",[])?;
+    c.execute(
+        "DELETE FROM removal_plans WHERE created_at < ?1 AND status != 'running'",
+        [&cutoff],
+    )?;
+    c.execute(
+        "DELETE FROM application_observations WHERE json_extract(json,'$.observedAt') < ?1",
+        [&cutoff],
+    )?;
+    // Keep the latest complete and latest unfinished index per scope; summaries remain retained.
+    c.execute("DELETE FROM files WHERE session_id IN (SELECT old.id FROM sessions old WHERE old.status!='running' AND EXISTS(SELECT 1 FROM sessions newer WHERE newer.status!='running' AND (newer.status='complete')=(old.status='complete') AND newer.scope=old.scope AND (newer.started_at>old.started_at OR (newer.started_at=old.started_at AND newer.rowid>old.rowid))))",[])?;
+    c.execute(
+        "DELETE FROM scan_plans WHERE created_at < ?1",
+        [(chrono::Utc::now() - chrono::Duration::minutes(10)).to_rfc3339()],
+    )?;
     Ok(())
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM application_observations; DELETE FROM removal_plans; DELETE FROM scan_plans; DELETE FROM scan_gaps; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
+}
+
+pub fn insert_gaps(c: &mut Connection, id: &str, batch: &[CoverageGap]) -> Result<()> {
+    let tx = c.transaction()?;
+    for gap in batch {
+        tx.execute(
+            "INSERT INTO scan_gaps VALUES(?1,?2,?3,?4)",
+            params![id, gap.root, gap.path, gap.reason],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+pub fn coverage(c: &Connection, id: &str, offset: u32) -> Result<Vec<CoverageGap>> {
+    let mut q=c.prepare("SELECT root,path,reason FROM scan_gaps WHERE session_id=?1 ORDER BY root,path LIMIT 100 OFFSET ?2")?;
+    let rows = q.query_map(params![id, offset], |r| {
+        Ok(CoverageGap {
+            root: r.get(0)?,
+            path: r.get(1)?,
+            reason: r.get(2)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }

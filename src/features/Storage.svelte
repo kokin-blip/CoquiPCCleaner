@@ -18,6 +18,10 @@
   import { bytes, date } from '../format';
   import Dialog from '../components/Dialog.svelte';
   import { treemap } from '../treemap';
+  import RemovalReview from '../components/RemovalReview.svelte';
+  import RemovalHistory from '../components/RemovalHistory.svelte';
+  import Coverage from '../components/Coverage.svelte';
+  import type { RemovalRequest } from '../bindings/RemovalRequest';
   let {
     controller,
     onScan,
@@ -34,6 +38,12 @@
   let error = $state('');
   let selected = $state<FileEntry | null>(null);
   let search = $state('');
+  let selection = $state<string[]>([]),
+    request = $state<RemovalRequest | null>(null);
+  $effect(() => {
+    void sessionId;
+    selection = [];
+  });
   let session = $derived($controller.session);
   let sessionId = $derived(session?.id);
   let revision = $derived(
@@ -41,9 +51,7 @@
       ? Math.floor((session?.fileCount ?? 0) / 250)
       : session?.status,
   );
-  let filtered = $derived(
-    rows.filter((r) => r.name.toLowerCase().includes(search.toLowerCase())),
-  );
+  let filtered = $derived(rows);
   $effect(() => {
     const id = sessionId;
     const rev = revision;
@@ -52,16 +60,22 @@
     const order = sort;
     const desc = descending;
     const page = offset;
+    const text = search.trim();
     const filesOnly = tab === 'Large files' || !!cat;
     let alive = true;
-    if (!id || tab === 'Cache candidates') return;
+    if (
+      !id ||
+      ['Cache candidates', 'Coverage', 'Removal records'].includes(tab)
+    )
+      return;
     void rev;
     loading = true;
     error = '';
     controller.service
       .files({
         sessionId: id,
-        parent: filesOnly ? null : p,
+        search: text || null,
+        parent: filesOnly || text ? null : p,
         category: cat || null,
         sort: order,
         descending: desc,
@@ -123,7 +137,9 @@
       See what’s here. Understand it before deciding what to remove.
     </p>
   </div>
-  <button onclick={onScan} disabled={$controller.workRunning || $controller.scanning}
+  <button
+    onclick={onScan}
+    disabled={$controller.workRunning || $controller.scanning}
     ><Search size={16} />Analyze storage</button
   >
 </div>
@@ -148,7 +164,7 @@
       <span class="subtle-tag"
         >{session.status === 'running'
           ? 'Analysis in progress'
-          : 'Read-only results'}</span
+          : 'Saved metadata results'}</span
       >
     </div>
     {#if segments.length}<div
@@ -193,7 +209,7 @@
     onkeydown={tabKeys}
     aria-label="Storage views"
   >
-    {#each ['Explorer', 'Large files', 'Cache candidates'] as name}<button
+    {#each ['Explorer', 'Large files', 'Cache candidates', 'Coverage', 'Removal records'] as name}<button
         role="tab"
         tabindex={tab === name ? 0 : -1}
         aria-selected={tab === name}
@@ -209,7 +225,12 @@
           : ''}</button
       >{/each}
   </div>
-  {#if tab === 'Cache candidates'}
+  {#if tab === 'Coverage'}<Coverage
+      {controller}
+      id={session.id}
+    />{:else if tab === 'Removal records'}<RemovalHistory
+      {controller}
+    />{:else if tab === 'Cache candidates'}
     <div class="callout">
       <Info size={20} />
       <div>
@@ -265,12 +286,28 @@
         <input
           class="compact-search"
           type="search"
-          aria-label="Filter the current results page"
-          placeholder="Filter this page…"
-          bind:value={search}
+          aria-label="Search all indexed paths"
+          placeholder="Search all indexed paths…"
+          value={search}
+          oninput={(e) => {
+            search = e.currentTarget.value;
+            offset = 0;
+          }}
         />
       </div>
       <div class="file-filters">
+        <button
+          class="primary"
+          disabled={!selection.length ||
+            $controller.workRunning ||
+            $controller.scanning}
+          onclick={() =>
+            (request = { paths: [...selection], application: null })}
+          >Review removal ({selection.length})</button
+        >
+        {#if selection.length}<button onclick={() => (selection = [])}
+            >Clear selection</button
+          >{/if}
         <label
           >Category<select
             value={category}
@@ -308,6 +345,17 @@
           <thead
             ><tr
               ><th
+                ><input
+                  type="checkbox"
+                  aria-label="Select this results page"
+                  checked={rows.length > 0 &&
+                    rows.every((r) => selection.includes(r.path))}
+                  onchange={(e) =>
+                    (selection = e.currentTarget.checked
+                      ? rows.map((r) => r.path)
+                      : [])}
+                /></th
+              ><th
                 ><button onclick={() => sortBy('name')}
                   >Name {sort === 'name'
                     ? descending
@@ -333,6 +381,16 @@
             ></thead
           ><tbody
             >{#each filtered as row}<tr
+                ><td
+                  ><input
+                    type="checkbox"
+                    aria-label={`Select ${row.path} for removal review`}
+                    checked={selection.includes(row.path)}
+                    onchange={(e) =>
+                      (selection = e.currentTarget.checked
+                        ? [...selection, row.path]
+                        : selection.filter((p) => p !== row.path))}
+                  /></td
                 ><td
                   ><button
                     class="file-name"
@@ -406,9 +464,23 @@
       its contents or selected it for deletion.
     </p>
     <button
+      disabled={$controller.workRunning || $controller.scanning}
+      onclick={() => {
+        request = { paths: [selected!.path], application: null };
+        selected = null;
+      }}>Review removal</button
+    >
+    <button
       class="primary"
       onclick={() =>
         controller.run(() => controller.service.reveal(selected!.path))}
       >Reveal in Finder<ExternalLink size={15} /></button
     ></Dialog
   >{/if}
+
+{#if request}<RemovalReview
+    {controller}
+    {request}
+    onclose={() => (request = null)}
+    oncomplete={() => (selection = [])}
+  />{/if}

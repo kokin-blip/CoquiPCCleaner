@@ -1,3 +1,11 @@
+import type { DiskScanPlan } from './bindings/DiskScanPlan';
+import type { CoverageGap } from './bindings/CoverageGap';
+import type { ApplicationPage } from './bindings/ApplicationPage';
+import type { ApplicationFootprint } from './bindings/ApplicationFootprint';
+import type { ApplicationPreferences } from './bindings/ApplicationPreferences';
+import type { RemovalRequest } from './bindings/RemovalRequest';
+import type { RemovalApproval } from './bindings/RemovalApproval';
+import type { RemovalPlan } from './bindings/RemovalPlan';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import type { AppSettings } from './bindings/AppSettings';
@@ -35,6 +43,33 @@ import type { FirmwarePlanKind } from './bindings/FirmwarePlanKind';
 import type { FirmwareCenter } from './bindings/FirmwareCenter';
 import type { FirmwareComparison } from './bindings/FirmwareComparison';
 export interface Backend {
+  applicationLeftovers(offset: number): Promise<ApplicationFootprint[]>;
+  applicationNotices(): Promise<number>;
+  diskScanPlan(): Promise<DiskScanPlan>;
+  coverage(id: string, offset: number): Promise<CoverageGap[]>;
+  refreshApplicationInventory(): Promise<void>;
+  applicationPage(
+    query: string,
+    sort: string,
+    offset: number,
+    protectedOnly?: boolean,
+  ): Promise<ApplicationPage>;
+  inspectApplication(path: string): Promise<ApplicationFootprint>;
+  applicationPreferences(): Promise<ApplicationPreferences>;
+  saveApplicationPreferences(p: ApplicationPreferences): Promise<void>;
+  selectApplication(): Promise<string | null>;
+  previewRemoval(r: RemovalRequest): Promise<RemovalPlan>;
+  previewRestore(id: string, paths: string[]): Promise<RemovalPlan>;
+  removalHistory(offset: number): Promise<RemovalPlan[]>;
+  removalEntries(
+    id: string,
+    index: number,
+    offset: number,
+  ): Promise<FileEntry[]>;
+  executeRemoval(
+    a: RemovalApproval,
+    event: (p: RemovalPlan) => void,
+  ): Promise<RemovalPlan>;
   firmwareCenter(): Promise<FirmwareCenter>;
   saveFirmwareReminder(enabled: boolean, days: number): Promise<FirmwareCenter>;
   dismissFirmwareNotice(id: string): Promise<FirmwareCenter>;
@@ -115,6 +150,36 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  applicationLeftovers: (offset) => invoke('application_leftovers', { offset }),
+  applicationNotices: () => invoke('application_notices'),
+  diskScanPlan: () => invoke('disk_scan_plan'),
+  coverage: (id, offset) => invoke('scan_coverage', { id, offset }),
+  refreshApplicationInventory: () => invoke('refresh_application_inventory'),
+  applicationPage: (query, sort, offset, protectedOnly = false) =>
+    invoke('application_page', { query, sort, offset, protectedOnly }),
+  inspectApplication: (path) => invoke('inspect_application', { path }),
+  applicationPreferences: () => invoke('application_preferences'),
+  saveApplicationPreferences: (p) =>
+    invoke('save_application_preferences', { p }),
+  selectApplication: async () => {
+    const p = await open({
+      multiple: false,
+      directory: false,
+      title: 'Choose a macOS application',
+      filters: [{ name: 'macOS application', extensions: ['app'] }],
+    });
+    return typeof p === 'string' ? p : null;
+  },
+  previewRemoval: (r) => invoke('preview_removal', { r }),
+  previewRestore: (id, paths) => invoke('preview_restore', { id, paths }),
+  removalHistory: (offset) => invoke('removal_history', { offset }),
+  removalEntries: (id, index, offset) =>
+    invoke('removal_entries', { id, index, offset }),
+  executeRemoval: (a, onEvent) => {
+    const channel = new Channel<RemovalPlan>();
+    channel.onmessage = onEvent;
+    return invoke('execute_removal', { a, onEvent: channel });
+  },
   firmwareCenter: () => invoke('firmware_center'),
   saveFirmwareReminder: (enabled, days) =>
     invoke('save_firmware_reminder', { enabled, days }),

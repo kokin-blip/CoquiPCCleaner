@@ -7,3 +7,7 @@
 5. **Intel Macs:** see phases/intel.md. A separate compatibility and validation effort, not an untested universal-release claim.
 
 All original feature and UX requirements remain in ../docs/original-brief.md. Deferred functionality must not appear as working controls in Phase 1.
+
+## 0.8 whole-disk and recoverable application removal
+
+The user approved this post-Phase-3 extension. Portable mounted-scope/coverage, SQLite-backed analysis, selected-item review, Applications and reviewed Trash/restore are implemented and locally validated. An optional package-installed administrator helper is required for full completion and remains at its native authorization gate. See [implementation boundary](phases/whole-disk-cleanup.md) and [complete reference map](reference-feature-map.md). Existing Windows/Intel and future integration specifications remain intact.

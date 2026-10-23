@@ -1,5 +1,6 @@
 <script lang="ts">
   import ActivityHistory from './ActivityHistory.svelte';
+  import RemovalHistory from '../components/RemovalHistory.svelte';
   import { tabKeys } from '../keyboard';
   import { Search, ChevronRight, History } from '@lucide/svelte';
   import type { createAppStore } from '../state';
@@ -43,7 +44,7 @@
   tabindex="-1"
   onkeydown={tabKeys}
 >
-  {#each ['Scans', 'Activity'] as name}<button
+  {#each ['Scans', 'Activity', 'Removal & restore'] as name}<button
       role="tab"
       tabindex={tab === name ? 0 : -1}
       aria-selected={tab === name}
@@ -51,7 +52,9 @@
       onclick={() => (tab = name)}>{name}</button
     >{/each}
 </div>
-{#if tab === 'Activity'}<ActivityHistory {controller} />{:else}
+{#if tab === 'Removal & restore'}<RemovalHistory
+    {controller}
+  />{:else if tab === 'Activity'}<ActivityHistory {controller} />{:else}
   <div class="callout">
     <History size={20} />
     <div>

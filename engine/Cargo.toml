@@ -1,6 +1,6 @@
 [package]
 name = "coqui_engine"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.88"
 
@@ -29,3 +29,6 @@ tempfile = "3.20"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "=0.6.5"
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSFileManager", "NSString", "NSURL", "NSError"] }
+
+[build-dependencies]
+cc = "=1.9.0"

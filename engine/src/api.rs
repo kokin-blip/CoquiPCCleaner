@@ -125,7 +125,20 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
     );
     let _guard = ActiveGuard(&e.active);
     e.cancel.store(false, Ordering::SeqCst);
-    let (roots, root_errors) = storage::roots(&request)?;
+    let mut c = database::open(&e.path)?;
+    let (roots, root_errors) = if request.mode == "deep" {
+        let proposed = crate::volumes::approved_roots(&c, &request)?;
+        storage::roots(&ScanRequest {
+            mode: "selected".into(),
+            roots: proposed
+                .iter()
+                .map(|r| r.to_string_lossy().into_owned())
+                .collect(),
+            ..request.clone()
+        })?
+    } else {
+        storage::roots(&request)?
+    };
     let mut excluded = request
         .excluded_paths
         .iter()
@@ -138,8 +151,22 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
     if let Some(parent) = e.path.parent() {
         excluded.push(parent.to_owned());
     }
-    let mut c = database::open(&e.path)?;
     let mut s = DiagnosticSession {
+        volume_plan: if request.mode == "deep" {
+            {
+                let mut plan = crate::volumes::get(
+                    &c,
+                    request.plan_id.as_deref().context("Missing scope plan")?,
+                )?;
+                for volume in &mut plan.volumes {
+                    volume.selected = request.roots.contains(&volume.mount);
+                }
+                Some(plan)
+            }
+        } else {
+            None
+        },
+        coverage: vec![],
         id: uuid::Uuid::new_v4().to_string(),
         started_at: now(),
         finished_at: None,
@@ -184,7 +211,8 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
         let session = std::cell::RefCell::new(&mut s);
         let id = session.borrow().id.clone();
         let mut last_event = std::time::Instant::now();
-        let summary = storage::walk(
+        let gaps = std::cell::RefCell::new(Vec::with_capacity(250));
+        let summary = storage::walk_with_gaps(
             &roots,
             &excluded,
             &e.cancel,
@@ -207,6 +235,8 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                 s.logical_bytes = w.logical;
                 s.allocated_bytes = w.allocated;
                 s.skipped_count = w.skipped;
+                s.coverage = w.coverage.clone();
+                s.stage = w.stage.clone();
                 if last_event.elapsed() >= Duration::from_millis(250) || w.files == 0 {
                     database::save_session(&connection.borrow(), &s)?;
                     if !send(ScanEvent {
@@ -218,7 +248,20 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                 }
                 Ok(())
             },
+            |g| {
+                let mut b = gaps.borrow_mut();
+                b.push(g);
+                if b.len() >= 250 {
+                    database::insert_gaps(&mut connection.borrow_mut(), &id, &b)?;
+                    b.clear();
+                }
+                Ok(())
+            },
         )?;
+        if !gaps.borrow().is_empty() {
+            database::insert_gaps(&mut connection.borrow_mut(), &id, &gaps.borrow())?;
+        }
+        s.coverage = summary.coverage;
         s.file_count = summary.files;
         s.logical_bytes = summary.logical;
         s.allocated_bytes = summary.allocated;
@@ -591,4 +634,107 @@ pub fn save_firmware_reminder(enabled: bool, days: u32) -> Result<FirmwareCenter
 }
 pub fn dismiss_firmware_notice(id: String) -> Result<FirmwareCenter> {
     with_work(|_, c| crate::firmware_review::dismiss(c, &id))
+}
+
+pub fn disk_scan_plan() -> Result<DiskScanPlan> {
+    crate::volumes::plan(&database::open(&engine()?.path)?)
+}
+pub fn scan_coverage(id: String, offset: u32) -> Result<Vec<CoverageGap>> {
+    database::coverage(&database::open(&engine()?.path)?, &id, offset)
+}
+
+fn removal_policy(e: &Engine) -> Result<crate::removal::Policy> {
+    let mut p = cleanup_policy(e)?;
+    p.exclusions.extend(
+        crate::applications::preferences(&database::open(&e.path)?)?
+            .protected_paths
+            .iter()
+            .map(PathBuf::from),
+    );
+    let exe = std::env::current_exe()?;
+    let self_app = exe
+        .ancestors()
+        .find(|p| p.extension().is_some_and(|s| s == "app"))
+        .map(std::path::Path::to_owned);
+    Ok(crate::removal::Policy {
+        home: p.home,
+        exclusions: p.exclusions,
+        self_app,
+    })
+}
+pub fn application_page(
+    query: String,
+    sort: String,
+    offset: u32,
+    protected_only: bool,
+) -> Result<crate::applications::ApplicationPage> {
+    crate::applications::indexed_page(
+        &database::open(&engine()?.path)?,
+        &query,
+        &sort,
+        offset,
+        protected_only,
+    )
+}
+pub fn refresh_application_inventory() -> Result<()> {
+    with_work(|e, c| {
+        crate::applications::page(
+            c,
+            &removal_policy(e)?,
+            &crate::applications::preferences(c)?,
+            "",
+            "name",
+            0,
+        )?;
+        Ok(())
+    })
+}
+pub fn inspect_application(path: String) -> Result<crate::applications::ApplicationFootprint> {
+    with_work(|e, _| {
+        let policy = removal_policy(e)?;
+        Ok(crate::applications::qualify_related(
+            crate::applications::inspect(std::path::Path::new(&path), &policy)?,
+            &policy,
+        ))
+    })
+}
+pub fn application_preferences() -> Result<crate::applications::ApplicationPreferences> {
+    crate::applications::preferences(&database::open(&engine()?.path)?)
+}
+pub fn save_application_preferences(p: crate::applications::ApplicationPreferences) -> Result<()> {
+    with_work(|_, c| crate::applications::save_preferences(c, &p))
+}
+pub fn preview_removal(r: crate::removal::RemovalRequest) -> Result<crate::removal::RemovalPlan> {
+    with_work(|e, c| crate::removal::preview(c, r, &removal_policy(e)?, &e.cancel_work))
+}
+pub fn preview_restore(id: String, paths: Vec<String>) -> Result<crate::removal::RemovalPlan> {
+    with_work(|e, c| {
+        crate::removal::preview_restore(c, &id, &paths, &removal_policy(e)?, &e.cancel_work)
+    })
+}
+pub fn execute_removal(
+    a: crate::removal::RemovalApproval,
+    send: impl FnMut(crate::removal::RemovalPlan) -> bool,
+) -> Result<crate::removal::RemovalPlan> {
+    with_work(|e, c| {
+        crate::removal::native_execute(c, a, &removal_policy(e)?, &e.cancel_work, send)
+    })
+}
+pub fn removal_history(offset: u32) -> Result<Vec<crate::removal::RemovalPlan>> {
+    crate::removal::history(&database::open(&engine()?.path)?, offset)
+}
+
+pub fn removal_entries(id: String, index: u32, offset: u32) -> Result<Vec<FileEntry>> {
+    with_work(|e, c| {
+        crate::removal::entries(c, &id, index, offset, &removal_policy(e)?, &e.cancel_work)
+    })
+}
+
+pub fn application_leftovers(
+    offset: u32,
+) -> Result<Vec<crate::applications::ApplicationFootprint>> {
+    with_work(|_, c| crate::applications::leftovers(c, offset))
+}
+pub fn application_notices() -> Result<u32> {
+    crate::applications::notices(&database::open(&engine()?.path)?)
 }

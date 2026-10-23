@@ -91,6 +91,8 @@ describe('desktop workflows', () => {
     c.update((s) => ({
       ...s,
       session: {
+        coverage: [],
+        volumePlan: null,
         id: 'scan',
         startedAt: '',
         finishedAt: null,

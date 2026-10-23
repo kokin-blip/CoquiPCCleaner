@@ -204,6 +204,10 @@ pub struct StorageCategory {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticSession {
+    #[serde(default)]
+    pub volume_plan: Option<DiskScanPlan>,
+    #[serde(default)]
+    pub coverage: Vec<RootCoverage>,
     pub id: String,
     pub started_at: String,
     pub finished_at: Option<String>,
@@ -225,6 +229,8 @@ pub struct DiagnosticSession {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanRequest {
+    #[serde(default)]
+    pub plan_id: Option<String>,
     pub mode: String,
     pub roots: Vec<String>,
     pub excluded_paths: Vec<String>,
@@ -262,6 +268,8 @@ pub struct LiveMetrics {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageQuery {
+    #[serde(default)]
+    pub search: Option<String>,
     pub session_id: String,
     pub parent: Option<String>,
     pub category: Option<String>,
@@ -762,5 +770,43 @@ pub struct FirmwareCenter {
     pub notices: Vec<FirmwareNotice>,
     pub latest_attempt_at: Option<String>,
     pub latest_attempt_state: String,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RootCoverage {
+    pub root: String,
+    pub state: String,
+    pub files: u32,
+    pub visited: u32,
+    pub skips: std::collections::BTreeMap<String, u32>,
+    pub examples: Vec<CoverageGap>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CoverageGap {
+    pub root: String,
+    pub path: String,
+    pub reason: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskVolume {
+    pub id: String,
+    pub mount: String,
+    pub device: String,
+    pub filesystem: String,
+    pub internal: bool,
+    pub read_only: bool,
+    pub selected: bool,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskScanPlan {
+    pub id: String,
+    pub created_at: String,
+    pub volumes: Vec<DiskVolume>,
     pub qualification: String,
 }

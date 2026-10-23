@@ -97,7 +97,7 @@ fn standalone_home_package(path: &Path, expected: &fs::Metadata) -> Result<()> {
 
 // This context applies only after inspect establishes the dedicated user-cache
 // namespace. It never authorizes project-local caches elsewhere in the home.
-fn cache_project_context(parent: &Path, home: &Path) -> Result<String> {
+pub(crate) fn cache_project_context(parent: &Path, home: &Path) -> Result<String> {
     const REPOSITORIES: &[&str] = &[".git", ".hg", ".svn", ".jj"];
     const MANIFESTS: &[&str] = &[
         "Cargo.toml",
@@ -255,6 +255,7 @@ pub fn candidates(
     let rows = database::files(
         c,
         &StorageQuery {
+            search: None,
             session_id: session_id.into(),
             parent: None,
             category: Some("Caches".into()),

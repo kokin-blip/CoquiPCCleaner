@@ -27,6 +27,8 @@ impl Fixture {
     }
     fn index(&mut self) {
         let mut s = DiagnosticSession {
+            volume_plan: None,
+            coverage: vec![],
             id: "scan".into(),
             started_at: now(),
             finished_at: Some(now()),
@@ -269,6 +271,7 @@ fn rule() -> MaintenanceRule {
         interval_days: 7,
         next_due_at: "2020-01-01T00:00:00Z".into(),
         scope: ScanRequest {
+            plan_id: None,
             mode: "standard".into(),
             roots: vec![],
             excluded_paths: vec!["/exclude".into()],

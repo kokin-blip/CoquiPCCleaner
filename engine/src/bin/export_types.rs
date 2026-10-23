@@ -3,6 +3,13 @@ use ts_rs::TS;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings");
     AppSettings::export_all_to(&path)?;
+    coqui_engine::applications::ApplicationPage::export_all_to(&path)?;
+    coqui_engine::applications::ApplicationPreferences::export_all_to(&path)?;
+    coqui_engine::removal::RemovalRequest::export_all_to(&path)?;
+    coqui_engine::removal::RemovalApproval::export_all_to(&path)?;
+    coqui_engine::removal::RemovalPlan::export_all_to(&path)?;
+    DiskScanPlan::export_all_to(&path)?;
+    CoverageGap::export_all_to(&path)?;
     ScanRequest::export_all_to(&path)?;
     ScanEvent::export_all_to(&path)?;
     LiveMetrics::export_all_to(&path)?;

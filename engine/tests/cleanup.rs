@@ -29,6 +29,8 @@ impl Fixture {
         }
         let mut c = database::open(&home.join("app.sqlite3")).unwrap();
         let mut s = DiagnosticSession {
+            volume_plan: None,
+            coverage: vec![],
             id: "scan".into(),
             started_at: now(),
             finished_at: Some(now()),
@@ -396,7 +398,7 @@ fn migration_reopen_and_interruption_do_not_retry_uncertain_actions() {
         reopened
             .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
             .unwrap(),
-        5
+        6
     );
     database::purge(&reopened).unwrap();
     assert!(cleanup::history(&reopened, 0, 10).unwrap().is_empty());

@@ -168,7 +168,12 @@ describe('remaining Phase 2 workflows', () => {
         expect.objectContaining({
           enabled: true,
           mode: 'reminder',
-          scope: { mode: 'selected', roots: ['/fixture'], excludedPaths: [] },
+          scope: {
+            planId: null,
+            mode: 'selected',
+            roots: ['/fixture'],
+            excludedPaths: [],
+          },
         }),
       ),
     );

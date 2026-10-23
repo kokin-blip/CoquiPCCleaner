@@ -16,12 +16,14 @@ export type Page =
   | 'System Analysis'
   | 'Hardware'
   | 'Storage'
+  | 'Applications'
   | 'Optimization'
   | 'Performance'
   | 'Firmware & Security'
   | 'History'
   | 'Settings';
 export interface AppState {
+  missingApplications: number;
   firmwareCenter: FirmwareCenter | null;
   firmwareNoticeError: string | null;
   firmwareReportId: string | null;
@@ -48,6 +50,7 @@ export interface AppState {
 }
 export function createAppStore(service: Backend = nativeBackend) {
   const store = writable<AppState>({
+    missingApplications: 0,
     firmwareCenter: null,
     firmwareNoticeError: null,
     firmwareReportId: null,
@@ -169,6 +172,8 @@ export function createAppStore(service: Backend = nativeBackend) {
         }, 30000);
         void checkMaintenance();
       }
+      const missingApplications = await service.applicationNotices();
+      store.update((s) => ({ ...s, missingApplications }));
       await refreshFirmwareCenter();
       if (settings.onboardingComplete && settings.monitoringEnabled)
         startMonitoring();
@@ -212,7 +217,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     }
   }
 
-  async function scan() {
+  async function scan(planId: string | null = null, roots?: string[]) {
     const s = get(store);
     if (!s.settings || s.scanning) return;
     if (
@@ -224,9 +229,11 @@ export function createAppStore(service: Backend = nativeBackend) {
       fail('Wait for the active operation to finish before scanning.');
       return;
     }
+    let receivedEvent = false;
     store.update((s) => ({
       ...s,
       scanning: true,
+      session: null,
       cancelling: false,
       error: null,
       notice: null,
@@ -235,13 +242,18 @@ export function createAppStore(service: Backend = nativeBackend) {
       await service.scan(
         {
           mode: s.settings.scanMode,
-          roots: s.settings.selectedRoots,
+          planId,
+          roots: roots ?? s.settings.selectedRoots,
           excludedPaths: s.settings.excludedPaths,
         },
-        (e) => store.update((s) => ({ ...s, session: e.session })),
+        (e) => {
+          receivedEvent = true;
+          store.update((s) => ({ ...s, session: e.session }));
+        },
       );
       await refresh();
     } catch (e) {
+      if (!receivedEvent) store.update((v) => ({ ...v, session: s.session }));
       fail(e);
     } finally {
       store.update((s) => ({ ...s, scanning: false, cancelling: false }));
@@ -402,6 +414,8 @@ export function createAppStore(service: Backend = nativeBackend) {
     initialize,
     setFirmwareCenter,
     refreshFirmwareCenter,
+    dismissApplicationNotice: () =>
+      store.update((s) => ({ ...s, missingApplications: 0 })),
     selectFirmwareReport: (id: string) =>
       store.update((s) => ({ ...s, firmwareReportId: id })),
     openFirmwareReport: (id: string | null) =>

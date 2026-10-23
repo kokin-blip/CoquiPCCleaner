@@ -3,6 +3,8 @@ use std::{fs, path::PathBuf, sync::atomic::AtomicBool};
 
 fn session(id: &str) -> DiagnosticSession {
     DiagnosticSession {
+        volume_plan: None,
+        coverage: vec![],
         id: id.into(),
         started_at: now(),
         finished_at: None,
@@ -161,6 +163,7 @@ fn database_roundtrip_pagination_recovery_and_purge() {
     let result = database::files(
         &c,
         &StorageQuery {
+            search: None,
             session_id: "one".into(),
             parent: Some("/fixture".into()),
             category: None,
@@ -223,6 +226,7 @@ fn invalid_unicode_is_not_rewritten_to_a_different_path() {
 fn disconnected_selected_root_does_not_discard_accessible_roots() {
     let d = tempfile::tempdir().unwrap();
     let request = ScanRequest {
+        plan_id: None,
         mode: "selected".into(),
         roots: vec![
             d.path().to_string_lossy().into_owned(),
@@ -263,7 +267,7 @@ fn newer_database_schema_is_not_silently_downgraded() {
     let d = tempfile::tempdir().unwrap();
     let path = d.path().join("newer.db");
     let c = database::open(&path).unwrap();
-    c.execute_batch("PRAGMA user_version=6").unwrap();
+    c.execute_batch("PRAGMA user_version=7").unwrap();
     drop(c);
     assert!(database::open(&path).is_err());
 }
@@ -280,4 +284,111 @@ fn old_complete_indexes_are_pruned_without_losing_summary() {
     database::save_session(&c, &b).unwrap();
     database::retain(&c, 3650).unwrap();
     assert_eq!(database::history(&c, 0, 10).unwrap().len(), 2);
+}
+
+#[test]
+fn disk_backed_frontier_aggregates_large_index_and_persists_all_omissions() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    for i in 0..120 {
+        let sub = root.join(format!("d{i:03}"));
+        fs::create_dir(&sub).unwrap();
+        for j in 0..100 {
+            fs::write(sub.join(format!("f{j:03}")), b"0123456789").unwrap();
+        }
+    }
+    fs::write(root.join("cloud.icloud"), "metadata fixture").unwrap();
+    let mut count = 0;
+    let mut total = 0.;
+    let mut gaps = vec![];
+    let rss = || {
+        let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+        unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut usage) };
+        usage.ru_maxrss as u64
+    };
+    let before = rss();
+    let summary = storage::walk_with_gaps(
+        std::slice::from_ref(&root),
+        &[],
+        &AtomicBool::new(false),
+        |f| {
+            count += 1;
+            if f.path == root.to_str().unwrap() {
+                total = f.logical_bytes;
+            }
+            Ok(())
+        },
+        |_| Ok(()),
+        |g| {
+            gaps.push(g);
+            Ok(())
+        },
+    )
+    .unwrap();
+    let growth = rss().saturating_sub(before);
+    let growth = if cfg!(target_os = "macos") {
+        growth
+    } else {
+        growth * 1024
+    };
+    assert_eq!(summary.files, 12_000);
+    assert_eq!(count, 12_121);
+    assert_eq!(total, 120_000.);
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0].reason, "cloudPlaceholder");
+    assert!(
+        growth < 48 * 1024 * 1024,
+        "Scanner high-water RSS grew by {growth} bytes"
+    );
+    assert_eq!(summary.coverage[0].state, "completedWithOmissions");
+}
+#[test]
+fn repeated_partial_indexes_are_bounded_while_history_and_complete_index_remain() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = database::open(&dir.path().join("retained.db")).unwrap();
+    for (i, status) in ["complete", "partial", "cancelled", "partial"]
+        .iter()
+        .enumerate()
+    {
+        let mut s = session(&format!("scan{i}"));
+        s.status = (*status).into();
+        s.started_at = format!("2026-10-23T00:00:0{i}Z");
+        database::save_session(&c, &s).unwrap();
+        database::insert_files(
+            &mut c,
+            &s.id,
+            &[FileEntry {
+                path: "/fixture/file".into(),
+                parent: "/fixture".into(),
+                name: "file".into(),
+                category: "Other".into(),
+                logical_bytes: 4.,
+                allocated_bytes: 4096.,
+                is_directory: false,
+                modified_at: String::new(),
+                qualification: String::new(),
+            }],
+        )
+        .unwrap();
+    }
+    database::retain(&c, 3650).unwrap();
+    let indexed: i64 = c
+        .query_row("SELECT count(*) FROM files", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(indexed, 2);
+    assert_eq!(database::history(&c, 0, 100).unwrap().len(), 4);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn mounted_system_and_data_roots_remain_separate_even_with_unified_apfs_device_identity() {
+    let data = PathBuf::from("/System/Volumes/Data");
+    if data.is_dir()
+        && coqui_engine::volumes::mounted_identity(&data).unwrap()
+            != coqui_engine::volumes::mounted_identity(std::path::Path::new("/")).unwrap()
+    {
+        let roots = storage::normalized_roots(vec![PathBuf::from("/"), data.clone()]).unwrap();
+        assert!(roots.contains(&data));
+        assert_eq!(roots.len(), 2);
+    }
 }

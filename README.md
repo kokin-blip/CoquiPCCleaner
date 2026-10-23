@@ -33,10 +33,12 @@ npm run types
 - Onboarding, workload/preferences, light/dark/system appearance, local settings.
 - Real hardware, disks/volumes, application and readable startup configuration inventory.
 - Two-second CPU, memory, swap and readable process I/O monitoring while open.
-- Standard home-folder scans, confirmed deep scans, explicit additional folders and exclusions.
-- Metadata-only storage traversal, category treemap, large files, folder drill-down, cache candidates and Finder reveal.
+- Standard home scans, reviewed Whole internal disk volume plans, explicit additional folders and exclusions.
+- SQLite-backed metadata traversal/deduplication/folder totals; paginated search, category treemap, large files, drill-down and per-root coverage.
 - Capability disclosures, scan/cancel/history, permission guidance and user-chosen report export.
 - Exact-path cache-file review, expiring approval, native Trash moves, cancellation, verification and action history.
+- Applications inventory/inspection, separate related-data selection and shared/protected-app guidance.
+- Selected personal/volume-item and app-bundle Trash review, verification, retained records and separately reviewed no-overwrite restore.
 - Local guided Ask Coqui, saved conversations, typed evidence/context and action handoffs.
 - Explicit exact-duplicate and PNG/JPEG similarity review; separate personal-copy approval with retained keeper verification.
 - Workload baselines, before/after comparisons, recorded manual startup/power plans and assumption-based upgrade guidance.
@@ -64,3 +66,7 @@ cargo test --manifest-path engine/Cargo.toml --locked --test phase2 native_dupli
 Phase 3.1 adds **Firmware & Security → Advanced audit**: individually select firmware inventory, readable security status and an optional macOS update check. Update checks require network consent each run and never download or install. The Guidance tab prepares separate Apple manual checklists with interruption/recovery disclosures; observations after a manual step remain qualified. Audits and plans are retained in History → Activity and follow Settings retention/purge. See [capabilities, compatibility and validation](docs/phases/phase-3-implementation.md).
 
 Phase 3.2 (0.7.0) adds **Compare audits** and **Updates & reminders**. Compare two chronological saved audits, inspect scope/permission gaps, open exact source audits from local notices, or enable a 1–365 day review reminder. Reminders appear only inside Coqui while open/reopened; they never start an audit, contact Apple or request macOS notification permission. Manual follow-up links its before/after evidence while remaining unverified. Schema 5 preserves reminder preferences through diagnostic purge. See [implementation and validation](docs/phases/phase-3-completion.md).
+
+## 0.8 implementation gate
+
+The portable 0.8 candidate adds whole-internal scope/coverage, Applications and reviewed recoverable removal. The complete approved plan is **not yet finished**: the optional administrator helper currently has only a health gate, with native installation/connection/removal still requiring user authorization. `scripts/helper-package.sh` produces the diagnostic gate and removal packages, not the final app+helper installer. See [scope, commands and validation limits](docs/phases/whole-disk-cleanup.md) and [reference feature map](docs/reference-feature-map.md). No elevated cleanup support or comprehensive disk access is claimed by this gate.

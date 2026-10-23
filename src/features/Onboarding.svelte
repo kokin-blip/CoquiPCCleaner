@@ -10,7 +10,10 @@
   } from '@lucide/svelte';
   import { workloads } from '../format';
   import type { createAppStore } from '../state';
-  let { controller }: { controller: ReturnType<typeof createAppStore> } =
+  let {
+    controller,
+    onScan = () => void controller.scan(),
+  }: { controller: ReturnType<typeof createAppStore>; onScan?: () => void } =
     $props();
   let step = $state(0);
   let selected = $state<string[]>([]);
@@ -39,7 +42,7 @@
         scanMode: mode,
         monitoringEnabled: monitor,
       });
-      if (scan) void controller.scan();
+      if (scan) onScan();
     });
     saving = false;
   }
@@ -49,9 +52,11 @@
   <div class="onboard-chrome" data-tauri-drag-region></div>
   <div class="onboard-card">
     <div class="wordmark">
-      <img class="brand-icon" src="/brand/coqui-file-emblem-v1.png" alt="" />coqui<span
-        class="wordmark-detail">PC Cleaner</span
-      >
+      <img
+        class="brand-icon"
+        src="/brand/coqui-file-emblem-v1.png"
+        alt=""
+      />coqui<span class="wordmark-detail">PC Cleaner</span>
     </div>
     <div class="onboard-steps" aria-label="Setup progress">
       {#each steps as name, i}<button
@@ -133,8 +138,7 @@
       <label class="field-label"
         >Storage analysis scope<select bind:value={mode}
           ><option value="standard">Standard — accessible home folder</option
-          ><option value="deep">Deep — accessible internal volumes</option
-          ></select
+          ><option value="deep">Whole internal disk</option></select
         ></label
       >
       <div class="callout">
@@ -142,7 +146,7 @@
         <div>
           <strong
             >{mode === 'deep'
-              ? 'Deep analysis covers accessible internal locations.'
+              ? 'Whole internal disk analysis reviews mounted internal volumes.'
               : 'Protected folders may be skipped.'}</strong
           >
           <p>

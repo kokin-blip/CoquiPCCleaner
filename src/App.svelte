@@ -10,6 +10,7 @@
     ScanLine,
     Cpu,
     HardDrive,
+    Package,
     ShieldCheck,
     History as HistoryIcon,
     Settings as SettingsIcon,
@@ -27,6 +28,8 @@
   import Dashboard from './features/Dashboard.svelte';
   import Analysis from './features/Analysis.svelte';
   import Storage from './features/Storage.svelte';
+  import Applications from './features/Applications.svelte';
+  import type { DiskScanPlan } from './bindings/DiskScanPlan';
   import Hardware from './features/Hardware.svelte';
   import Firmware from './features/Firmware.svelte';
   import Performance from './features/Performance.svelte';
@@ -41,6 +44,10 @@
     $props();
   let query = $state('');
   let deepConfirm = $state(false);
+  let volumePlan = $state<DiskScanPlan | null>(null),
+    volumeError = $state(''),
+    volumeLoading = $state(false),
+    volumeRoots = $state<string[]>([]);
   let notifications = $state(false);
   const pages: { name: Page; icon: typeof LayoutDashboard; group: string }[] = [
     { name: 'Ask Coqui', icon: MessageCircle, group: 'Main' },
@@ -48,6 +55,7 @@
     { name: 'System Analysis', icon: ScanLine, group: 'Analysis' },
     { name: 'Hardware', icon: Cpu, group: 'Analysis' },
     { name: 'Storage', icon: HardDrive, group: 'Analysis' },
+    { name: 'Applications', icon: Package, group: 'Analysis' },
     { name: 'Optimization', icon: BrushCleaning, group: 'Analysis' },
     { name: 'Performance', icon: Activity, group: 'Analysis' },
     { name: 'Firmware & Security', icon: ShieldCheck, group: 'Analysis' },
@@ -92,8 +100,20 @@
     document.querySelector('main.content')?.scrollTo(0, 0);
   }
   function scan() {
-    if ($controller.settings?.scanMode === 'deep') deepConfirm = true;
-    else void controller.scan();
+    if ($controller.settings?.scanMode === 'deep') {
+      deepConfirm = true;
+      volumePlan = null;
+      volumeError = '';
+      volumeLoading = true;
+      controller.service
+        .diskScanPlan()
+        .then((p) => {
+          volumePlan = p;
+          volumeRoots = p.volumes.filter((v) => v.internal).map((v) => v.mount);
+        })
+        .catch((e) => (volumeError = String(e)))
+        .finally(() => (volumeLoading = false));
+    } else void controller.scan();
   }
 </script>
 
@@ -324,6 +344,23 @@
             >Cancel validation</button
           >
         </div>{/if}
+      {#if $controller.missingApplications > 0}<div class="callout">
+          <div>
+            <strong
+              >{$controller.missingApplications} previously observed applications
+              are missing at their recorded paths</strong
+            >
+            <p>
+              They may have moved or become disconnected. Review retained
+              associations before deciding what to do.
+            </p>
+            <button onclick={() => controller.navigate('Applications')}
+              >Review applications</button
+            ><button onclick={() => controller.dismissApplicationNotice()}
+              >Dismiss</button
+            >
+          </div>
+        </div>{/if}
       {#if $controller.cleanupRunning || ($controller.cleanupPreparing && $controller.page !== 'Optimization')}<div
           class="scan-banner"
           role="status"
@@ -362,6 +399,8 @@
           />{:else if $controller.page === 'Storage'}<Storage
             {controller}
             onScan={scan}
+          />{:else if $controller.page === 'Applications'}<Applications
+            {controller}
           />{:else if $controller.page === 'Optimization'}<Optimization
             {controller}
             onScan={scan}
@@ -383,24 +422,62 @@
   </div>
 {/if}
 {#if deepConfirm}<Dialog
-    title="Analyze accessible internal volumes?"
+    title="Review whole internal disk scope"
     onclose={() => (deepConfirm = false)}
-    ><p>
-      A deep scan inspects accessible internal locations beyond your home
-      folder. It can take longer and encounter protected folders. External and
-      network mounts remain excluded unless selected separately.
+  >
+    <p>
+      Scan readable metadata on the selected mounted internal volumes. Protected
+      locations can remain unavailable. External and network volumes require
+      separate selection.
     </p>
-    <p class="muted">
-      Only metadata is inspected. No cleanup or system changes are performed.
-      Existing exclusions remain in effect.
-    </p>
+    {#if volumeLoading}<p role="status">Enumerating mounted volumes…</p>{/if}
+    {#if volumeError}<p class="inline-error" role="alert">{volumeError}</p>
+      <button onclick={scan}>Retry volume inventory</button>{/if}
+    {#if volumePlan}<div class="table-scroll">
+        <table>
+          <thead
+            ><tr
+              ><th>Scan</th><th>Mounted volume</th><th>Filesystem</th><th
+                >Access</th
+              ></tr
+            ></thead
+          ><tbody
+            >{#each volumePlan.volumes as v}<tr
+                ><td
+                  ><input
+                    type="checkbox"
+                    aria-label={`Scan ${v.mount}`}
+                    disabled={!v.internal}
+                    checked={volumeRoots.includes(v.mount)}
+                    onchange={(e) =>
+                      (volumeRoots = e.currentTarget.checked
+                        ? [...volumeRoots, v.mount]
+                        : volumeRoots.filter((p) => p !== v.mount))}
+                  /></td
+                ><td class="path selectable"
+                  >{v.mount}
+                  <p class="muted small">
+                    {v.internal ? 'Internal' : 'Separate selection required'}
+                  </p></td
+                ><td>{v.filesystem}</td><td
+                  >{v.readOnly
+                    ? 'Read-only volume'
+                    : 'Subject to permissions'}</td
+                ></tr
+              >{/each}</tbody
+          >
+        </table>
+      </div>
+      <p class="muted">{volumePlan.qualification}</p>{/if}
     <div class="dialog-actions">
       <button onclick={() => (deepConfirm = false)}>Cancel</button><button
         class="primary"
+        disabled={!volumePlan || !volumeRoots.length || volumeLoading}
         onclick={() => {
+          const p = volumePlan!;
           deepConfirm = false;
-          void controller.scan();
-        }}>Start deep analysis</button
+          void controller.scan(p.id, volumeRoots);
+        }}>Scan selected volumes</button
       >
-    </div></Dialog
-  >{/if}
+    </div>
+  </Dialog>{/if}

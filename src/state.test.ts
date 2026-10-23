@@ -145,3 +145,24 @@ describe('native scan state', () => {
     expect(get(c).monitoringError).toContain('stream ended');
   });
 });
+
+describe('new scan scope preparation', () => {
+  it('does not show the previous completed scan as active progress and restores it on preflight failure', async () => {
+    let reject!: (e: Error) => void;
+    const controller = createAppStore(
+      fakeBackend({
+        history: async () => [{ ...session, status: 'complete' }],
+        scan: async () => new Promise<void>((_resolve, r) => (reject = r)),
+      }),
+    );
+    await controller.initialize();
+    const running = controller.scan();
+    expect(get(controller).scanning).toBe(true);
+    expect(get(controller).session).toBeNull();
+    reject(new Error('Volume scope changed; review again'));
+    await running;
+    expect(get(controller).session?.status).toBe('complete');
+    expect(get(controller).error).toContain('Volume scope changed');
+    await controller.dispose();
+  });
+});

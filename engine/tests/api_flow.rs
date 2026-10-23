@@ -7,6 +7,7 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     let settings = api::init_engine(data.path().to_string_lossy().into()).unwrap();
     assert_eq!(settings.retention_days, 30);
     let request = ScanRequest {
+        plan_id: None,
         mode: "selected".into(),
         roots: vec![fixture.path().to_string_lossy().into()],
         excluded_paths: vec![],
@@ -28,6 +29,7 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     api::init_engine(data.path().to_string_lossy().into()).unwrap();
     assert_eq!(api::scan_history(0, 20).unwrap().len(), 1);
     let rows = api::storage_entries(StorageQuery {
+        search: None,
         session_id: last.id.clone(),
         parent: Some("".into()),
         category: None,
@@ -78,6 +80,7 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     let mut indexed = None;
     api::scan(
         ScanRequest {
+            plan_id: None,
             mode: "selected".into(),
             roots: vec![fixture.path().to_string_lossy().into()],
             excluded_paths: vec![],
@@ -205,6 +208,7 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
         interval_days: 7,
         next_due_at: "2020-01-01T00:00:00Z".into(),
         scope: ScanRequest {
+            plan_id: None,
             mode: "selected".into(),
             roots: vec![fixture.path().to_string_lossy().into()],
             excluded_paths: vec![],

@@ -26,6 +26,8 @@ export const settings: AppSettings = {
   advancedDiagnostics: false,
 };
 export const session: DiagnosticSession = {
+  coverage: [],
+  volumePlan: null,
   id: 'fixture',
   startedAt: new Date().toISOString(),
   finishedAt: null,
@@ -60,6 +62,29 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     throw new Error('No phase 2 fixture configured');
   };
   return {
+    applicationLeftovers: vi.fn(async () => []),
+    applicationNotices: vi.fn(async () => 0),
+    diskScanPlan: vi.fn(missing),
+    coverage: vi.fn(async () => []),
+    refreshApplicationInventory: vi.fn(async () => {}),
+    applicationPage: vi.fn(async () => ({
+      applications: [],
+      offset: 0,
+      total: 0,
+      qualification: 'Fixture',
+    })),
+    inspectApplication: vi.fn(missing),
+    applicationPreferences: vi.fn(async () => ({
+      protectedPaths: [],
+      disappearanceNotices: false,
+    })),
+    saveApplicationPreferences: vi.fn(async () => {}),
+    selectApplication: vi.fn(async () => null),
+    previewRemoval: vi.fn(missing),
+    previewRestore: vi.fn(missing),
+    removalHistory: vi.fn(async () => []),
+    removalEntries: vi.fn(async () => []),
+    executeRemoval: vi.fn(missing),
     auditFirmware: vi.fn(missing),
     firmwarePlan: vi.fn(missing),
     acknowledgeFirmwarePlan: vi.fn(missing),

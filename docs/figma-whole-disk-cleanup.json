@@ -1,0 +1,86 @@
+{
+  "fileKey": "Gz7WEiN8Y3Vvivvae0ZPlP",
+  "sessionId": "0c23b984-b970-4b6c-b63c-1272ac19ff23",
+  "pageId": "155:91",
+  "frames": [
+    {
+      "id": "183:1633",
+      "name": "Storage / Whole internal disk and coverage / 0.8",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 15,
+        "TEXT": 24,
+        "INSTANCE": 23,
+        "VECTOR": 40
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "imageNodes": []
+    },
+    {
+      "id": "183:1761",
+      "name": "Applications / Installed apps and associations / 0.8",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 15,
+        "TEXT": 24,
+        "INSTANCE": 23,
+        "VECTOR": 40
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "imageNodes": []
+    },
+    {
+      "id": "183:1889",
+      "name": "Cleanup / Exact-path approval and Trash / 0.8",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 15,
+        "TEXT": 24,
+        "INSTANCE": 23,
+        "VECTOR": 40
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "imageNodes": []
+    },
+    {
+      "id": "183:2017",
+      "name": "History / Verified Trash and reviewed restore / 0.8",
+      "width": 1440,
+      "height": 960,
+      "counts": {
+        "FRAME": 15,
+        "TEXT": 24,
+        "INSTANCE": 23,
+        "VECTOR": 40
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "imageNodes": []
+    }
+  ],
+  "actions": [
+    "183:1737",
+    "183:1865",
+    "183:1993",
+    "183:2121"
+  ],
+  "sourcePreserved": "180:1441",
+  "components": [
+    "156:11",
+    "156:32",
+    "156:63",
+    "156:69"
+  ],
+  "appearanceCollection": "VariableCollectionId:155:94",
+  "qualification": "Editable illustrative structural handoffs; incumbent Inter fallback, native runtime system font. No pixel parity or elevated implementation completion claim."
+}

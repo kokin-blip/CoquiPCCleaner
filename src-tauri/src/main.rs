@@ -6,6 +6,94 @@ fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+use coqui_engine::{applications::*, removal::*};
+#[tauri::command]
+fn application_leftovers(offset: u32) -> Response<Vec<ApplicationFootprint>> {
+    api::application_leftovers(offset).map_err(error)
+}
+#[tauri::command]
+fn application_notices() -> Response<u32> {
+    api::application_notices().map_err(error)
+}
+#[tauri::command]
+async fn removal_entries(id: String, index: u32, offset: u32) -> Response<Vec<FileEntry>> {
+    tauri::async_runtime::spawn_blocking(move || api::removal_entries(id, index, offset))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn disk_scan_plan() -> Response<DiskScanPlan> {
+    tauri::async_runtime::spawn_blocking(api::disk_scan_plan)
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+fn scan_coverage(id: String, offset: u32) -> Response<Vec<CoverageGap>> {
+    api::scan_coverage(id, offset).map_err(error)
+}
+#[tauri::command]
+async fn application_page(
+    query: String,
+    sort: String,
+    offset: u32,
+    protected_only: bool,
+) -> Response<ApplicationPage> {
+    api::application_page(query, sort, offset, protected_only).map_err(error)
+}
+#[tauri::command]
+async fn refresh_application_inventory() -> Response<()> {
+    tauri::async_runtime::spawn_blocking(api::refresh_application_inventory)
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn inspect_application(path: String) -> Response<ApplicationFootprint> {
+    tauri::async_runtime::spawn_blocking(move || api::inspect_application(path))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+fn application_preferences() -> Response<ApplicationPreferences> {
+    api::application_preferences().map_err(error)
+}
+#[tauri::command]
+fn save_application_preferences(p: ApplicationPreferences) -> Response<()> {
+    api::save_application_preferences(p).map_err(error)
+}
+#[tauri::command]
+async fn preview_removal(r: RemovalRequest) -> Response<RemovalPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::preview_removal(r))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn preview_restore(id: String, paths: Vec<String>) -> Response<RemovalPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::preview_restore(id, paths))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+fn removal_history(offset: u32) -> Response<Vec<RemovalPlan>> {
+    api::removal_history(offset).map_err(error)
+}
+#[tauri::command]
+async fn execute_removal(
+    a: RemovalApproval,
+    on_event: Channel<RemovalPlan>,
+) -> Response<RemovalPlan> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::execute_removal(a, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
 #[tauri::command]
 fn initialize(app: tauri::AppHandle) -> Response<AppSettings> {
     let dir = app
@@ -349,6 +437,20 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            refresh_application_inventory,
+            application_leftovers,
+            application_notices,
+            removal_entries,
+            disk_scan_plan,
+            scan_coverage,
+            application_page,
+            inspect_application,
+            application_preferences,
+            save_application_preferences,
+            preview_removal,
+            preview_restore,
+            execute_removal,
+            removal_history,
             open_reference,
             compare_firmware,
             firmware_center,

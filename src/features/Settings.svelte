@@ -151,13 +151,13 @@
   <label class="settings-row"
     ><span
       ><strong>Default scope</strong><span class="muted small"
-        >Deep scans are confirmed before each run.</span
+        >Whole internal disk scope is reviewed before each run.</span
       ></span
     ><select
       value={settings.scanMode}
       onchange={(e) => patch({ scanMode: e.currentTarget.value })}
       ><option value="standard">Standard · home folder</option><option
-        value="deep">Deep · accessible internal volumes</option
+        value="deep">Whole internal disk</option
       ><option value="selected">Selected folders only</option></select
     ></label
   >
@@ -210,8 +210,8 @@
   </div>
   <p>
     Scanning respects macOS protections. Coqui does not request administrator
-    privileges or bypass restricted folders. Grant Full Disk Access only if you
-    want protected locations included.
+    privileges or bypass restricted folders. Full Disk Access can expand
+    coverage; some protected locations remain unavailable.
   </p>
   <button
     onclick={() =>
@@ -238,8 +238,8 @@
   <label class="settings-row"
     ><span
       ><strong>Keep diagnostic history</strong><span class="muted small"
-        >Latest completed file index per scope; older summaries expire
-        automatically.</span
+        >Latest completed and latest partial index per scope; older summaries
+        expire automatically.</span
       ></span
     ><select
       value={settings.retentionDays}
@@ -276,10 +276,11 @@
   <h2>About CoquiPCCleaner</h2>
   <p>Version {version} · Apple Silicon · macOS 14+</p>
   <p class="muted">
-    Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only.
-    Optimization can move individually approved cache files and supported
-    project-output folders to macOS Trash. Ask Coqui, baselines, manual plans
-    and maintenance keep inspectable local records.
+    Tauri · Svelte · Vite · Rust · SQLite. Analysis remains read-only. Reviewed
+    cleanup can move supported cache/project outputs, selected personal files
+    and application bundles to macOS Trash. Related data needs separate
+    selection; retained verified moves can be reviewed for restore. Ask Coqui,
+    baselines, manual plans and maintenance keep inspectable local records.
   </p>
 </section>
 {#if confirmPurge}<Dialog
@@ -287,10 +288,11 @@
     onclose={() => (confirmPurge = false)}
     ><p>
       This removes stored scans, findings, file indexes, developer reviews, and
-      cleanup action records, duplicate reports, conversations, baselines,
-      workload advice, resource reviews, firmware audits/comparisons/guidance,
-      evidence notices and maintenance events from Coqui’s local database. Your
-      files, preferences, maintenance and firmware review schedules, and system
+      cleanup/removal action records, recovery references, application
+      observations, duplicate reports, conversations, baselines, workload
+      advice, resource reviews, firmware audits/comparisons/guidance, evidence
+      notices and maintenance events from Coqui’s local database. Your files,
+      preferences, maintenance and firmware review schedules, and system
       settings are preserved. Disable schedules separately if you do not want
       new reminders or records.
     </p>

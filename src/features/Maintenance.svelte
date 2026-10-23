@@ -59,6 +59,7 @@
         capacityThresholdPercent: threshold,
         nextDueAt: new Date(Date.now() + days * 86400000).toISOString(),
         scope: {
+          planId: null,
           mode: settings.scanMode === 'selected' ? 'selected' : 'standard',
           roots: settings.scanMode === 'selected' ? settings.selectedRoots : [],
           excludedPaths: settings.excludedPaths,
