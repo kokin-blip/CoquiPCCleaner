@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-21T07:33:38.070860+00:00",
+  "generatedAt": "2026-10-23T23:30:48.103676+00:00",
   "title": "Design System: CoquiPCCleaner",
   "extensions": {
     "provenance": {
@@ -15,11 +15,26 @@
         "src/components/Evidence.svelte",
         "src/components/Chart.svelte",
         "src/App.svelte",
-        "src-tauri/tauri.conf.json"
+        "src-tauri/tauri.conf.json",
+        "src/components/HelperSettings.svelte",
+        "src/components/RemovalReview.svelte",
+        "src/features/Settings.svelte"
       ],
       "themeMapping": "Frontmatter dark-* and light-* keys map to matching runtime CSS variable names without the theme prefix. Snippets inherit active runtime variables. Storage categories retain root values in both themes.",
       "tonalRampNote": "Ramps are synthesized OKLCH swatch explorations, not additional implementation tokens; canonical colors remain in DESIGN.md frontmatter.",
-      "previewNote": "All component previews are illustrative and contain no measured device values."
+      "previewNote": "All component previews are illustrative and contain no measured device values.",
+      "administratorExtension": {
+        "handoff": "docs/phases/administrator-helper-design-handoff.md",
+        "review": ".impeccable/review/administrator-finish-review.md",
+        "disposition": "ship within the supplied helper/session capture and sampled source scope; no material fixes",
+        "scope": "Code-led extension of the incumbent native macOS Operate world. No new raster assets; selected logo preserved.",
+        "tokenChange": "Add --on-danger: dark #351015, light #fff, paired with --danger for filled destructive controls. Other primitive values and existing typography mappings preserved.",
+        "preservedDrift": [
+          "button-primary frontmatter inherits body weight 400; runtime and sidecar preview use 600",
+          "status frontmatter inherits caption weight 400; runtime and sidecar preview use 500",
+          "context loader does not recognize the existing macOS Platform prose"
+        ]
+      }
     },
     "colorMeta": {
       "dark-canvas": {
@@ -287,6 +302,22 @@
           "oklch(84% 0.1102 15.75)",
           "oklch(95% 0.1102 15.75)"
         ]
+      },
+      "dark-on-danger": {
+        "role": "neutral",
+        "displayName": "Dark On Danger",
+        "canonical": "#351015",
+        "tonalRamp": [
+          "oklch(15% 0.0596 14.72)",
+          "oklch(26% 0.0596 14.72)",
+          "oklch(38% 0.0596 14.72)",
+          "oklch(49% 0.0596 14.72)",
+          "oklch(61% 0.0596 14.72)",
+          "oklch(72% 0.0596 14.72)",
+          "oklch(84% 0.0596 14.72)",
+          "oklch(95% 0.0596 14.72)"
+        ],
+        "purpose": "Foreground paired with the corresponding danger fill; canonical value maps to runtime --on-danger."
       },
       "dark-category-0": {
         "role": "neutral",
@@ -651,6 +682,22 @@
           "oklch(84% 0.1617 20.17)",
           "oklch(95% 0.1617 20.17)"
         ]
+      },
+      "light-on-danger": {
+        "role": "neutral",
+        "displayName": "Light On Danger",
+        "canonical": "#fff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ],
+        "purpose": "Foreground paired with the corresponding danger fill; canonical value maps to runtime --on-danger."
       }
     },
     "typographyMeta": {
@@ -757,6 +804,14 @@
       "description": "Retry and other secondary actions.",
       "html": "<button class=\"ds-secondary\">Retry monitoring</button>",
       "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:background .13s ease,border-color .13s ease;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;background:var(--elevated);color:var(--text);}.ds-secondary:hover{background:var(--hover);}.ds-secondary:active{background:var(--selected);}.ds-secondary:focus-visible{outline:3px solid var(--focus);outline-offset:3px;}.ds-secondary:disabled{opacity:.5;cursor:default;}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none;}}"
+    },
+    {
+      "name": "Destructive Confirmation Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Explicit confirmation for helper-record, helper or local-history removal. Illustrative preview grants no operation authority.",
+      "html": "<button class=\"ds-danger\">Remove helper records</button>",
+      "css": ".ds-danger{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 12px;border:1px solid transparent;border-radius:6px;cursor:pointer;transition:background .13s ease,border-color .13s ease;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;background:var(--danger);color:var(--on-danger);}.ds-danger:hover,.ds-danger:active{background:var(--danger);}.ds-danger:focus-visible{outline:3px solid var(--focus);outline-offset:3px;}.ds-danger:disabled{opacity:.5;cursor:default;}@media(prefers-reduced-motion:reduce){.ds-danger{transition:none;}}"
     },
     {
       "name": "Text Button",

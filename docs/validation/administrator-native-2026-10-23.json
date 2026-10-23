@@ -5,10 +5,10 @@
   "helperRestart": "retained records reopened",
   "missingAuthorization": "rejected",
   "qualification": "Disposable administrator fixture validation only; no existing app/user files removed. Full hardware, TCC and Gatekeeper acceptance remain separately qualified.",
-  "restoredRecord": "a1188d13-9427-4e8d-aa4e-4e3d52ac8717",
+  "restoredRecord": "02f5d049-d254-4bd8-837c-bf75e1389f0a",
   "rootOwnedTrashAndRestore": "verified",
   "scan": {
-    "id": "5f158cdd-1755-4d61-b7bc-300cd648ad00",
+    "id": "05db86bc-b437-4d88-97f2-ee0a9f8d3f03",
     "status": "cancelled",
     "stage": "Scan cancelled; partial results retained",
     "fileCount": 0,
@@ -37,12 +37,71 @@
   "privacy": {
     "initialResult": "Both moves blocked before rename; macOS refused user Trash access.",
     "consent": "User explicitly approved helper Full Disk Access and completed native authentication.",
-    "repair": "Replacing an ad hoc build revoked the previous grant; enabled the final installed helper entry after installation."
+    "repair": "Replacing the ad hoc build revoked the previous grant. The user explicitly approved this exact new build, then its Full Disk Access toggle was enabled. Fresh fixture reviews passed."
   },
-  "pending": [
-    "GUI administrator metadata import/pagination/restart",
-    "Production helper uninstall/reinstall",
-    "Final ordinary package fixture teardown",
-    "Final UI/theme review"
+  "pending": [],
+  "authorizationLockedAtEnd": true,
+  "interactiveAuthorizationRequests": 1,
+  "installedBuild": {
+    "applicationCodeHash": "334b4df5147dc79bb1ff88642ed28e57d9d77d0d",
+    "helperCodeHash": "17c8ccb104858adfe7f57ec3603e1d5d01229c91",
+    "qualification": "Exact matched ad hoc build; one interactive API request is measured, not a promise about all macOS setup dialogs."
+  },
+  "productionUninstall": {
+    "result": "passed on preceding production build",
+    "preserved": [
+      "app",
+      "restored disposable fixtures",
+      "private per-user journal"
+    ],
+    "removed": [
+      "fixed daemon plist",
+      "fixed helper binary",
+      "pairing manifest"
+    ],
+    "launchdRegisteredAfter": false
+  },
+  "guiAdministratorScan": {
+    "id": "82d6f062-8350-48d6-851a-1fb5fdcd0d42",
+    "scope": "/System/Volumes/VM",
+    "files": 4,
+    "visited": 5,
+    "rootTraversal": "complete",
+    "sessionStatus": "partial",
+    "qualification": "Headless hardware inventory was unavailable. Four swapfile metadata rows and root coverage were visible; no contents read or comprehensive disk-access claim.",
+    "sameSessionReusedWithoutNewPrompt": true,
+    "administratorIndexMarkerPersisted": true,
+    "folderDrillDown": true,
+    "reopenedAfterAppRestart": true,
+    "retainedRemovalHistoryReopened": true,
+    "guiExplicitLock": true,
+    "importedFileRowsIncludingRoot": 5
+  },
+  "restoredPreferences": {
+    "appearance": "system",
+    "scanMode": "selected",
+    "administratorEnabled": false,
+    "monitoringEnabled": true
+  },
+  "ordinaryPackage": {
+    "installed": true,
+    "disposableApplicationRemoved": true,
+    "disposableCacheRemoved": true,
+    "validationMarkerRemoved": true,
+    "appAndPrivateJournalPreserved": true,
+    "strictAppAndHelperSignatures": true,
+    "authenticatedHealth": true,
+    "authorizationSecondsAfterInstall": 0
+  },
+  "uiReview": {
+    "disposition": "ship",
+    "scope": "Eight supplied helper/session captures and sampled source; no comprehensive security/accessibility/hardware/Gatekeeper acceptance."
+  },
+  "validationLimits": [
+    "Physical macOS14 and additional Apple Silicon hardware/disk layouts",
+    "Complete VoiceOver walkthrough",
+    "Downloaded Gatekeeper behavior on another Mac",
+    "Independent security review",
+    "Full-disk traversal and comprehensive access not established by bounded native comparisons"
   ]
 }

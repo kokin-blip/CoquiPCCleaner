@@ -21,6 +21,7 @@ colors:
   dark-warning: "#f2c483"
   dark-warning-wash: "#493b2b"
   dark-danger: "#ee9399"
+  dark-on-danger: "#351015"
   dark-category-0: "#275f56"
   dark-category-1: "#3b5c7b"
   dark-category-2: "#625580"
@@ -47,6 +48,7 @@ colors:
   light-warning: "#83540b"
   light-warning-wash: "#fff0d8"
   light-danger: "#ad2f3b"
+  light-on-danger: "#fff"
 typography:
   display:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
@@ -114,6 +116,12 @@ components:
     rounded: "{rounded.control}"
     padding: "6px 12px"
     typography: "{typography.body}"
+  button-danger:
+    backgroundColor: "{colors.dark-danger}"
+    textColor: "{colors.dark-on-danger}"
+    rounded: "{rounded.control}"
+    padding: "6px 12px"
+    typography: "{typography.body}"
   button-text:
     textColor: "{colors.dark-accent-text}"
     padding: "4px 0"
@@ -178,6 +186,8 @@ The approved brand mark is `public/brand/coqui-file-emblem-v1.png`: the mint fro
 
 The implementation reference is `src/tokens.css`, `src/styles.css`, the reusable Svelte components and `src-tauri/tauri.conf.json`. Captured native evidence lives in `.impeccable/review/native-dashboard-dark.png`, `native-dashboard-minimum.png`, `native-storage-minimum.png` and `native-settings-light.png`; the labeled failure fixture is `monitoring-failure.png`. These files record a review point, not permanent machine measurements or blanket runtime acceptance.
 
+The optional administrator-session extension preserves this world. Its checked helper/session captures, task order, separate setup permissions and validation limits are recorded in [the administrator design handoff](docs/phases/administrator-helper-design-handoff.md). No raster asset was generated or replaced for this extension.
+
 Kit reuse follows the established mapping: Music for shell/navigation, shared foundations for controls/settings, Numbers for tables/graphs, Notes for evidence/reports, Mail for finding reading, App Store for application inventory, and iMovie for scan stages/history. Messages, Reminders and Calendar inform later troubleshooting, action queues and maintenance. Original kit content stays intact. Existing ledgers are `docs/figma-foundations.json`, `docs/figma-components.json`, `docs/figma-icons.json`, `docs/figma-screens.json`, `docs/figma-prototype.json` and `docs/figma-handoff.json`.
 
 ## Colors
@@ -198,7 +208,7 @@ The palette uses warm charcoal or soft gray neutrals with one mint action accent
 - **Primary Ink** (`text`) and **Secondary Ink** (`secondary`): main content and supporting labels. The dark secondary token is the implemented value, replacing the provisional seed's older value.
 - **Input**, **Hover**, **Selected** and **Tag**: field fill, transient hover, active selection and quiet metadata backgrounds.
 
-Warning and warning wash are semantic attention colors. Danger is reserved for errors and local-history purge controls. Focus uses its own high-visibility token. `category-0` through `category-6` form the categorical storage palette; they retain their root values in both appearances. They encode categories, never disk health, and storage tiles use white text.
+Warning and warning wash are semantic attention colors. Danger identifies errors and destructive confirmation controls, including local/helper-record removal and helper removal. Filled destructive buttons pair `danger` with the corresponding `on-danger` foreground; danger-outline actions retain danger text on a transparent fill. Focus uses its own high-visibility token. `category-0` through `category-6` form the categorical storage palette; they retain their root values in both appearances. They encode categories, never disk health, and storage tiles use white text.
 
 **The Semantic Color Rule.** Use accent for actions, selection and supported/complete labels; use warning for attention. Keep readable status text beside every status color.
 
@@ -255,6 +265,8 @@ Avoid decorative gauges and ornamental containers. The device illustration is a 
 
 Compact, explicit actions. Primary buttons use the accent/on-accent pair, semibold text (600), control radius and standard padding; default secondary buttons use elevated fill with a separator border. Both have a minimum height of (32px). The primary hover brightens by (1.06); secondary hover/press uses hover/selected fills. Disabled controls use opacity (0.5). Text actions use readable accent text, transparent fill and a (28px) minimum height. Icon buttons are (30×30px) with accessible names.
 
+Filled destructive buttons reuse the compact control shape and the `danger`/`on-danger` pair. Keep the explicit action label and separate confirmation; their foreground does not inherit primary-button ink.
+
 Every keyboard-focusable control receives a (3px) focus outline offset by (3px). Background/border changes use (0.13s ease); reduced motion removes animation, transitions and smooth scrolling. Active scan indicators rotate over (1.3s) only when motion is allowed.
 
 ### Inputs / Fields
@@ -276,6 +288,10 @@ Diagnostic panels use surface fill, separator border, surface radius and standar
 ### Evidence / Tables
 
 Evidence rows keep label, source, time and qualification together, with the value aligned at the opposite edge. Non-supported readings retain their status badge. File/process/history tables use compact headers, row separators, tabular numeric columns and horizontal scrolling. A row action opens inspection or reveals a location; it does not imply deletion. Detail dialogs use native modal focus behavior, an accessible title, close control, Escape handling and full-path disclosure.
+
+### Administrator Settings
+
+The helper extends the existing Settings panel and switch-row pattern. Keep the installed-build qualification next to the default-off choice, show authorization waiting as ongoing work with cancellation, and place the explicit Lock action beside qualified last-checked session time. Supporting privacy, record-removal and helper-removal actions wrap using the shared compact action group. Exact installed paths wrap; separate modal confirmations retain their full consequences, Cancel and visible focus. Scope review, removal approval, restore and saved verification reuse the existing evidence/dialog patterns. See the task-specific handoff for state and authority boundaries.
 
 ### Charts / Storage Map
 

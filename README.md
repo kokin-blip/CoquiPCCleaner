@@ -69,7 +69,7 @@ Phase 3.2 (0.7.0) adds **Compare audits** and **Updates & reminders**. Compare t
 
 ## 0.8 whole-disk and administrator extension
 
-Whole internal disk reviews mounted scopes and persists omissions; it never promises comprehensive access. Applications and Storage use exact-path Trash approval, verification and separate no-overwrite restore. The optional administrator helper is off by default. Its corrected installation gate passed; production native fixture validation is in progress. See [helper authority, recovery and validation](docs/phases/administrator-helper.md), [whole-disk scope](docs/phases/whole-disk-cleanup.md) and [reference feature map](docs/reference-feature-map.md).
+Whole internal disk reviews mounted scopes and persists omissions; it never promises comprehensive access. Applications and Storage use exact-path Trash approval, verification and separate no-overwrite restore. The optional administrator helper is off by default. Its corrected installation gate and production native disposable fixture cycle passed locally, including verified root-owned Trash/separate restore, cancellation, restart, one interactive authorization request per tested short session, and final ordinary installation/fixture teardown. See [helper authority, recovery and validation](docs/phases/administrator-helper.md), [whole-disk scope](docs/phases/whole-disk-cleanup.md) and [reference feature map](docs/reference-feature-map.md).
 
 After the portable release build, create the optional app-plus-helper installer:
 
@@ -79,3 +79,12 @@ python3 scripts/verify-administrator-package.py
 ```
 
 Install the matching package and open `/Applications/CoquiPCCleaner.app`. In Settings, explicitly check its connection before enabling administrator choices. Enabling administrator choices authenticates a short native session, reused for up to 15 minutes. Each scan/review/action still requires its own scope or approval; Lock, turning the option off and app exit end the session. Installation and Full Disk Access are separate macOS setup steps and can require their own authentication. Root access cannot bypass TCC/SIP, and private helper journals have separate removal controls. Elevated Trash uses the requesting user's location; Finder Put Back metadata and full app recovery are not promised. No production installer/operation acceptance is inferred from packaging alone.
+
+Local 0.8 artifacts are in `release/whole-disk/`: `CoquiPCCleaner-0.8.0-macOS-arm64.zip` for portable use, and `CoquiPCCleaner-0.8.0-administrator-arm64.pkg` for the optional matched app/helper installation. `SHA256SUMS` records their hashes. The `administrator-validation` package is for the explicit disposable fixture cycle, not ordinary installation.
+
+```sh
+cd release/whole-disk
+shasum -a 256 -c SHA256SUMS
+```
+
+The final helper/session UI finish review returned **ship** within its supplied light/dark, wide/minimum capture and source scope. Full VoiceOver, additional Macs/macOS14, downloaded Gatekeeper and independent security review remain unvalidated. Headless helper hardware inventory was unavailable during native metadata scans and stayed qualified; whole-disk coverage is never inferred from a completed single-volume traversal. See [the actual validation record](docs/status.md).
