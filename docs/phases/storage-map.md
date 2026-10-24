@@ -57,3 +57,6 @@ Use disposable filesystem fixtures with many small files, nested outputs, hard l
 Verify map/list drill-down, metric switching, keyboard/focus, loading/error/retry, unavailable legacy statistics and partial summaries. Capture light/dark at the 1440-wide host reference and 1100 × 720 minimum; keep host-clamped heights and untested VoiceOver/hardware limits explicit. A successful fixture or traversal is not proof of whole-disk finalization or comprehensive access.
 
 Do not overwrite or publish the 0.8 artifacts. Build a versioned local ad hoc app/archive and matching optional administrator package. A rebuilt helper requires updated pairing and can require macOS authorization or a refreshed privacy grant; no promise of one total setup prompt. Record actual checks and unresolved limitations in `../status.md` before delivery.
+
+
+The installed 0.9.0 checkpoint passed a 515-file disposable real Tauri scan, exact small-file metrics and omissions, native keyboard/drill-down/metric/pagination behavior, public schema-7 migration and restart. This does not complete whole-disk finalization/import or elevated large-index validation. Actual results and verified preference restoration are recorded in [status.md](../status.md#090-installed-native-validation--2026-10-23).

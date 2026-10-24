@@ -1,0 +1,43 @@
+{
+  "sessionId": "3e9a182a-b44c-4875-b4b3-73c17dbe1096",
+  "fileCount": 515,
+  "logicalBytes": 1048709.0,
+  "allocatedBytes": 2629632.0,
+  "skippedCount": 3,
+  "status": "complete",
+  "finishedAt": "2026-10-24T02:07:00.620560+00:00",
+  "debugMetrics": [
+    512,
+    512,
+    2097152.0,
+    4096.0
+  ],
+  "validationDate": "2026-10-23",
+  "timezone": "America/Phoenix",
+  "version": "0.9.0",
+  "schema": 7,
+  "quickCheck": "ok",
+  "priorScansRetained": 12,
+  "priorRemovalRecordsRetained": 4,
+  "helperHealth": "authenticatedMatchingInstalledBuild",
+  "fixtureContentsAndIdentitiesUnchanged": true,
+  "nativeChecks": [
+    "scan",
+    "map/list drill-down",
+    "logical/allocated metric switch",
+    "Tab/Return folder opening and heading focus",
+    "omission coverage",
+    "file pagination",
+    "restart and retained map"
+  ],
+  "elevatedOperationsTested": false,
+  "fullDiskRetested": false,
+  "preferenceRestoration": "explicitly approved; selectedRoots restored with app closed; all captured settings matched after restart",
+  "qualification": "Disposable ordinary-user fixture; does not establish comprehensive access, elevated import, full-scale finalization, full VoiceOver or other-Mac acceptance.",
+  "diagnosticRecordCountsUnchangedByRestoration": {
+    "sessions": 14,
+    "removalPlans": 4,
+    "files": 1822,
+    "storageMetrics": 6
+  }
+}
