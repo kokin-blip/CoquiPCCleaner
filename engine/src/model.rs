@@ -138,7 +138,7 @@ impl Default for AppSettings {
                 preference: "Balanced".into(),
             },
             appearance: "system".into(),
-            scan_mode: "standard".into(),
+            scan_mode: "deep".into(),
             excluded_paths: vec![],
             selected_roots: vec![],
             retention_days: 30,

@@ -19,7 +19,7 @@
   let selected = $state<string[]>([]);
   let custom = $state('');
   let preference = $state('Balanced');
-  let mode = $state('standard');
+  let mode = $state('deep');
   let monitor = $state(true);
   let saving = $state(false);
   const steps = [
