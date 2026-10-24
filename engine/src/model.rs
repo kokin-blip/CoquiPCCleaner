@@ -283,6 +283,61 @@ pub struct StorageQuery {
     pub files_only: bool,
 }
 
+/// A bounded map of immediate children. An empty parent selects scan roots.
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMapQuery {
+    pub session_id: String,
+    pub parent: String,
+    pub metric: String,
+    pub limit: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMapNode {
+    pub entry: FileEntry,
+    pub file_count: Option<f64>,
+    pub small_file_count: Option<f64>,
+    pub small_allocated_bytes: Option<f64>,
+    pub largest_file_bytes: Option<f64>,
+    pub kind: String,
+    pub title: String,
+    pub reason: String,
+    pub consequences: String,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMap {
+    pub nodes: Vec<StorageMapNode>,
+    pub total_allocated_bytes: f64,
+    pub total_logical_bytes: f64,
+    pub file_count: Option<f64>,
+    pub remainder_allocated_bytes: f64,
+    pub remainder_logical_bytes: f64,
+    pub remainder_file_count: Option<f64>,
+    pub qualification: String,
+}
+
+/// Persisted descendant measurements, never an assertion that an item is disposable.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMetrics {
+    pub file_count: u64,
+    pub small_file_count: u64,
+    pub small_allocated_bytes: f64,
+    pub largest_file_bytes: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexedStorageEntry {
+    pub entry: FileEntry,
+    pub metrics: Option<StorageMetrics>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupFile {

@@ -3,7 +3,8 @@
 from pathlib import Path
 import json, plistlib, re, subprocess, sys, tempfile, uuid
 project=Path(__file__).resolve().parent.parent
-package=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else project/'release/whole-disk/CoquiPCCleaner-0.8.0-administrator-arm64.pkg'
+version=json.loads((project/'package.json').read_text())['version']
+package=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else project/f'release/{version}/CoquiPCCleaner-{version}-administrator-arm64.pkg'
 with tempfile.TemporaryDirectory(prefix='coqui-administrator-verification-',dir='/private/tmp') as temporary:
     expanded=Path(temporary)/'expanded'
     subprocess.run(['/usr/sbin/pkgutil','--expand-full',str(package),str(expanded)],check=True)
@@ -24,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='coqui-administrator-verification-',dir=
         rejected=subprocess.run(['/usr/bin/codesign','--verify','--strict','-R','=cdhash H"'+'0'*40+'"',str(binary)],capture_output=True)
         assert rejected.returncode!=0
     info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
-    assert info['CFBundleShortVersionString']=='0.8.0' and info['LSMinimumSystemVersion']=='14.0'
+    assert info['CFBundleShortVersionString']==version and info['LSMinimumSystemVersion']=='14.0'
     architecture=subprocess.check_output(['/usr/bin/file',str(app/'Contents/MacOS/coqui-pc-cleaner')],text=True)
     assert 'arm64' in architecture
     daemon=plistlib.loads(next(expanded.rglob('com.coqui.CoquiPCCleaner.Helper.plist')).read_bytes())

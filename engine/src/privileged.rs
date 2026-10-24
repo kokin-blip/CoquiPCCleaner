@@ -100,13 +100,24 @@ pub enum Operation {
     Files {
         query: StorageQuery,
     },
+    StorageMap {
+        query: StorageMapQuery,
+    },
     ExportFiles {
+        id: String,
+        after: String,
+    },
+    ExportStorage {
         id: String,
         after: String,
     },
     Coverage {
         id: String,
         offset: u32,
+    },
+    ExportCoverage {
+        id: String,
+        after: u64,
     },
     Entries {
         id: String,
@@ -284,16 +295,23 @@ fn connection(uid: u32) -> Result<Connection> {
     );
     let c = database::open(&file)?;
     c.execute_batch("PRAGMA synchronous=FULL;")?;
-    initialize(&c)?;
     let mut recovered = RECOVERED
         .get_or_init(Default::default)
         .lock()
         .map_err(|_| anyhow::anyhow!("Helper recovery lock unavailable"))?;
-    if recovered.insert(uid) {
+    if !recovered.contains(&uid) {
+        initialize(&c)?;
         database::recover_interrupted(&c)?;
         c.execute("UPDATE helper_jobs SET status='interrupted',json=json_set(json,'$.status','interrupted','$.error','Helper restarted; inspect retained results, no automatic retry') WHERE status IN ('running','authorized')",[])?;
         c.execute("DELETE FROM helper_pending", [])?;
+        expire_requests(&c)?;
+        recovered.insert(uid);
     }
+    // Status, file pages and map requests are pure reads after first connection.
+    // They must remain available while the scan writer finalizes or retains an index.
+    Ok(c)
+}
+fn expire_requests(c: &Connection) -> Result<()> {
     let pending_cutoff = (chrono::Utc::now() - chrono::Duration::minutes(2)).to_rfc3339();
     c.execute("UPDATE helper_jobs SET status='expired',json=json_set(json,'$.status','expired','$.error','Prepared authorization expired; obtain a new review') WHERE id IN (SELECT id FROM helper_pending WHERE created_at<?1)",[&pending_cutoff])?;
     c.execute(
@@ -304,7 +322,7 @@ fn connection(uid: u32) -> Result<Connection> {
         "DELETE FROM helper_challenges WHERE expires_at < ?1",
         [crate::model::now()],
     )?;
-    Ok(c)
+    Ok(())
 }
 fn initialize(c: &Connection) -> Result<()> {
     c.execute_batch("CREATE TABLE IF NOT EXISTS helper_pending(id TEXT PRIMARY KEY,pid INTEGER NOT NULL,start INTEGER NOT NULL,created_at TEXT NOT NULL,json TEXT NOT NULL);CREATE TABLE IF NOT EXISTS helper_challenges(id TEXT PRIMARY KEY,uid INTEGER NOT NULL,digest TEXT NOT NULL,expires_at TEXT NOT NULL);CREATE TABLE IF NOT EXISTS helper_jobs(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,status TEXT NOT NULL,json TEXT NOT NULL);CREATE TABLE IF NOT EXISTS helper_policy(id TEXT PRIMARY KEY,json TEXT NOT NULL);")?;
@@ -318,6 +336,7 @@ fn challenge(c: &Connection, uid: u32, op: &Operation) -> Result<String> {
         op.authorized(),
         "This operation does not accept an authorization challenge"
     );
+    expire_requests(c)?;
     let count: u32 = c.query_row("SELECT count(*) FROM helper_challenges", [], |r| r.get(0))?;
     anyhow::ensure!(
         count < 100,
@@ -490,8 +509,11 @@ fn start_prepared(c: &Connection, uid: u32, pid: i32, id: &str) -> Result<Job> {
         .map_err(|_| anyhow::anyhow!("Helper lifecycle lock unavailable"))?;
     let record: Option<(i32, u64, String)> = c
         .query_row(
-            "DELETE FROM helper_pending WHERE id=?1 RETURNING pid,start,json",
-            [id],
+            "DELETE FROM helper_pending WHERE id=?1 AND created_at>?2 RETURNING pid,start,json",
+            params![
+                id,
+                (chrono::Utc::now() - chrono::Duration::minutes(2)).to_rfc3339()
+            ],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?;
@@ -707,13 +729,18 @@ fn run(uid: u32, op: Operation, cancel: &AtomicBool, j: &mut Job) -> Result<()> 
                     .into_owned(),
             );
             let data = PathBuf::from(STATE).join(uid.to_string());
-            let mut settings = crate::api::init_engine_database(data.join("diagnostics.sqlite3"))?;
-            settings.retention_days = preferences.retention_days;
-            crate::api::update_settings(settings)?;
+            let mut settings = crate::api::init_engine_database_for_scan(
+                data.join("diagnostics.sqlite3"),
+                cancel,
+            )?;
             anyhow::ensure!(
                 !cancel.load(Ordering::SeqCst),
                 "Scan cancelled before collection"
             );
+            settings.retention_days = preferences.retention_days;
+            // The helper already validated/saved policy; avoid a second uncancellable
+            // retention pass through the general GUI preference operation.
+            database::save_settings(&c, &settings)?;
             crate::api::scan(request, |event| {
                 j.session = Some(event.session);
                 save(&c, j).is_ok() && !cancel.load(Ordering::SeqCst)
@@ -734,6 +761,19 @@ pub fn dispatch(text: &str, uid: u32, pid: i32) -> Result<serde_json::Value> {
         return Ok(
             serde_json::json!({"protocol":2,"version":env!("CARGO_PKG_VERSION"),"result":HelperStatus{authorization_seconds:0,installed:true,compatible:true,version:env!("CARGO_PKG_VERSION").into(),protocol:2,qualification:"Authenticated matching installed build. Elevated operations require separate authorization; TCC/SIP protections still apply.".into()}}),
         );
+    }
+    // Renew a validated client's lease and accept active cancellation before any
+    // database work. A busy journal must not prevent the user from stopping a scan.
+    match &e.request {
+        Operation::Status { id } => {
+            signal_active(uid, pid, id, false)?;
+        }
+        Operation::Cancel { id } if signal_active(uid, pid, id, true)? => {
+            return Ok(
+                serde_json::json!({"protocol":2,"version":env!("CARGO_PKG_VERSION"),"result":true}),
+            );
+        }
+        _ => {}
     }
     let c = connection(uid)?;
     if e.request.authorized() {
@@ -772,11 +812,20 @@ pub fn dispatch(text: &str, uid: u32, pid: i32) -> Result<serde_json::Value> {
         }
         Operation::History { offset } => serde_json::to_value(removal::history(&c, offset)?)?,
         Operation::Files { query } => serde_json::to_value(database::files(&c, &query)?)?,
+        Operation::StorageMap { query } => {
+            serde_json::to_value(database::storage_map(&c, &query)?)?
+        }
         Operation::ExportFiles { id, after } => {
             serde_json::to_value(database::files_after(&c, &id, &after)?)?
         }
+        Operation::ExportStorage { id, after } => {
+            serde_json::to_value(database::indexed_files_after(&c, &id, &after)?)?
+        }
         Operation::Coverage { id, offset } => {
             serde_json::to_value(database::coverage(&c, &id, offset)?)?
+        }
+        Operation::ExportCoverage { id, after } => {
+            serde_json::to_value(database::gaps_after(&c, &id, after)?)?
         }
         Operation::Entries { id, index, offset } => {
             let preferences: Preferences = serde_json::from_str(&c.query_row(
@@ -795,23 +844,14 @@ pub fn dispatch(text: &str, uid: u32, pid: i32) -> Result<serde_json::Value> {
             )?)?
         }
         Operation::Cancel { id } => {
-            if c.execute("DELETE FROM helper_pending WHERE id=?1", [&id])? > 0 {
+            if c.execute(
+                "DELETE FROM helper_pending WHERE id=?1 AND pid=?2 AND start=?3",
+                params![id, pid, process_start(pid)],
+            )? > 0
+            {
                 let mut j = job(&c, &id)?;
                 j.status = "cancelled".into();
                 save(&c, &j)?;
-            } else {
-                let guard = CANCEL
-                    .get_or_init(Default::default)
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("Helper cancellation unavailable"))?;
-                if let Some(active) = &*guard {
-                    anyhow::ensure!(
-                        active.uid == uid && active.id == id,
-                        "Only the requesting user's current job can be cancelled"
-                    );
-                    active.cancel.store(true, Ordering::SeqCst);
-                    let _ = crate::api::cancel_scan();
-                }
             }
             serde_json::json!(true)
         }
@@ -836,6 +876,33 @@ pub fn dispatch(text: &str, uid: u32, pid: i32) -> Result<serde_json::Value> {
         operation => serde_json::to_value(prepare(&c, pid, &operation)?)?,
     };
     Ok(serde_json::json!({"protocol":2,"version":env!("CARGO_PKG_VERSION"),"result":result}))
+}
+
+fn signal_active(uid: u32, pid: i32, id: &str, cancel: bool) -> Result<bool> {
+    let guard = CANCEL
+        .get_or_init(Default::default)
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Helper control unavailable"))?;
+    let Some(active) = guard.as_ref().filter(|a| a.id == id) else {
+        return Ok(false);
+    };
+    signal_record(active, uid, pid, process_start(pid), cancel)?;
+    if cancel {
+        let _ = crate::api::cancel_scan();
+    }
+    Ok(true)
+}
+
+fn signal_record(active: &ActiveJob, uid: u32, pid: i32, start: u64, cancel: bool) -> Result<()> {
+    anyhow::ensure!(
+        active.uid == uid && active.pid == pid && active.start != 0 && start == active.start,
+        "Only the original authenticated process can control this operation"
+    );
+    active.seen.store(tick(), Ordering::SeqCst);
+    if cancel {
+        active.cancel.store(true, Ordering::SeqCst);
+    }
+    Ok(())
 }
 fn schedule_stop(uninstall: bool) -> Result<()> {
     STOPPING.store(true, Ordering::SeqCst);
@@ -1139,6 +1206,52 @@ mod tests {
                 .contains("preferences changed")
         );
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "fixture");
+    }
+    #[test]
+    fn status_lease_and_active_cancellation_do_not_wait_for_a_journal_writer() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("helper.sqlite3");
+        let writer = database::open(&path).unwrap();
+        initialize(&writer).unwrap();
+        save(
+            &writer,
+            &Job {
+                id: "fixture-job".into(),
+                revision: 1,
+                status: "running".into(),
+                kind: "scan".into(),
+                session: None,
+                plan: None,
+                application: None,
+                error: None,
+            },
+        )
+        .unwrap();
+        writer
+            .execute_batch("BEGIN IMMEDIATE;UPDATE helper_jobs SET status=status;")
+            .unwrap();
+        let active = ActiveJob {
+            uid: 501,
+            id: "fixture-job".into(),
+            pid: 123,
+            start: 42,
+            cancel: Arc::new(AtomicBool::new(false)),
+            seen: Arc::new(AtomicU64::new(u64::MAX)),
+            ack: Arc::new(AtomicU64::new(0)),
+        };
+        assert!(signal_record(&active, 502, 123, 42, true).is_err());
+        assert!(signal_record(&active, 501, 124, 42, true).is_err());
+        assert!(signal_record(&active, 501, 123, 43, true).is_err());
+        assert!(!active.cancel.load(Ordering::SeqCst));
+        let start = std::time::Instant::now();
+        signal_record(&active, 501, 123, 42, false).unwrap();
+        let reader = database::open(&path).unwrap();
+        assert_eq!(job(&reader, "fixture-job").unwrap().status, "running");
+        assert_ne!(active.seen.load(Ordering::SeqCst), u64::MAX);
+        signal_record(&active, 501, 123, 42, true).unwrap();
+        assert!(active.cancel.load(Ordering::SeqCst));
+        assert!(start.elapsed() < std::time::Duration::from_millis(500));
+        writer.execute_batch("ROLLBACK").unwrap();
     }
     #[test]
     fn unknown_commands_versions_and_ambiguous_preferences_are_rejected() {

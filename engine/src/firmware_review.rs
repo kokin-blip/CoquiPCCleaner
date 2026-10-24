@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(
             c.query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
                 .unwrap(),
-            6
+            7
         );
         let (b, a) = pair(&c);
         compare(&c, &b.id, &a.id).unwrap();

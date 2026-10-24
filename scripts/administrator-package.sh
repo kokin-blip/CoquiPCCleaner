@@ -4,6 +4,8 @@ cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Library/Developer/CommandLineTools}"
 export MACOSX_DEPLOYMENT_TARGET=14.0
 export COPYFILE_DISABLE=1
+version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
+output="release/$version"
 app='src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CoquiPCCleaner.app'
 [ -d "$app" ] || { echo 'Run scripts/release.sh first.' >&2; exit 1; }
 cargo build --manifest-path engine/Cargo.toml --locked --release --bin coqui_helper
@@ -11,7 +13,7 @@ stage=$(mktemp -d /private/tmp/coqui-administrator-package.XXXXXX)
 trap 'rm -rf "$stage"' EXIT
 payload="$stage/payload"
 base="$payload/Library/Application Support/CoquiPCCleaner/Helper"
-mkdir -p "$base" "$payload/Library/PrivilegedHelperTools" "$payload/Library/LaunchDaemons" "$payload/Applications" "$stage/scripts" release/whole-disk
+mkdir -p "$base" "$payload/Library/PrivilegedHelperTools" "$payload/Library/LaunchDaemons" "$payload/Applications" "$stage/scripts" "$output"
 /usr/bin/ditto "$app" "$payload/Applications/CoquiPCCleaner.app"
 helper="$payload/Library/PrivilegedHelperTools/com.coqui.CoquiPCCleaner.Helper"
 cp engine/target/release/coqui_helper "$helper"
@@ -92,9 +94,9 @@ for item in items:
     item.update(BundleIsRelocatable=False,BundleIsVersionChecked=False,BundleHasStrictIdentifier=True,BundleOverwriteAction='upgrade')
 with open(p,'wb') as f:plistlib.dump(items,f)
 PYCOMP
-/usr/bin/pkgbuild --root "$payload" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.coqui.CoquiPCCleaner.Administrator --version 0.8.0 --install-location / --ownership recommended release/whole-disk/CoquiPCCleaner-0.8.0-administrator-arm64.pkg
+/usr/bin/pkgbuild --root "$payload" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.coqui.CoquiPCCleaner.Administrator --version "$version" --install-location / --ownership recommended "$output/CoquiPCCleaner-$version-administrator-arm64.pkg"
 if [ "${1:-}" = '--with-fixtures' ]; then
-  python3 - "$payload" 'release/whole-disk/administrator-fixture.json' <<'PY'
+  python3 - "$payload" "$output/administrator-fixture.json" <<'PY'
 from pathlib import Path
 import json,plistlib,sys,uuid,os
 root=Path(sys.argv[1]);marker=Path(sys.argv[2])
@@ -122,8 +124,8 @@ with open(p,'rb') as f:items=plistlib.load(f)
 for item in items:item.update(BundleIsRelocatable=False,BundleIsVersionChecked=False,BundleHasStrictIdentifier=True,BundleOverwriteAction='upgrade')
 with open(p,'wb') as f:plistlib.dump(items,f)
 PYCOMP
-  /usr/bin/pkgbuild --root "$payload" --component-plist "$stage/validation-components.plist" --scripts "$stage/scripts" --identifier com.coqui.CoquiPCCleaner.AdministratorValidation --version 0.8.0 --install-location / --ownership recommended release/whole-disk/CoquiPCCleaner-0.8.0-administrator-validation-arm64.pkg
+  /usr/bin/pkgbuild --root "$payload" --component-plist "$stage/validation-components.plist" --scripts "$stage/scripts" --identifier com.coqui.CoquiPCCleaner.AdministratorValidation --version "$version" --install-location / --ownership recommended "$output/CoquiPCCleaner-$version-administrator-validation-arm64.pkg"
 fi
 python3 scripts/verify-administrator-package.py
-if [ "${1:-}" = '--with-fixtures' ]; then python3 scripts/verify-administrator-package.py release/whole-disk/CoquiPCCleaner-0.8.0-administrator-validation-arm64.pkg; fi
-/usr/bin/shasum -a 256 release/whole-disk/*.pkg release/whole-disk/*.zip > release/whole-disk/SHA256SUMS
+if [ "${1:-}" = '--with-fixtures' ]; then python3 scripts/verify-administrator-package.py "$output/CoquiPCCleaner-$version-administrator-validation-arm64.pkg"; fi
+/usr/bin/shasum -a 256 "$output"/*.pkg "$output"/*.zip > "$output/SHA256SUMS"

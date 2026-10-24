@@ -85,6 +85,17 @@ pub fn roots(request: &ScanRequest) -> Result<(Vec<PathBuf>, Vec<String>)> {
 }
 pub fn category(path: &Path) -> &'static str {
     let p = path.to_string_lossy();
+    // A VM's sparse .raw image is not a camera photograph.
+    if p.contains("/com.docker.docker/")
+        || p.contains(".vmwarevm/")
+        || p.contains(".pvm/")
+        || matches!(
+            path.extension().and_then(|s| s.to_str()),
+            Some("vmdk" | "qcow2" | "vdi")
+        )
+    {
+        return "Virtual machines";
+    }
     if p.contains("/Library/Caches/") || p.contains("/private/var/tmp/") {
         return "Caches";
     }
@@ -112,6 +123,108 @@ pub fn category(path: &Path) -> &'static str {
         "pdf" | "docx" | "txt" | "md" | "pages" | "xlsx" | "csv" => "Documents",
         _ if p.contains("/Downloads/") => "Downloads",
         _ => "Other",
+    }
+}
+
+/// Conservative, evidence-described interpretations of indexed paths and aggregate metadata.
+/// No classification here participates in the cleanup authorization policy.
+pub fn identify(
+    mut entry: FileEntry,
+    metrics: Option<&StorageMetrics>,
+    project: Option<&str>,
+) -> StorageMapNode {
+    let path = entry.path.replace('\\', "/");
+    let parts = path.split('/').collect::<Vec<_>>();
+    let has = |name: &str| parts.contains(&name);
+    if category(Path::new(&entry.path)) == "Virtual machines" {
+        entry.category = "Virtual machines".into();
+    }
+    let (kind, title, reason, consequences) = if has("target")
+        && (has("debug") || has("release") || project == Some("rust"))
+    {
+        ("rustBuild","Rust build artifacts","The indexed path matches Cargo target output or a target directory beside an indexed Cargo.toml. Debug objects, fingerprints, build-script outputs and incremental state can accumulate many small files.","Rebuilding can take time and require toolchains or dependencies. Project and Git/worktree validation is still required before any supported cleanup.")
+    } else if has("node_modules") {
+        ("dependencies","JavaScript dependencies","The node_modules path identifies an installed dependency tree. Numerous small packages can occupy substantial allocated space.","Dependencies may include local changes, offline-only packages or native builds. Use the project package manager; identification alone does not permit removal.")
+    } else if has(".npm")
+        || has(".pnpm-store")
+        || path.contains("/.cache/pip/")
+        || path.contains("/.cache/uv/")
+        || path.contains("/Caches/Homebrew")
+        || path.contains("/Caches/Yarn")
+    {
+        ("packageCache","Package manager resources","The indexed path matches a named package-manager cache or content-addressed package store, where many small objects can add up.","These resources may be shared across projects or needed offline. Use the owning package manager's maintenance controls; shared stores are not ordinary project build output.")
+    } else if has(".next")
+        || has(".nuxt")
+        || has(".vite")
+        || has(".parcel-cache")
+        || has(".turbo")
+        || (project == Some("javascript") && (has("dist") || has("build")))
+    {
+        ("webBuild","Web build and tool output","The indexed path matches a web tool cache/output name, or build/dist inside an indexed JavaScript project.","Output can be needed for deployment or offline use. Inspect the project and tool configuration before a separately supported cleanup review.")
+    } else if has("__pycache__") || has(".pytest_cache") || has(".mypy_cache") || has(".ruff_cache")
+    {
+        ("pythonCache","Python tool cache","The indexed path matches Python bytecode or a named Python tool cache.","Tools may regenerate this data and the next run may be slower. Path identification does not verify that every descendant is disposable.")
+    } else if has(".venv")
+        || has("venv")
+        || project == Some("python")
+        || (has("envs") && (has("miniconda3") || has("anaconda3") || has("miniforge3")))
+    {
+        ("environment","Python environment","The path uses a common virtual-environment name or contains an indexed pyvenv.cfg context.","Environments contain installed packages and may contain local changes. Recreating them can require network access and exact dependencies; use their owning tool.")
+    } else if path.contains("/Library/Developer/Xcode/DerivedData") {
+        ("xcodeBuild","Xcode Derived Data","The indexed path matches Xcode's DerivedData location, which holds build products, indexes and intermediate files.","Xcode may need to rebuild and reindex. Simulator runtimes, device support and archives are separate resources and are not inferred disposable.")
+    } else if has(".gradle") || (project == Some("gradle") && has("build")) {
+        ("gradleBuild","Gradle cache and output","The indexed path matches .gradle, or a build directory in an indexed Gradle project.","Offline dependencies, local state and outputs may be required. Use Gradle/project review and preserve project sources.")
+    } else if project == Some("unity") && (has("Library") || has("Temp") || has("obj")) {
+        ("unityBuild","Unity generated project data","The path matches a common Unity generated-data directory beside an indexed project marker.","Reimporting assets may be expensive and require the project's exact Unity version. Project validation remains necessary.")
+    } else if entry.category == "Virtual machines"
+        || path.ends_with(".vmwarevm")
+        || path.ends_with(".pvm")
+    {
+        ("virtualMachine","Virtual machine data","The indexed path or disk-image format identifies a virtual-machine resource. Sparse images can have a much larger logical size than allocated space.","This may contain an entire operating system, containers and personal data. Manage it in the owning VM/container application; do not remove individual disk segments.")
+    } else if parts.iter().any(|part| part.ends_with(".photoslibrary")) {
+        ("photoLibrary","Photo library","The indexed path is inside a macOS Photos library package, which combines originals, thumbnails, derivatives and databases.","This can contain original photographs and edits. Use Photos and its library/storage controls; individual package files are not standalone cleanup candidates.")
+    } else if has("models")
+        && (path.contains("/ComfyUI")
+            || path.contains("/.lmstudio/")
+            || path.contains("/.ollama/")
+            || path.ends_with(".safetensors")
+            || path.ends_with(".gguf"))
+        || path.ends_with(".safetensors")
+        || path.ends_with(".gguf")
+    {
+        ("models","AI model resources","The indexed path or model file format identifies downloaded model resources.","Models may be difficult or costly to download again and workflows can depend on exact versions. Keep the owning application and workflow requirements in mind.")
+    } else if path.ends_with(".sqlite")
+        || path.ends_with(".sqlite3")
+        || path.ends_with(".db")
+        || has(".git")
+    {
+        ("database","Application or repository state","The indexed filename/path matches a database or Git repository state. Small records can accumulate into large retained stores.","This can contain history, indexes or irreplaceable application/repository data. Use the owning application's retention or maintenance controls.")
+    } else if has("Caches") || path.contains("/private/var/tmp/") {
+        ("cache","Application cache location","The indexed path matches a conventional cache or temporary location. The name describes origin, not safe disposal.","Caches may include unsaved work, offline data and active application state. Review exact items and consequences in the existing cleanup workflow.")
+    } else if metrics.is_some_and(|m| {
+        m.file_count >= 128
+            && m.small_file_count as f64 / m.file_count as f64 >= 0.8
+            && m.small_allocated_bytes >= 16. * 1024. * 1024.
+    }) {
+        ("manySmallFiles","Many small files","At least 80% of inspected descendant files are 64 KiB or smaller, with at least 16 MiB allocated together. Aggregate size reveals storage that a large-file list misses.","Small size and high file count do not establish disposability. Inspect ownership and folder purpose before any removal review.")
+    } else {
+        (if entry.is_directory {"folder"} else {"file"},if entry.is_directory {"Folder allocation"} else {"File allocation"},"Measured metadata from the inspected scope; folder allocation includes indexed descendants.","Size and age do not establish disposability. Review exact paths and the owning application's requirements.")
+    };
+    StorageMapNode {
+        qualification: if entry.is_directory && metrics.is_none() {
+            "Descendant counts unavailable for this legacy or unfinished folder record.".into()
+        } else {
+            "Observed path/metadata interpretation; not a cleanup eligibility decision.".into()
+        },
+        file_count: metrics.map(|m| m.file_count as f64),
+        small_file_count: metrics.map(|m| m.small_file_count as f64),
+        small_allocated_bytes: metrics.map(|m| m.small_allocated_bytes),
+        largest_file_bytes: metrics.map(|m| m.largest_file_bytes),
+        entry,
+        kind: kind.into(),
+        title: title.into(),
+        reason: reason.into(),
+        consequences: consequences.into(),
     }
 }
 pub fn placeholder(path: &Path, metadata: &fs::Metadata) -> bool {
@@ -149,6 +262,46 @@ pub fn walk_with_gaps<
     exclusions: &[PathBuf],
     cancel: &AtomicBool,
     mut emit: F,
+    progress: P,
+    gap: G,
+) -> Result<WalkSummary> {
+    walk_indexed(
+        roots,
+        exclusions,
+        cancel,
+        false,
+        |item| emit(item.entry),
+        progress,
+        gap,
+    )
+}
+
+/// Production collection emits initial folder context, then replaces it with final aggregates.
+pub fn walk_indexed_with_gaps<
+    F: FnMut(IndexedStorageEntry) -> Result<()>,
+    P: FnMut(&WalkSummary) -> Result<()>,
+    G: FnMut(CoverageGap) -> Result<()>,
+>(
+    roots: &[PathBuf],
+    exclusions: &[PathBuf],
+    cancel: &AtomicBool,
+    emit: F,
+    progress: P,
+    gap: G,
+) -> Result<WalkSummary> {
+    walk_indexed(roots, exclusions, cancel, true, emit, progress, gap)
+}
+
+fn walk_indexed<
+    F: FnMut(IndexedStorageEntry) -> Result<()>,
+    P: FnMut(&WalkSummary) -> Result<()>,
+    G: FnMut(CoverageGap) -> Result<()>,
+>(
+    roots: &[PathBuf],
+    exclusions: &[PathBuf],
+    cancel: &AtomicBool,
+    initial_folders: bool,
+    mut emit: F,
     mut progress: P,
     mut gap: G,
 ) -> Result<WalkSummary> {
@@ -168,7 +321,7 @@ pub fn walk_with_gaps<
         .mode(0o600)
         .open(&scratch.0)?;
     let sql = Connection::open(&scratch.0)?;
-    sql.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; CREATE TABLE identities(dev INTEGER,ino INTEGER,PRIMARY KEY(dev,ino)) WITHOUT ROWID; CREATE TABLE folders(path TEXT PRIMARY KEY,parent TEXT,depth INTEGER,json TEXT,logical REAL DEFAULT 0,allocated REAL DEFAULT 0); CREATE INDEX folder_depth ON folders(depth DESC); CREATE TABLE pending(path TEXT PRIMARY KEY,parent_dev INTEGER,parent_ino INTEGER);")?;
+    sql.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; CREATE TABLE identities(dev INTEGER,ino INTEGER,PRIMARY KEY(dev,ino)) WITHOUT ROWID; CREATE TABLE folders(path TEXT PRIMARY KEY,parent TEXT,depth INTEGER,json TEXT,logical REAL DEFAULT 0,allocated REAL DEFAULT 0,file_count INTEGER DEFAULT 0,small_count INTEGER DEFAULT 0,small_allocated REAL DEFAULT 0,largest REAL DEFAULT 0); CREATE INDEX folder_depth ON folders(depth DESC,path); CREATE TABLE pending(path TEXT PRIMARY KEY,parent_dev INTEGER,parent_ino INTEGER);")?;
     let mut summary = WalkSummary {
         stage: "Storage metadata • traversing readable locations".into(),
         coverage: roots
@@ -354,6 +507,14 @@ pub fn walk_with_gaps<
                         serde_json::to_string(&f)?
                     ],
                 )?;
+                if initial_folders {
+                    let mut pending = f.clone();
+                    pending.qualification = "Folder aggregation is unfinished; displayed bytes do not yet include descendants.".into();
+                    emit(IndexedStorageEntry {
+                        entry: pending,
+                        metrics: None,
+                    })?;
+                }
                 match fs::read_dir(p) {
                     Ok(entries) => {
                         // Stream one directory into an on-disk frontier; no recursive path stack or entry list.
@@ -422,10 +583,14 @@ pub fn walk_with_gaps<
             c.allocated_bytes += f.allocated_bytes;
             c.file_count = c.file_count.saturating_add(1);
             sql.execute(
-                "UPDATE folders SET logical=logical+?1,allocated=allocated+?2 WHERE path=?3",
-                params![f.logical_bytes, f.allocated_bytes, parent],
+                "UPDATE folders SET logical=logical+?1,allocated=allocated+?2,file_count=file_count+1,small_count=small_count+?4,small_allocated=small_allocated+?5,largest=MAX(largest,?2) WHERE path=?3",
+                params![f.logical_bytes, f.allocated_bytes, parent,u32::from(f.logical_bytes<=65_536.),if f.logical_bytes<=65_536. {f.allocated_bytes} else {0.}],
             )?;
-            emit(f).context("Could not persist scanned file")?;
+            emit(IndexedStorageEntry {
+                entry: f,
+                metrics: None,
+            })
+            .context("Could not persist scanned file")?;
             if summary.files.is_multiple_of(250) {
                 progress(&summary)?;
                 last = std::time::Instant::now();
@@ -443,39 +608,48 @@ pub fn walk_with_gaps<
     }
     // Aggregate one folder at a time, deepest first; SQLite owns the sorting and identity set.
     summary.stage = if cancel.load(Ordering::Relaxed) {
-        "Retaining partial folder totals after cancellation"
+        "Scan cancelled; folder aggregation is unfinished"
     } else {
         "Aggregating inspected folder allocation"
     }
     .into();
     progress(&summary)?;
+    // A cancelled scan must not spend minutes finalizing millions of folder records.
+    // Initial folder context remains indexed with unavailable descendant measurements.
+    if cancel.load(Ordering::Relaxed) {
+        summary.categories = cats.into_values().collect();
+        return Ok(summary);
+    }
     sql.execute_batch("BEGIN")?;
     let mut q =
         sql.prepare("SELECT json,logical,allocated FROM folders ORDER BY depth DESC,path")?;
     let mut rows = q.query([])?;
     while let Some(row) = rows.next()? {
-        // Cancellation still retains discovered folder context, with sizes explicitly partial.
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
         let mut f: FileEntry = serde_json::from_str(&row.get::<_, String>(0)?)?;
         // Read the current total because children updated it after this ordered cursor began.
-        (f.logical_bytes, f.allocated_bytes) = sql.query_row(
-            "SELECT logical,allocated FROM folders WHERE path=?1",
+        let (logical,allocated,metrics) = sql.query_row(
+            "SELECT logical,allocated,file_count,small_count,small_allocated,largest FROM folders WHERE path=?1",
             [&f.path],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?,r.get(1)?,StorageMetrics {file_count:r.get(2)?,small_file_count:r.get(3)?,small_allocated_bytes:r.get(4)?,largest_file_bytes:r.get(5)?})),
         )?;
-        if cancel.load(Ordering::Relaxed) {
-            f.qualification =
-                "Partial allocation at cancellation; descendants may be missing.".into();
-        }
+        f.logical_bytes = logical;
+        f.allocated_bytes = allocated;
         sql.execute(
-            "UPDATE folders SET logical=logical+?1,allocated=allocated+?2 WHERE path=?3",
-            params![f.logical_bytes, f.allocated_bytes, f.parent],
+            "UPDATE folders SET logical=logical+?1,allocated=allocated+?2,file_count=file_count+?4,small_count=small_count+?5,small_allocated=small_allocated+?6,largest=MAX(largest,?7) WHERE path=?3",
+            params![f.logical_bytes,f.allocated_bytes,f.parent,metrics.file_count,metrics.small_file_count,metrics.small_allocated_bytes,metrics.largest_file_bytes],
         )?;
         if f.path.ends_with("/Library/Caches") || f.path.ends_with("/private/var/tmp") {
             if summary.candidates.len() < 500 {
                 summary.candidates.push(CleanupCandidate{path:f.path.clone(),allocated_bytes:f.allocated_bytes,logical_bytes:f.logical_bytes,modified_at:f.modified_at.clone(),origin:"Known cache/temporary directory".into(),reason:"Directory name and size alone do not establish disposability.".into(),safety:"Review required".into(),consequences:"Applications may regenerate contents; removal can discard useful data or slow subsequent work.".into()});
             }
         }
-        emit(f)?;
+        emit(IndexedStorageEntry {
+            entry: f,
+            metrics: Some(metrics),
+        })?;
         if last.elapsed() >= std::time::Duration::from_millis(250) {
             progress(&summary)?;
             last = std::time::Instant::now();

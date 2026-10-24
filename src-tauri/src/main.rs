@@ -137,6 +137,10 @@ async fn storage_entries(query: StorageQuery) -> Response<Vec<FileEntry>> {
     tauri::async_runtime::spawn_blocking(move || api::storage_entries(query)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
+async fn storage_map(query: StorageMapQuery) -> Response<StorageMap> {
+    tauri::async_runtime::spawn_blocking(move || api::storage_map(query)).await.map_err(error)?.map_err(error)
+}
+#[tauri::command]
 fn clear_diagnostic_data() -> Response<()> {
     api::clear_diagnostic_data().map_err(error)
 }
@@ -507,6 +511,7 @@ fn main() {
             scan_history,
             get_session,
             storage_entries,
+            storage_map,
             clear_diagnostic_data,
             export_report,
             cancel_scan,

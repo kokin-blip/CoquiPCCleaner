@@ -162,6 +162,16 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     save: vi.fn(async () => {}),
     history: vi.fn(async () => []),
     files: vi.fn(async () => []),
+    storageMap: vi.fn(async () => ({
+      nodes: [],
+      totalAllocatedBytes: 0,
+      totalLogicalBytes: 0,
+      fileCount: null,
+      remainderAllocatedBytes: 0,
+      remainderLogicalBytes: 0,
+      remainderFileCount: null,
+      qualification: 'No folder aggregate fixture configured.',
+    })),
     scan: vi.fn(async (_r, on) =>
       on({
         session: {

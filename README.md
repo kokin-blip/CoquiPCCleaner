@@ -20,7 +20,7 @@ npm ci
 ./scripts/release.sh
 ```
 
-The release script builds `src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CoquiPCCleaner.app`, verifies its ad hoc signature, and creates `release/CoquiPCCleaner-macOS-arm64.zip` with a SHA-256 checksum. No Developer ID identity, notarization, account or release upload is required. macOS may require explicit user approval when opening a downloaded, unnotarized build.
+The release script builds `src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CoquiPCCleaner.app`, verifies its ad hoc signature, and creates `release/<version>/CoquiPCCleaner-<version>-macOS-arm64.zip` with a SHA-256 checksum. No Developer ID identity, notarization, account or release upload is required. macOS may require explicit user approval when opening a downloaded, unnotarized build.
 
 Regenerate TypeScript domain models after Rust model changes:
 
@@ -34,7 +34,7 @@ npm run types
 - Real hardware, disks/volumes, application and readable startup configuration inventory.
 - Two-second CPU, memory, swap and readable process I/O monitoring while open.
 - Standard home scans, reviewed Whole internal disk volume plans, explicit additional folders and exclusions.
-- SQLite-backed metadata traversal/deduplication/folder totals; paginated search, category treemap, large files, drill-down and per-root coverage.
+- SQLite-backed metadata traversal/deduplication/folder totals; paginated search, folder treemap beside ranked contents, logical/allocated switching, small-file aggregate evidence, large files, drill-down and per-root coverage.
 - Capability disclosures, scan/cancel/history, permission guidance and user-chosen report export.
 - Exact-path cache-file review, expiring approval, native Trash moves, cancellation, verification and action history.
 - Applications inventory/inspection, separate related-data selection and shared/protected-app guidance.
@@ -88,3 +88,5 @@ shasum -a 256 -c SHA256SUMS
 ```
 
 The final helper/session UI finish review returned **ship** within its supplied light/dark, wide/minimum capture and source scope. Full VoiceOver, additional Macs/macOS14, downloaded Gatekeeper and independent security review remain unvalidated. Headless helper hardware inventory was unavailable during native metadata scans and stayed qualified; whole-disk coverage is never inferred from a completed single-volume traversal. See [the actual validation record](docs/status.md).
+
+Version 0.9 adds folder-first storage and schema 7; see [the implementation and scenario guide](docs/phases/storage-map.md). Build a matching optional administrator installer after the portable app with `./scripts/administrator-package.sh`; verify its payload with `python3 scripts/verify-administrator-package.py`. Artifacts stay under `release/<version>/`, with `SHA256SUMS`. Installation/privileged operation validation is separate from payload verification. An old helper cannot be assumed compatible with a new app; paired updates preserve the private journal but may require macOS authorization/privacy review.

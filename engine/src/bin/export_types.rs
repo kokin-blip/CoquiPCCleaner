@@ -15,6 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ScanEvent::export_all_to(&path)?;
     LiveMetrics::export_all_to(&path)?;
     StorageQuery::export_all_to(&path)?;
+    StorageMapQuery::export_all_to(&path)?;
+    StorageMap::export_all_to(&path)?;
     FileEntry::export_all_to(&path)?;
     CleanupRequest::export_all_to(&path)?;
     CleanupApproval::export_all_to(&path)?;

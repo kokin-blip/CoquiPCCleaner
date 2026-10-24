@@ -16,6 +16,8 @@ import type { LiveMetrics } from './bindings/LiveMetrics';
 import type { ScanEvent } from './bindings/ScanEvent';
 import type { ScanRequest } from './bindings/ScanRequest';
 import type { StorageQuery } from './bindings/StorageQuery';
+import type { StorageMapQuery } from './bindings/StorageMapQuery';
+import type { StorageMap } from './bindings/StorageMap';
 import type { CleanupPlan } from './bindings/CleanupPlan';
 import type { CleanupRequest } from './bindings/CleanupRequest';
 import type { CleanupApproval } from './bindings/CleanupApproval';
@@ -142,6 +144,7 @@ export interface Backend {
   save(settings: AppSettings): Promise<void>;
   history(offset: number, limit: number): Promise<DiagnosticSession[]>;
   files(query: StorageQuery): Promise<FileEntry[]>;
+  storageMap(query: StorageMapQuery): Promise<StorageMap>;
   scan(
     request: ScanRequest,
     onEvent: (event: ScanEvent) => void,
@@ -276,6 +279,7 @@ export const backend: Backend = {
   save: (settings) => invoke('update_settings', { settings }),
   history: (offset, limit) => invoke('scan_history', { offset, limit }),
   files: (query) => invoke('storage_entries', { query }),
+  storageMap: (query) => invoke('storage_map', { query }),
   scan: (request, onEvent, administratorPlan) => {
     const channel = new Channel<ScanEvent>();
     channel.onmessage = onEvent;

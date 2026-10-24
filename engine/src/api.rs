@@ -89,6 +89,17 @@ pub fn init_engine(data_directory: String) -> Result<AppSettings> {
 // The helper uses the same validated per-user database for scans and journals.
 // This is internal Rust API, never a caller-selected IPC database path.
 pub(crate) fn init_engine_database(path: PathBuf) -> Result<AppSettings> {
+    init_database(path, None)
+}
+
+pub(crate) fn init_engine_database_for_scan(
+    path: PathBuf,
+    cancel: &AtomicBool,
+) -> Result<AppSettings> {
+    init_database(path, Some(cancel))
+}
+
+fn init_database(path: PathBuf, cancel: Option<&AtomicBool>) -> Result<AppSettings> {
     let mut guard = ENGINE
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -102,7 +113,11 @@ pub(crate) fn init_engine_database(path: PathBuf) -> Result<AppSettings> {
     let c = database::open(&path)?;
     database::recover_interrupted(&c)?;
     let settings = database::settings(&c)?;
-    database::retain(&c, settings.retention_days)?;
+    if let Some(cancel) = cancel {
+        database::retain_after_scan(&c, settings.retention_days, cancel)?;
+    } else {
+        database::retain(&c, settings.retention_days)?;
+    }
     *guard = Some(Arc::new(Engine {
         path,
         active: AtomicBool::new(false),
@@ -176,6 +191,22 @@ pub fn storage_entries(query: StorageQuery) -> Result<Vec<FileEntry>> {
         )?)?);
     }
     database::files(&c, &query)
+}
+pub fn storage_map(query: StorageMapQuery) -> Result<StorageMap> {
+    let c = database::open(&engine()?.path)?;
+    if database::settings(&c)?.administrator_enabled
+        && c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM administrator_records WHERE id=?1 AND kind='scan')",
+            [&query.session_id],
+            |r| r.get::<_, bool>(0),
+        )?
+    {
+        return Ok(serde_json::from_value(crate::helper::production(
+            crate::privileged::Operation::StorageMap { query },
+            false,
+        )?)?);
+    }
+    database::storage_map(&c, &query)
 }
 pub fn clear_diagnostic_data() -> Result<()> {
     let e = engine()?;
@@ -301,7 +332,7 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
         let id = session.borrow().id.clone();
         let mut last_event = std::time::Instant::now();
         let gaps = std::cell::RefCell::new(Vec::with_capacity(250));
-        let summary = storage::walk_with_gaps(
+        let summary = storage::walk_indexed_with_gaps(
             &roots,
             &excluded,
             &e.cancel,
@@ -309,14 +340,18 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                 let mut b = batch.borrow_mut();
                 b.push(f);
                 if b.len() >= 250 {
-                    database::insert_files(&mut connection.borrow_mut(), &id, &b)?;
+                    database::insert_indexed_files(&mut connection.borrow_mut(), &id, &b)?;
                     b.clear();
                 }
                 Ok(())
             },
             |w| {
                 if !batch.borrow().is_empty() {
-                    database::insert_files(&mut connection.borrow_mut(), &id, &batch.borrow())?;
+                    database::insert_indexed_files(
+                        &mut connection.borrow_mut(),
+                        &id,
+                        &batch.borrow(),
+                    )?;
                     batch.borrow_mut().clear();
                 }
                 let mut s = session.borrow_mut();
@@ -325,6 +360,13 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                 s.allocated_bytes = w.allocated;
                 s.skipped_count = w.skipped;
                 s.coverage = w.coverage.clone();
+                s.permissions = w.permissions.clone();
+                // Keep bounded omission context even if a later database write fails.
+                for error in &w.errors {
+                    if !s.errors.contains(error) && s.errors.len() < 200 {
+                        s.errors.push(error.clone());
+                    }
+                }
                 s.stage = w.stage.clone();
                 if last_event.elapsed() >= Duration::from_millis(250) || w.files == 0 {
                     database::save_session(&connection.borrow(), &s)?;
@@ -347,6 +389,9 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                 Ok(())
             },
         )?;
+        if !batch.borrow().is_empty() {
+            database::insert_indexed_files(&mut connection.borrow_mut(), &id, &batch.borrow())?;
+        }
         if !gaps.borrow().is_empty() {
             database::insert_gaps(&mut connection.borrow_mut(), &id, &gaps.borrow())?;
         }
@@ -356,13 +401,22 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
         s.allocated_bytes = summary.allocated;
         s.skipped_count = summary.skipped;
         s.permissions = summary.permissions;
-        s.errors.extend(summary.errors);
+        for error in summary.errors {
+            if !s.errors.contains(&error) {
+                s.errors.push(error);
+            }
+        }
         s.categories = summary.categories;
         s.candidates = summary.candidates;
         Ok(())
     })();
-    if result.is_err() {
-        s.errors.push("Scan stopped because results could not be collected or persisted. Retry after checking available application storage.".into());
+    if let Err(error) = &result {
+        s.errors.push(format!("Scan stopped because collection or persistence failed: {}. Retained results may be incomplete; check available application storage before retrying.",scan_error(error)));
+        for coverage in &mut s.coverage {
+            if coverage.state == "running" {
+                coverage.state = "interrupted".into();
+            }
+        }
     }
     s.status = if e.cancel.load(Ordering::SeqCst) {
         "cancelled"
@@ -384,10 +438,30 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
     .into();
     s.findings = findings(&s);
     database::save_session(&c, &s)?;
+    // Publish terminal collection before potentially substantial index retention.
+    let _ = send(ScanEvent { session: s.clone() });
     let settings = database::settings(&c)?;
-    database::retain(&c, settings.retention_days)?;
+    if let Err(error) = database::retain_after_scan(&c, settings.retention_days, &e.cancel) {
+        s.errors.push(format!("Scan results were saved, but older index retention did not finish: {}. Retention will retry on a later app start.",scan_error(&error)));
+        database::save_session(&c, &s)?;
+    }
     let _ = send(ScanEvent { session: s });
     Ok(())
+}
+
+fn scan_error(error: &anyhow::Error) -> String {
+    // Keep actionable SQLite/I/O classes without persisting raw paths or command output.
+    for cause in error.chain() {
+        if let Some(sql) = cause.downcast_ref::<rusqlite::Error>() {
+            if let rusqlite::Error::SqliteFailure(code, _) = sql {
+                return format!("SQLite {:?} (code {})", code.code, code.extended_code);
+            }
+        }
+        if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+            return format!("filesystem {:?}", io.kind());
+        }
+    }
+    "collection or persistence error (detail unavailable)".into()
 }
 
 fn findings(s: &DiagnosticSession) -> Vec<DiagnosticFinding> {
@@ -1162,7 +1236,8 @@ pub fn administrator_scan(
             if let Some(mut s) = latest {
                 s.status = "partial".into();
                 s.stage = "Administrator scan interrupted".into();
-                s.errors.push(error.to_string());
+                s.finished_at = Some(now());
+                s.errors.push(format!("{error:#}"));
                 save_administrator_session(&c, &s)?;
                 let _ = send(ScanEvent { session: s });
             }
@@ -1173,68 +1248,94 @@ pub fn administrator_scan(
         .session
         .or(latest)
         .context("Administrator scan returned no session")?;
-    // Preserve real partial pages already imported. Cancellation stops collection; saving the resulting index is a separate stage.
-    let collection_cancelled = e.cancel.swap(false, Ordering::SeqCst);
-    if collection_cancelled {
-        s.stage = "Saving partial administrator results".into();
-    }
-    let mut after = String::new();
+    // Cancellation covers collection and both import loops. Retain bounded mirrored
+    // context, but never turn one cancel into an uninterruptible second workload.
     let mut imported_files = 0u32;
-    loop {
+    let import = (|| -> Result<()> {
+        let mut after = String::new();
+        while !e.cancel.load(Ordering::SeqCst) {
+            let entries: Vec<IndexedStorageEntry> =
+                serde_json::from_value(crate::helper::production(
+                    Operation::ExportStorage {
+                        id: s.id.clone(),
+                        after: after.clone(),
+                    },
+                    false,
+                )?)?;
+            if entries.is_empty() {
+                break;
+            }
+            imported_files += entries.iter().filter(|f| !f.entry.is_directory).count() as u32;
+            after = entries.last().unwrap().entry.path.clone();
+            database::insert_indexed_files(&mut c, &s.id, &entries)?;
+            let mut progress = s.clone();
+            progress.status = "running".into();
+            progress.stage = format!(
+                "Saving administrator metadata: {imported_files} of {} files",
+                s.file_count
+            );
+            if !send(ScanEvent { session: progress }) {
+                e.cancel.store(true, Ordering::SeqCst);
+            }
+        }
         if e.cancel.load(Ordering::SeqCst) {
-            s.status = "cancelled".into();
-            s.errors.push("Index import cancelled; local results contain the imported subset. The helper retains its own scan until retention or explicit purge.".into());
-            break;
+            return Ok(());
         }
-        let files: Vec<FileEntry> = serde_json::from_value(crate::helper::production(
-            Operation::ExportFiles {
-                id: s.id.clone(),
-                after: after.clone(),
-            },
-            false,
-        )?)?;
-        if files.is_empty() {
-            break;
+        if imported_files != s.file_count {
+            s.status = "partial".into();
+            s.errors.push("The helper index changed or was unavailable during import. Retained imported results are partial; review scope and retry.".into());
         }
-        imported_files += files.iter().filter(|f| !f.is_directory).count() as u32;
-        after = files.last().unwrap().path.clone();
-        database::insert_files(&mut c, &s.id, &files)?;
-        let mut progress = s.clone();
-        progress.status = "running".into();
-        progress.stage = format!(
-            "Saving administrator metadata: {imported_files} of {} files",
-            s.file_count
-        );
-        if !send(ScanEvent { session: progress }) {
-            e.cancel.store(true, Ordering::SeqCst);
+        c.execute("DELETE FROM scan_gaps WHERE session_id=?1", [&s.id])?;
+        let mut after = 0;
+        while !e.cancel.load(Ordering::SeqCst) {
+            let page: database::CoverageExport =
+                serde_json::from_value(crate::helper::production(
+                    Operation::ExportCoverage {
+                        id: s.id.clone(),
+                        after,
+                    },
+                    false,
+                )?)?;
+            if page.gaps.is_empty() {
+                break;
+            }
+            after = page.after;
+            database::insert_gaps(&mut c, &s.id, &page.gaps)?;
+            let mut progress = s.clone();
+            progress.status = "running".into();
+            progress.stage = "Saving administrator coverage evidence".into();
+            if !send(ScanEvent { session: progress }) {
+                e.cancel.store(true, Ordering::SeqCst);
+            }
         }
+        Ok(())
+    })();
+    if e.cancel.load(Ordering::SeqCst) {
+        s.status = "cancelled".into();
+        s.stage = "Administrator scan/import cancelled".into();
+        s.finished_at = Some(now());
+        s.errors.push("Local index import is incomplete after cancellation; saved coverage and bytes describe collection, while local folder/file results may contain only a subset. The helper retains its index until retention or explicit purge.".into());
     }
-    if !e.cancel.load(Ordering::SeqCst) && imported_files != s.file_count {
+    if let Err(error) = import {
         s.status = "partial".into();
-        s.errors.push("The helper index changed or was unavailable during import. Retained imported results are partial; review scope and retry.".into());
-    }
-    c.execute("DELETE FROM scan_gaps WHERE session_id=?1", [&s.id])?;
-    let mut offset = 0;
-    loop {
-        let gaps: Vec<CoverageGap> = serde_json::from_value(crate::helper::production(
-            Operation::Coverage {
-                id: s.id.clone(),
-                offset,
-            },
-            false,
-        )?)?;
-        if gaps.is_empty() {
-            break;
-        }
-        database::insert_gaps(&mut c, &s.id, &gaps)?;
-        offset += gaps.len() as u32;
+        s.stage = "Administrator index import interrupted".into();
+        s.finished_at = Some(now());
+        s.errors.push(format!("Administrator result import failed: {error}. Local file and coverage results contain only the imported subset; the helper retains its index."));
     }
     s.stage = format!(
         "{} • administrator metadata; TCC/SIP access gaps remain qualified",
         s.stage
     );
     save_administrator_session(&c, &s)?;
-    database::retain(&c, database::settings(&c)?.retention_days)?;
+    if let Err(error) =
+        database::retain_after_scan(&c, database::settings(&c)?.retention_days, &e.cancel)
+    {
+        s.errors.push(format!(
+            "Administrator results were saved, but older index retention did not finish: {}.",
+            scan_error(&error)
+        ));
+        save_administrator_session(&c, &s)?;
+    }
     let _ = send(ScanEvent { session: s });
     Ok(())
 }

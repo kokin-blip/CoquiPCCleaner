@@ -42,6 +42,20 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     .unwrap();
     assert_eq!(rows.len(), 1);
     assert!(rows[0].is_directory);
+    let map = api::storage_map(StorageMapQuery {
+        session_id: last.id.clone(),
+        parent: String::new(),
+        metric: "allocated".into(),
+        limit: 60,
+    })
+    .unwrap();
+    assert_eq!(map.nodes.len(), 1);
+    assert_eq!(map.file_count, Some(1.));
+    assert_eq!(map.nodes[0].small_file_count, Some(1.));
+    assert_eq!(
+        map.nodes[0].largest_file_bytes,
+        Some(rows[0].allocated_bytes)
+    );
     let mut metrics = 0;
     api::monitor(|m| {
         metrics += 1;

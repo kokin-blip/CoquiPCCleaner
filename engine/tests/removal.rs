@@ -605,7 +605,7 @@ fn indexed_application_search_protected_pagination_and_schema_five_upgrade() {
         upgraded
             .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
             .unwrap(),
-        6
+        7
     );
     assert!(applications::preferences(&upgraded)
         .unwrap()
