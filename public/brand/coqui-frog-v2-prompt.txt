@@ -1,0 +1,19 @@
+Coqui frog logo v2 — generated 2026-10-21
+Mode: built-in image_gen edit, transparent_background=true
+Asset: coqui-frog-v2.png
+Reference image: coqui-frog-v1.png (approved frog identity and UI palette)
+Revision: frog holding a folded-corner document and a magnifying glass.
+Standalone brand asset; original logo preserved.
+
+Final generation prompt:
+
+Use case: precise-object-edit
+Asset type: version 2 of the CoquiPCCleaner frog logo, transparent PNG.
+Input image: the existing approved mint coqui frog logo, used as the edit target and identity/style reference.
+Primary request: Make a new polished version of this same friendly frog logo incorporating BOTH a recognizable file/document and a magnifying glass, communicating file inspection. The user likes this frog, so preserve its identity, broad rounded head, raised rounded eyes, calm smile, mint/deep-green color scheme, sitting silhouette, rounded tree-frog toe pads and clean macOS utility brand style.
+Change the forelimb pose to integrate the two new objects naturally: the frog holds one upright folded-corner file/document in front of its lower torso with one forefoot, and a simple bold magnifying glass in the other forefoot, inspecting the file. Let the circular lens partially overlap an upper corner of the document so the two features read clearly together. Keep the full face and both eyes visible and unobstructed. The frog remains the primary subject. Keep the composition compact and optically balanced; do not merely scatter little accessory icons around the frog.
+Style: flat, crisp, vector-like logo artwork with smooth rounded contours, a few large solid shapes, generous negative spaces. Simplify details so it reads at icon scale. The document is pale mint #e3f2ed with a distinct folded corner, a thick deep green outline and at most two short horizontal file lines. The magnifying glass has a substantial dark green circular rim, a short rounded handle and a transparent or very pale mint lens. Match the frog's existing visual weight.
+Color palette: frog mint #68d9c0, deep forest green #10352c facial features and accessory outlines, pale mint #e3f2ed for the document. Restrained colors matching a charcoal/mint macOS app UI.
+Composition: one complete centered logo on a square transparent canvas, with even breathing room on all sides. Retain the large expressive frog eyes and broad simple smile. Adjust the lower body/arms only as needed to hold the file and magnifier cleanly.
+Invariants: preserve the recognizable approved frog character and mint/dark-green brand. Preserve actual background transparency. No opaque background or enclosing tile.
+Avoid: words, letters, numbers, wordmarks, watermark, presentation boards, duplicate logos, additional props, monitors, shields, sparkles, scenery, extra limbs, extra hands, lens over an eye, tiny document text, photorealism, 3D, glossy lighting, gradients, texture or drop shadows. Deliver one finished logo only.

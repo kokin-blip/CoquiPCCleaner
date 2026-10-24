@@ -1,0 +1,16 @@
+Coqui frog logo v1 — generated 2026-10-21
+Mode: built-in image_gen, transparent_background=true
+Asset: coqui-frog-v1.png (1254 × 1254 PNG with alpha)
+Style source: DESIGN.md, src/tokens.css, and the existing native dashboard capture.
+Standalone brand asset; no runtime or packaged icon replacement in this change.
+
+Final generation prompt:
+
+Use case: logo-brand
+Asset type: final standalone frog logo symbol for CoquiPCCleaner, a quiet native macOS utility.
+Primary request: Create one beautifully resolved, distinctive coquí tree frog logo that matches an existing minimal macOS desktop UI. The UI has warm charcoal #211f23 and #28272a surfaces, mint #68d9c0 accent, dark forest green #10352c details, gently rounded corners and restrained flat iconography.
+Subject: a friendly, alert, compact coquí frog viewed mostly from the front, in a balanced sitting pose. Make the whole frog a bold coherent symbol with a wide softly rounded head, two raised rounded eyes, a small calm smile, elegantly folded hind legs, and simplified tree-frog toe pads. Favor a memorable compact silhouette and a few large negative spaces. Give it personality through excellent proportions rather than extra decoration.
+Style/medium: premium vector-like brand design rendered as a crisp PNG; flat solid fills, smooth precise curves, consistent rounded geometry. Mint #68d9c0 is the dominant frog fill; deep green #10352c for minimal facial details. Understated, clever, friendly and trustworthy; suitable for a polished Mac utility.
+Composition/framing: a single centered logo mark on a square canvas, taking about 78 percent of the image, generous even transparent padding, optically balanced. Must remain recognizable at 32px. Clean true alpha silhouette.
+Scene/backdrop: fully transparent background, no opaque backdrop or enclosing tile.
+Constraints: one logo only. No lettering, no wordmark, no text, no watermark. No mockup or presentation sheet. No gradients, shadows, glow, glossy or 3D rendering, texture, photorealism, thin fussy lines, computer hardware, cleaning tools, shields, health gauges, sparkle accessories or scenery. No resemblance to an existing famous frog character. This should be a refined designed logo, not a detailed animal illustration.

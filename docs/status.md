@@ -57,6 +57,25 @@ The principal Phase 1 workflow is implemented and locally validated. The items a
 
 Removed the persistent shield/read-only notices from the sidebar, content footer and dashboard device summary at the user's request. Contextual onboarding and permission guidance stays in place. Removed unused styles. `scripts/check.sh` passed again (15 frontend tests, 12 Rust tests, zero Svelte errors/warnings); the release app/archive were rebuilt, signature verified, and the relaunched native dashboard visually confirmed without the repeated notices. Capture: `.impeccable/review/native-dashboard-clean.png`.
 
+## Frog logo — 2026-10-21
+
+Added `public/brand/coqui-frog-v1.png`, a standalone mint/deep-green coquí logo generated with built-in imagegen to match the existing UI palette and rounded shapes. The 1254 × 1254 PNG has an alpha channel; the output was visually inspected. The complete generation prompt and mode are recorded in `public/brand/coqui-frog-v1-prompt.txt`. Runtime branding and packaged application icons have not been replaced by this asset-only change.
+
+Ran `./scripts/check.sh` on the shared working tree: Svelte/TypeScript reported 0 errors and 0 warnings; the production frontend build, 15 frontend tests, Rust formatting and 12 Rust tests passed. The final native Tauri check stopped because `src-tauri/Cargo.lock` requires updating while `--locked` is enabled. That dependency/lockfile mismatch is outside the logo asset change; a complete passing check remains outstanding for the concurrent Phase 2 work. No release was rebuilt for this logo.
+
+### Version 2 — file inspection
+
+Added `public/brand/coqui-frog-v2.png` at the user's request: the approved frog now holds a folded-corner document and a magnifying glass. Generated with built-in imagegen using v1 as an edit reference; v1 is preserved. Visually inspected both requested features and confirmed the 1254 × 1254 PNG has alpha. The complete prompt is in `public/brand/coqui-frog-v2-prompt.txt`.
+
+Reran `./scripts/check.sh`: Svelte/TypeScript reported 0 errors and 0 warnings and the production frontend build passed. Frontend tests reported 19 passed and 1 failed: `clears a transport-failed approval and sends the user to action history` in `src/features/optimization.test.ts` could not find the expected alert. The script stopped there, before Rust and native checks. This failure concerns the concurrent Phase 2 implementation; this revision only adds the image and its prompt. Runtime branding and packaged icons still await a separate integration change.
+
+### Two new concepts — 2026-10-21
+
+Generated two independent designs from scratch with built-in imagegen, without reference images: `public/brand/coqui-file-emblem-v1.png` combines frog features with a folded-corner document and search lens; `public/brand/coqui-inspector-profile-v1.png` shows a side-profile frog inspecting a file. Both were visually inspected and confirmed as 1254 × 1254 PNGs with alpha. Both complete prompts are preserved in `public/brand/coqui-alternatives-prompts.txt`. Existing logo versions are preserved; these are standalone alternatives awaiting selection and integration.
+
+The latest `./scripts/check.sh` run passed on the shared working tree: production frontend build, Svelte/TypeScript with 0 errors and 0 warnings, 20 frontend tests, Rust formatting, 24 Rust tests and the locked native Tauri check. One explicit native Trash/fixture-restore test remains ignored by the standard suite. Earlier check failures above record prior working-tree snapshots. No application code or packaged icons were changed for these concepts, and no release was rebuilt.
+
+
 ## Phase 2.1 — cleanup approval and verification
 
 User selected this milestone on 2026-10-21. Version 0.2.0 adds eligible individual user-cache files, exact-path review, ten-minute approvals, native macOS Trash, per-file verification, cancellation and retained action history. Scans remain read-only. The complete Phase 2 vision remains in `phases/phase-2.md`; current scope and exclusions are detailed in `phases/phase-2-progress.md`.
