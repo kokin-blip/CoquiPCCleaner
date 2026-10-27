@@ -229,6 +229,70 @@ pub struct DiagnosticSession {
     pub errors: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanReviewKind {
+    Caches,
+    Development,
+    Startup,
+    Applications,
+    LargeFiles,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanReviewState {
+    Ready,
+    Partial,
+    NotChecked,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanReviewSource {
+    RetainedScanCategories,
+    RetainedSnapshot,
+    RetainedApplicationInventory,
+    RetainedFileIndex,
+    RetainedScanObservations,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanReviewDestination {
+    CacheFiles,
+    DeveloperArtifacts,
+    Startup,
+    Applications,
+    LargeFiles,
+}
+
+/// Retained observations for navigation and review, never cleanup authority.
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReviewGroup {
+    pub kind: ScanReviewKind,
+    pub state: ScanReviewState,
+    pub source: ScanReviewSource,
+    pub observed_at: Option<String>,
+    pub count: Option<u32>,
+    pub logical_bytes: Option<f64>,
+    pub allocated_bytes: Option<f64>,
+    pub threshold_bytes: Option<f64>,
+    pub destination: ScanReviewDestination,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReview {
+    pub session_id: String,
+    pub scan_status: String,
+    pub observed_at: Option<String>,
+    pub groups: Vec<ScanReviewGroup>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanRequest {
@@ -306,6 +370,16 @@ pub struct StorageMapNode {
     pub reason: String,
     pub consequences: String,
     pub qualification: String,
+    #[serde(default)]
+    pub development: Vec<DevelopmentIndicator>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DevelopmentIndicator {
+    pub label: String,
+    pub attention: bool,
+    pub detail: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -447,6 +521,17 @@ pub struct GitValidation {
     pub changes: Option<GitChanges>,
     pub worktrees: Vec<GitWorktree>,
     pub qualification: String,
+    #[serde(default)]
+    pub recovery: Option<GitRecovery>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRecovery {
+    pub status: String,
+    pub last_commit_at: Option<String>,
+    pub ahead: Option<u32>,
+    pub behind: Option<u32>,
+    pub qualification: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -468,6 +553,8 @@ pub struct DeveloperArtifact {
     pub assessment: String,
     pub reasons: Vec<String>,
     pub consequences: String,
+    #[serde(default)]
+    pub development: Vec<DevelopmentIndicator>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -512,6 +599,27 @@ pub struct PhotoMatch {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+pub struct PhotoPreview {
+    pub png_bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub enum DuplicateLocation {
+    Indexed,
+    Downloads,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DuplicateAnalysisRequest {
+    pub session_id: String,
+    pub location: DuplicateLocation,
+    pub similar_photos: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
 pub struct DuplicateReport {
     pub id: String,
     pub session_id: String,
@@ -525,6 +633,10 @@ pub struct DuplicateReport {
     pub photo_matches: Vec<PhotoMatch>,
     pub gaps: Vec<String>,
     pub qualification: String,
+    #[serde(default)]
+    pub request: Option<DuplicateAnalysisRequest>,
+    #[serde(default)]
+    pub scope_root: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -561,6 +673,68 @@ pub struct BaselineComparison {
     pub before: Baseline,
     pub after: Baseline,
     pub observations: Vec<String>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkloadTrialRequest {
+    pub workload: String,
+    pub task: String,
+    pub inputs: String,
+    pub application: String,
+    pub conditions: String,
+    pub target_seconds: f64,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkloadTrial {
+    pub id: String,
+    pub created_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub request: WorkloadTrialRequest,
+    pub elapsed_seconds: Option<f64>,
+    pub completion_reported: bool,
+    pub samples: Vec<LiveMetrics>,
+    pub power: Vec<DiagnosticEvidence>,
+    pub qualification: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TrialComparisonRequest {
+    pub before_ids: Vec<String>,
+    pub after_ids: Vec<String>,
+    pub change: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TrialObservation {
+    pub id: String,
+    pub created_at: String,
+    pub elapsed_seconds: f64,
+    pub target_met: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TrialGroup {
+    pub trials: Vec<TrialObservation>,
+    pub median_seconds: f64,
+    pub minimum_seconds: f64,
+    pub maximum_seconds: f64,
+    pub target_met_count: u32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TrialComparison {
+    pub id: String,
+    pub created_at: String,
+    pub request: TrialComparisonRequest,
+    pub protocol: WorkloadTrialRequest,
+    pub before: TrialGroup,
+    pub after: TrialGroup,
+    pub median_change_percent: f64,
+    pub matching_conditions: bool,
+    pub limitations: Vec<String>,
     pub qualification: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -624,12 +798,23 @@ pub struct Investigation {
     pub actions: Vec<String>,
     pub status: String,
     pub qualification: String,
+    #[serde(default)]
+    pub baseline_id: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "request", rename_all = "camelCase")]
+pub enum InvestigationCollection {
+    Baseline(BaselineRequest),
+    Developer,
+    Resources,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AdviceRequest {
     pub session_id: String,
     pub baseline_id: Option<String>,
+    #[serde(default)]
+    pub trial_id: Option<String>,
     pub workload: String,
     pub expectation: String,
     pub annual_growth_percent: f64,
@@ -648,6 +833,76 @@ pub struct AdviceReport {
     pub findings: Vec<DiagnosticFinding>,
     pub scenarios: Vec<DiagnosticEvidence>,
     pub sources: Vec<String>,
+    #[serde(default)]
+    pub source_reviews: Vec<AdviceSourceReview>,
+    #[serde(default)]
+    pub verification_limits: Vec<String>,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AdviceSourceReview {
+    pub url: String,
+    pub title: String,
+    pub publisher: String,
+    pub reviewed_on: Option<String>,
+    pub scope: String,
+}
+
+/// A retained-evidence review plan is never execution authority.
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendationAction {
+    pub id: String,
+    pub priority: u32,
+    pub title: String,
+    pub explanation: String,
+    pub classification: String,
+    pub affected_workloads: Vec<String>,
+    pub expected_benefit: String,
+    pub confidence: String,
+    pub risk: String,
+    pub reversibility: String,
+    pub permission: String,
+    pub restart: String,
+    pub verification: String,
+    pub destination: String,
+    pub evidence: Vec<DiagnosticEvidence>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkloadAssessment {
+    pub workload: String,
+    pub status: String,
+    pub explanation: String,
+    pub evidence: Vec<DiagnosticEvidence>,
+    pub next_test: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct BottleneckAssessment {
+    pub subsystem: String,
+    pub workload: String,
+    pub observation: String,
+    pub confidence: String,
+    pub possible_impact: String,
+    pub next_test: String,
+    pub evidence: Vec<DiagnosticEvidence>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendationPlan {
+    pub id: String,
+    pub created_at: String,
+    pub session_id: String,
+    pub baseline_id: Option<String>,
+    #[serde(default)]
+    pub trial_id: Option<String>,
+    pub preference: String,
+    pub actions: Vec<RecommendationAction>,
+    pub workloads: Vec<WorkloadAssessment>,
+    pub bottlenecks: Vec<BottleneckAssessment>,
     pub qualification: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -674,6 +929,11 @@ pub struct ActivityRecord {
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum RetainedRecord {
+    ScanObservations(crate::scan_observations::ScanObservations),
+    AppUpdateReport(AppUpdateReport),
+    WorkloadTrial(WorkloadTrial),
+    TrialComparison(TrialComparison),
+    RecommendationPlan(RecommendationPlan),
     Duplicates(DuplicateReport),
     Baseline(Baseline),
     ManualPlan(ManualPlan),
@@ -684,6 +944,80 @@ pub enum RetainedRecord {
     Firmware(FirmwareReport),
     FirmwarePlan(FirmwarePlan),
     FirmwareComparison(FirmwareComparison),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum AppUpdateSource {
+    AppStore,
+    Sparkle,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum AppUpdateState {
+    Available,
+    NoNewerVersionObserved,
+    Unavailable,
+    Uncomparable,
+    Cancelled,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateCandidate {
+    pub path: String,
+    pub name: String,
+    pub bundle_id: String,
+    pub installed_version: String,
+    pub installed_build: String,
+    pub source: AppUpdateSource,
+    pub source_url: Option<String>,
+    pub source_review_date: String,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdatePlan {
+    pub id: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub candidates: Vec<AppUpdateCandidate>,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateResult {
+    pub path: String,
+    pub name: String,
+    pub bundle_id: String,
+    pub installed_version: String,
+    pub installed_build: String,
+    pub source: AppUpdateSource,
+    pub source_url: Option<String>,
+    pub source_review_date: String,
+    pub state: AppUpdateState,
+    pub checked_at: Option<String>,
+    pub offered_version: Option<String>,
+    pub offered_build: Option<String>,
+    pub published_at: Option<String>,
+    pub min_system_version: Option<String>,
+    pub qualification: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateReport {
+    pub id: String,
+    pub plan_id: String,
+    pub created_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub items: Vec<AppUpdateResult>,
+    pub qualification: String,
 }
 
 /// Scope is explicit for every run; no capability is enabled by a saved default.
@@ -847,6 +1181,8 @@ pub struct CoverageGap {
     pub root: String,
     pub path: String,
     pub reason: String,
+    #[serde(default)]
+    pub guidance: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]

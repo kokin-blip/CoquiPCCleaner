@@ -50,6 +50,122 @@ fn query(parent: &str, limit: u32) -> StorageMapQuery {
     }
 }
 
+// A deterministic VM-work limit catches a full-session walk without relying on
+// machine speed or inspecting the implementation's SQL/index spelling.
+struct QueryBudget<'a> {
+    connection: &'a rusqlite::Connection,
+    _ticks: Box<u32>,
+}
+impl<'a> QueryBudget<'a> {
+    fn new(connection: &'a rusqlite::Connection) -> Self {
+        unsafe extern "C" fn tick(context: *mut libc::c_void) -> libc::c_int {
+            let remaining = unsafe { &mut *context.cast::<u32>() };
+            *remaining = remaining.saturating_sub(1);
+            i32::from(*remaining == 0)
+        }
+        let mut ticks = Box::new(200);
+        // SQLite invokes this synchronously on this connection. The boxed state
+        // stays alive until Drop unregisters the callback, including on panic.
+        unsafe {
+            rusqlite::ffi::sqlite3_progress_handler(
+                connection.handle(),
+                100,
+                Some(tick),
+                (&mut *ticks as *mut u32).cast(),
+            );
+        }
+        Self {
+            connection,
+            _ticks: ticks,
+        }
+    }
+}
+impl Drop for QueryBudget<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            rusqlite::ffi::sqlite3_progress_handler(
+                self.connection.handle(),
+                0,
+                None,
+                std::ptr::null_mut(),
+            );
+        }
+    }
+}
+fn sparse_folder_index() -> rusqlite::Connection {
+    let mut c = database::open(std::path::Path::new(":memory:")).unwrap();
+    database::save_session(&c, &session("scan")).unwrap();
+    let mut rows: Vec<_> = (0..10_000)
+        .map(|n| entry(&format!("/other/file{n:05}"), "/other", 1000., false))
+        .collect();
+    rows.extend(
+        (1..=3).map(|n| entry(&format!("/focus/file{n}"), "/focus", n as f64 * 10., false)),
+    );
+    database::insert_files(&mut c, "scan", &rows).unwrap();
+    c
+}
+
+#[test]
+fn folder_pages_do_not_walk_unrelated_indexed_paths() {
+    let c = sparse_folder_index();
+    {
+        let _budget = QueryBudget::new(&c);
+        for sort in ["allocated", "logical", "name", "modified"] {
+            let rows = database::files(
+                &c,
+                &StorageQuery {
+                    session_id: "scan".into(),
+                    parent: Some("/focus".into()),
+                    category: None,
+                    search: None,
+                    sort: sort.into(),
+                    descending: true,
+                    offset: 0,
+                    limit: 50,
+                    files_only: false,
+                },
+            )
+            .unwrap();
+            assert_eq!(rows.len(), 3);
+            assert!(rows.iter().all(|row| row.parent == "/focus"));
+        }
+    }
+    let rows = database::files(
+        &c,
+        &StorageQuery {
+            session_id: "scan".into(),
+            parent: None,
+            category: None,
+            search: None,
+            sort: "allocated".into(),
+            descending: true,
+            offset: 0,
+            limit: 2,
+            files_only: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| row.allocated_bytes == 1000.));
+}
+
+#[test]
+fn bounded_folder_maps_do_not_walk_unrelated_indexed_paths() {
+    let c = sparse_folder_index();
+    let _budget = QueryBudget::new(&c);
+    for metric in ["allocated", "logical"] {
+        let mut q = query("/focus", 2);
+        q.metric = metric.into();
+        let map = database::storage_map(&c, &q).unwrap();
+        assert_eq!(map.nodes.len(), 2);
+        assert_eq!(map.total_allocated_bytes, 60.);
+        assert_eq!(map.total_logical_bytes, 60.);
+        assert_eq!(map.remainder_allocated_bytes, 10.);
+        assert_eq!(map.file_count, Some(3.));
+        assert_eq!(map.remainder_file_count, Some(1.));
+    }
+}
+
 #[test]
 fn folder_metrics_count_tiny_descendants_and_deduplicate_links() {
     use std::os::unix::fs::MetadataExt;
@@ -393,4 +509,56 @@ fn retention_prunes_a_large_old_index_without_losing_summaries_or_coverage() {
         total += page.gaps.len();
     }
     assert_eq!(total, 1);
+}
+
+#[test]
+fn permission_filter_retains_denials_and_distinguishes_system_context_without_writes() {
+    let mut c = database::open(std::path::Path::new(":memory:")).unwrap();
+    database::save_session(&c, &session("scan")).unwrap();
+    let gaps = [
+        ("/private/var/db/SystemKeys", "permissionDenied"),
+        ("/Users/fixture/Documents", "permissionDenied"),
+        ("/Users/fixture/link", "symbolicLink"),
+    ]
+    .map(|(path, reason)| CoverageGap {
+        root: "/".into(),
+        path: path.into(),
+        reason: reason.into(),
+        guidance: None,
+    });
+    database::insert_gaps(&mut c, "scan", &gaps).unwrap();
+    let before = c.total_changes();
+    let rows = database::coverage_filtered(&c, "scan", 0, Some("permissionDenied")).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.reason == "permissionDenied"));
+    assert!(rows
+        .iter()
+        .find(|r| r.path.contains("SystemKeys"))
+        .unwrap()
+        .guidance
+        .as_ref()
+        .unwrap()
+        .contains("system/service"));
+    assert!(rows
+        .iter()
+        .find(|r| r.path.contains("Documents"))
+        .unwrap()
+        .guidance
+        .as_ref()
+        .unwrap()
+        .contains("folder owner's"));
+    assert_eq!(c.total_changes(), before);
+    assert!(database::coverage_filtered(&c, "scan", 0, Some("arbitrary")).is_err());
+    assert!(
+        storage::permission_guidance("/Systematic/notes", "permissionDenied")
+            .unwrap()
+            .contains("folder owner's")
+    );
+    assert!(storage::permission_guidance(
+        "/System/Volumes/Data/private/var/db/oah",
+        "permissionDenied"
+    )
+    .unwrap()
+    .contains("system/service"));
+    assert!(storage::permission_guidance("/System", "symbolicLink").is_none());
 }

@@ -1,4 +1,5 @@
 import type { DiskScanPlan } from './bindings/DiskScanPlan';
+import type { ScanModules } from './bindings/ScanModules';
 import { get, writable } from 'svelte/store';
 import { backend as nativeBackend, type Backend } from './backend';
 import type { AppSettings } from './bindings/AppSettings';
@@ -10,6 +11,8 @@ import type { CleanupApproval } from './bindings/CleanupApproval';
 import type { CleanupRequest } from './bindings/CleanupRequest';
 
 import type { FirmwareCenter } from './bindings/FirmwareCenter';
+import type { WorkloadTrial } from './bindings/WorkloadTrial';
+import type { WorkloadTrialRequest } from './bindings/WorkloadTrialRequest';
 export type Page =
   | 'Ask Coqui'
   | 'Maintenance'
@@ -24,6 +27,11 @@ export type Page =
   | 'History'
   | 'Settings';
 export interface AppState {
+  overviewMode: 'start' | 'results';
+  workloadTrial: WorkloadTrial | null;
+  trialFinishing: boolean;
+  askDraft: string;
+  reviewTarget: string | null;
   missingApplications: number;
   firmwareCenter: FirmwareCenter | null;
   firmwareNoticeError: string | null;
@@ -51,6 +59,11 @@ export interface AppState {
 }
 export function createAppStore(service: Backend = nativeBackend) {
   const store = writable<AppState>({
+    overviewMode: 'start',
+    workloadTrial: null,
+    trialFinishing: false,
+    askDraft: '',
+    reviewTarget: null,
     missingApplications: 0,
     firmwareCenter: null,
     firmwareNoticeError: null,
@@ -222,6 +235,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     planId: string | null = null,
     roots?: string[],
     administratorPlan: DiskScanPlan | null = null,
+    modules?: ScanModules,
   ) {
     const s = get(store);
     if (!s.settings || s.scanning) return;
@@ -238,6 +252,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     store.update((s) => ({
       ...s,
       scanning: true,
+      overviewMode: 'results',
       session: null,
       cancelling: false,
       error: null,
@@ -256,6 +271,7 @@ export function createAppStore(service: Backend = nativeBackend) {
           store.update((s) => ({ ...s, session: e.session }));
         },
         administratorPlan,
+        modules,
       );
       await refresh();
     } catch (e) {
@@ -378,6 +394,55 @@ export function createAppStore(service: Backend = nativeBackend) {
       store.update((s) => ({ ...s, workRunning: false, workLabel: '' }));
     }
   }
+  async function captureTrial(request: WorkloadTrialRequest) {
+    return work('Timed task trial', async () => {
+      store.update((s) => ({
+        ...s,
+        workloadTrial: null,
+        trialFinishing: false,
+      }));
+      try {
+        const trial = await service.captureTrial(request, (workloadTrial) =>
+          store.update((s) => ({ ...s, workloadTrial })),
+        );
+        store.update((s) => ({ ...s, workloadTrial: trial }));
+        return trial;
+      } catch (e) {
+        await service.cancelWork().catch(() => {});
+        store.update((s) => ({
+          ...s,
+          workloadTrial:
+            s.workloadTrial?.status === 'running'
+              ? {
+                  ...s.workloadTrial,
+                  status: 'unverified',
+                  qualification:
+                    'The capture connection ended without a verified terminal result. Reload retained history before using this interval.',
+                }
+              : s.workloadTrial,
+        }));
+        throw e;
+      } finally {
+        store.update((s) => ({ ...s, trialFinishing: false }));
+      }
+    });
+  }
+  async function finishTrial() {
+    const s = get(store);
+    if (
+      !s.workRunning ||
+      s.workloadTrial?.status !== 'running' ||
+      s.trialFinishing
+    )
+      throw new Error('No task timer is waiting for completion');
+    store.update((v) => ({ ...v, trialFinishing: true }));
+    try {
+      await service.finishTrial(s.workloadTrial.id);
+    } catch (e) {
+      store.update((v) => ({ ...v, trialFinishing: false }));
+      throw e;
+    }
+  }
   async function checkMaintenance() {
     if (
       disposed ||
@@ -432,6 +497,8 @@ export function createAppStore(service: Backend = nativeBackend) {
         page: 'Firmware & Security',
       })),
     work,
+    captureTrial,
+    finishTrial,
     executeCleanup,
     previewProjectCleanup,
     analyzeDeveloper,
@@ -444,6 +511,25 @@ export function createAppStore(service: Backend = nativeBackend) {
     refresh,
     retryMonitoring: startMonitoring,
     navigate: (page: Page) => store.update((s) => ({ ...s, page })),
+    openOverviewResults: () =>
+      store.update((s) => ({
+        ...s,
+        page: 'Dashboard',
+        overviewMode: 'results',
+      })),
+    showOverviewStart: () =>
+      store.update((s) => (s.scanning ? s : { ...s, overviewMode: 'start' })),
+    startInvestigation: (question: string) =>
+      store.update((s) => ({
+        ...s,
+        askDraft: question.trim(),
+        page: 'Ask Coqui',
+      })),
+    clearAskDraft: () => store.update((s) => ({ ...s, askDraft: '' })),
+    openRecommendation: (page: Page, target: string) =>
+      store.update((s) => ({ ...s, reviewTarget: target, page })),
+    clearReviewTarget: () =>
+      store.update((s) => ({ ...s, reviewTarget: null })),
     selectSession: (session: DiagnosticSession) =>
       store.update((s) => ({ ...s, session, page: 'System Analysis' })),
     dismiss: () => store.update((s) => ({ ...s, error: null, notice: null })),

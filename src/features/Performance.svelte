@@ -1,5 +1,7 @@
 <script lang="ts">
+  import type { ScanObservations } from '../bindings/ScanObservations';
   import Baselines from './Baselines.svelte';
+  import TaskTrials from './TaskTrials.svelte';
   import ManualPlans from './ManualPlans.svelte';
   import { tabKeys } from '../keyboard';
   import { Activity, ArrowRight, Info } from '@lucide/svelte';
@@ -8,7 +10,51 @@
   import Chart from '../components/Chart.svelte';
   let { controller }: { controller: ReturnType<typeof createAppStore> } =
     $props();
+  let observations = $state<ScanObservations | null>(null);
+  let observationError = $state('');
+  $effect(() => {
+    const id = $controller.session?.id;
+    let current = true;
+    observations = null;
+    observationError = '';
+    if (id)
+      controller.service
+        .scanObservations(id)
+        .then((value) => {
+          if (current) observations = value;
+        })
+        .catch(() => {
+          if (current) observationError = 'Saved startup check unavailable.';
+        });
+    return () => {
+      current = false;
+    };
+  });
+  let startupItems = $derived(
+    observations
+      ? observations.startupItems
+      : observationError
+        ? []
+        : ($controller.session?.snapshot?.startupItems ?? []),
+  );
   let tab = $state('Overview');
+  $effect(() => {
+    const target = $controller.reviewTarget;
+    if (
+      target &&
+      ['power', 'startup', 'baseline', 'cpu', 'memory', 'task'].includes(target)
+    ) {
+      tab =
+        target === 'task'
+          ? 'Task trials'
+          : target === 'power'
+            ? 'Manual plans'
+            : target === 'startup'
+              ? 'Startup'
+              : 'Baselines';
+      controller.clearReviewTarget();
+    }
+  });
   let seconds = $state(120);
   let processFilter = $state('');
   let live = $derived(
@@ -55,7 +101,7 @@
   onkeydown={tabKeys}
   aria-label="Performance views"
 >
-  {#each ['Overview', 'Processes', 'Startup', 'Preferences', 'Baselines', 'Manual plans'] as name}<button
+  {#each ['Overview', 'Processes', 'Startup', 'Preferences', 'Baselines', 'Task trials', 'Manual plans'] as name}<button
       role="tab"
       tabindex={tab === name ? 0 : -1}
       aria-selected={tab === name}
@@ -63,7 +109,9 @@
       onclick={() => (tab = name)}>{name}</button
     >{/each}
 </div>
-{#if tab === 'Baselines'}<Baselines
+{#if tab === 'Task trials'}<TaskTrials
+    {controller}
+  />{:else if tab === 'Baselines'}<Baselines
     {controller}
   />{:else if tab === 'Manual plans'}<ManualPlans
     {controller}
@@ -208,9 +256,12 @@
   </div>
   <section class="panel">
     <h2>Detected startup configurations</h2>
-    {#each $controller.session?.snapshot?.startupItems ?? [] as item}<div
-        class="startup-row"
-      >
+    {#if observations}<p class="small muted">
+        {observations.checks.find((check) => check.module === 'startup')
+          ?.qualification}
+      </p>{/if}
+    {#if observationError}<p role="alert">{observationError}</p>{/if}
+    {#each startupItems as item}<div class="startup-row">
         <div>
           <strong>{item.name}</strong>
           <p class="path small muted">{item.path}</p>

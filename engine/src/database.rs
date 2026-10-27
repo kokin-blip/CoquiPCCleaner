@@ -223,12 +223,15 @@ pub fn storage_map(c: &Connection, query: &StorageMapQuery) -> Result<StorageMap
     } else {
         "f.allocated"
     };
-    let sql = format!("SELECT f.path,f.parent,f.name,f.category,f.logical,f.allocated,f.directory,f.modified,f.qualification,m.file_count,m.small_file_count,m.small_allocated,m.largest_file FROM files f LEFT JOIN storage_metrics m ON m.session_id=f.session_id AND m.path=f.path WHERE f.session_id=?1 AND f.parent=?2 ORDER BY {order} DESC,f.path LIMIT ?3");
+    // Restrict work to this folder before ranking. Without this constraint SQLite
+    // can choose file_size and walk millions of unrelated paths to fill a page.
+    let sql = format!("SELECT f.path,f.parent,f.name,f.category,f.logical,f.allocated,f.directory,f.modified,f.qualification,m.file_count,m.small_file_count,m.small_allocated,m.largest_file FROM files f INDEXED BY file_parent LEFT JOIN storage_metrics m ON m.session_id=f.session_id AND m.path=f.path WHERE f.session_id=?1 AND f.parent=?2 ORDER BY {order} DESC,f.path LIMIT ?3");
     let mut statement = c.prepare(&sql)?;
     let rows = statement.query_map(
         params![query.session_id, query.parent, query.limit.clamp(1, 60)],
         |r| Ok((entry_at(r)?, metrics_at(r)?)),
     )?;
+    let developer = crate::developer::get(c, &query.session_id)?;
     let mut nodes = Vec::new();
     for row in rows {
         let (entry, metrics) = row?;
@@ -247,11 +250,43 @@ pub fn storage_map(c: &Connection, query: &StorageMapQuery) -> Result<StorageMap
             })
         };
         let context = indexed_project_context(c, &query.session_id, &entry.path)?;
-        nodes.push(crate::storage::identify(
-            entry,
-            metrics.as_ref(),
-            context.as_deref(),
-        ));
+        let mut node = crate::storage::identify(entry, metrics.as_ref(), context.as_deref());
+        let git_marker = Path::new(&node.entry.path)
+            .join(".git")
+            .to_string_lossy()
+            .into_owned();
+        if node.entry.is_directory
+            && c.query_row(
+                "SELECT EXISTS(SELECT 1 FROM files WHERE session_id=?1 AND path=?2)",
+                params![query.session_id, git_marker],
+                |r| r.get::<_, bool>(0),
+            )?
+        {
+            node.development.push(DevelopmentIndicator {label:"Git project · keep".into(), attention:true,
+                detail:"The scan indexed a .git marker directly in this folder. It may hold source, local commits, worktrees and ignored files. Review current Git state and all unique contents; age or a remote branch match is not a whole-folder backup.".into()});
+        }
+        if !node.development.is_empty() {
+            if let Some(artifact) = developer.as_ref().and_then(|r| {
+                r.artifacts
+                    .iter()
+                    .filter(|a| {
+                        Path::new(&node.entry.path).starts_with(&a.path)
+                            || a.git.root.as_deref() == Some(node.entry.path.as_str())
+                            || (a.technology == "Git"
+                                && Path::new(&node.entry.path).starts_with(&a.project_root))
+                    })
+                    .max_by_key(|a| a.path.len())
+            }) {
+                node.development.extend(crate::development::git_indicators(
+                    &artifact.git,
+                    &artifact.checked_at,
+                ));
+            } else {
+                node.development.push(DevelopmentIndicator {label:"Git not checked".into(), attention:true,
+                    detail:"No retained developer check covers this exact output. Use Optimization → Developer artifacts to check current Git/worktree state. Size and timestamps come from the storage scan.".into()});
+            }
+        }
+        nodes.push(node);
     }
     let shown_allocated: f64 = nodes.iter().map(|n| n.entry.allocated_bytes).sum();
     let shown_logical: f64 = nodes.iter().map(|n| n.entry.logical_bytes).sum();
@@ -304,7 +339,15 @@ pub fn files(c: &Connection, q: &StorageQuery) -> Result<Vec<FileEntry>> {
         _ => "allocated",
     };
     let dir = if q.descending { "DESC" } else { "ASC" };
-    let sql=format!("SELECT path,parent,name,category,logical,allocated,directory,modified,qualification FROM files WHERE session_id=?1 AND (?2 IS NULL OR parent=?2) AND (?3 IS NULL OR category=?3) AND (?4=0 OR directory=0) AND (?7 IS NULL OR instr(lower(path),lower(?7))>0) ORDER BY {order} {dir},path ASC LIMIT ?5 OFFSET ?6");
+    // A nullable OR prevents a parent equality from constraining the index.
+    // Folder pages use the existing parent index; global large-file/search pages
+    // retain their planner-selected index and original filter/order semantics.
+    let (source, parent) = if q.parent.is_some() {
+        ("files INDEXED BY file_parent", "parent=?2")
+    } else {
+        ("files", "?2 IS NULL")
+    };
+    let sql=format!("SELECT path,parent,name,category,logical,allocated,directory,modified,qualification FROM {source} WHERE session_id=?1 AND {parent} AND (?3 IS NULL OR category=?3) AND (?4=0 OR directory=0) AND (?7 IS NULL OR instr(lower(path),lower(?7))>0) ORDER BY {order} {dir},path ASC LIMIT ?5 OFFSET ?6");
     let mut s = c.prepare(&sql)?;
     let rows = s.query_map(
         params![
@@ -486,12 +529,28 @@ pub fn insert_gaps(c: &mut Connection, id: &str, batch: &[CoverageGap]) -> Resul
     Ok(())
 }
 pub fn coverage(c: &Connection, id: &str, offset: u32) -> Result<Vec<CoverageGap>> {
-    let mut q=c.prepare("SELECT root,path,reason FROM scan_gaps WHERE session_id=?1 ORDER BY root,path LIMIT 100 OFFSET ?2")?;
-    let rows = q.query_map(params![id, offset], |r| {
+    coverage_filtered(c, id, offset, None)
+}
+pub fn coverage_filtered(
+    c: &Connection,
+    id: &str,
+    offset: u32,
+    reason: Option<&str>,
+) -> Result<Vec<CoverageGap>> {
+    anyhow::ensure!(
+        reason.is_none_or(|v| v == "permissionDenied"),
+        "Unsupported coverage filter"
+    );
+    let mut q=c.prepare("SELECT root,path,reason FROM scan_gaps WHERE session_id=?1 AND (?3 IS NULL OR reason=?3) ORDER BY root,path LIMIT 100 OFFSET ?2")?;
+    let rows = q.query_map(params![id, offset, reason], |r| {
         Ok(CoverageGap {
             root: r.get(0)?,
             path: r.get(1)?,
             reason: r.get(2)?,
+            guidance: crate::storage::permission_guidance(
+                &r.get::<_, String>(1)?,
+                &r.get::<_, String>(2)?,
+            ),
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -550,6 +609,10 @@ pub fn gaps_after(c: &Connection, id: &str, after: u64) -> Result<CoverageExport
             root: r.get(1)?,
             path: r.get(2)?,
             reason: r.get(3)?,
+            guidance: crate::storage::permission_guidance(
+                &r.get::<_, String>(2)?,
+                &r.get::<_, String>(3)?,
+            ),
         });
     }
     Ok(result)

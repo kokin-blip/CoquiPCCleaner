@@ -12,8 +12,8 @@
   import type { createAppStore } from '../state';
   let {
     controller,
-    onScan = () => void controller.scan(),
-  }: { controller: ReturnType<typeof createAppStore>; onScan?: () => void } =
+    onScan,
+  }: { controller: ReturnType<typeof createAppStore>; onScan: () => void } =
     $props();
   let step = $state(0);
   let selected = $state<string[]>([]);
@@ -132,8 +132,9 @@
     {:else}
       <h1>Your Mac. Your boundaries.</h1>
       <p class="muted">
-        Diagnostics and file metadata stay in local SQLite storage. No file
-        contents, telemetry, or cloud AI are sent anywhere.
+        Storage scans and diagnostic records stay on your Mac. Optional app
+        update checks contact reviewed sources only after your acknowledgement.
+        File contents, telemetry and cloud AI are never sent.
       </p>
       <label class="field-label"
         >Storage analysis scope<select bind:value={mode}

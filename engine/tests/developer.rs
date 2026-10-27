@@ -142,6 +142,135 @@ fn real_git_clean_ignored_build_output_has_qualified_review_and_no_writes() {
         1
     );
 }
+
+#[test]
+fn cached_remote_matches_do_not_claim_upload_and_local_commits_remain_visible() {
+    let f = Fixture::new();
+    git(
+        &f.root,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/never-contacted.git",
+        ],
+    );
+    git(&f.root, &["config", "branch.main.remote", "origin"]);
+    git(&f.root, &["config", "branch.main.merge", "refs/heads/main"]);
+    git(&f.root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    let original = fs::read(f.root.join(".git/config")).unwrap();
+    let a = f.analyze().artifacts.remove(0);
+    let recovery = a.git.recovery.as_ref().unwrap();
+    assert_eq!(recovery.status, "matchesCachedRemote");
+    assert_eq!((recovery.ahead, recovery.behind), (Some(0), Some(0)));
+    assert!(recovery.qualification.contains("was not contacted"));
+    assert!(recovery.qualification.contains("Ignored/untracked"));
+    assert!(a
+        .development
+        .iter()
+        .any(|i| i.label == "Review before deleting"));
+    fs::write(f.root.join("source.rs"), "local-only fixture").unwrap();
+    git(&f.root, &["add", "source.rs"]);
+    git(&f.root, &["commit", "-m", "local only"]);
+    let a = f.analyze().artifacts.remove(0);
+    assert_eq!(a.git.status, "clean");
+    assert_eq!(a.git.recovery.as_ref().unwrap().ahead, Some(1));
+    assert!(a
+        .development
+        .iter()
+        .any(|i| i.label == "Commits absent from cached remote" && i.attention));
+    assert_eq!(fs::read(f.root.join(".git/config")).unwrap(), original);
+    // An upstream that is another local branch is not evidence of remote recovery.
+    git(&f.root, &["branch", "local-upstream"]);
+    git(&f.root, &["branch", "--set-upstream-to=local-upstream"]);
+    assert_eq!(
+        f.analyze().artifacts[0]
+            .git
+            .recovery
+            .as_ref()
+            .unwrap()
+            .status,
+        "noRemoteUpstream"
+    );
+}
+
+#[test]
+fn old_commit_age_and_agent_namespace_never_establish_disposability() {
+    let f = Fixture::new();
+    let mut a = f.analyze().artifacts.remove(0);
+    a.git.recovery = Some(GitRecovery {
+        status: "noRemoteUpstream".into(),
+        last_commit_at: Some("2000-01-01T00:00:00Z".into()),
+        ahead: None,
+        behind: None,
+        qualification: "No verified backup".into(),
+    });
+    let indicators = coqui_engine::development::git_indicators(&a.git, "2026-10-24T00:00:00Z");
+    assert!(indicators
+        .iter()
+        .any(|i| i.label == "Older commit · 90+ days" && i.detail.contains("not last use")));
+    let agent = coqui_engine::development::path_indicators(
+        "/fixture/.codex/worktrees/id/project/target/debug",
+        "rustBuild",
+    );
+    assert!(agent
+        .iter()
+        .any(|i| i.label == "Agent workspace" && i.detail.contains("unverified")));
+    assert!(agent.iter().any(|i| i.label == "Debug build"));
+    assert!(
+        coqui_engine::development::path_indicators("/fixture/ai-debug/photos", "folder").is_empty()
+    );
+    let git = coqui_engine::development::path_indicators("/fixture/.git/objects", "database");
+    assert!(git.iter().any(|i| i.label == "Git history · keep"));
+    let mut json = serde_json::to_value(&a).unwrap();
+    json.as_object_mut().unwrap().remove("development");
+    json["git"].as_object_mut().unwrap().remove("recovery");
+    let legacy: DeveloperArtifact = serde_json::from_value(json).unwrap();
+    assert!(legacy.development.is_empty());
+    assert!(legacy.git.recovery.is_none());
+    assert!(
+        coqui_engine::development::git_indicators(&legacy.git, "2020-01-01T00:00:00Z")
+            .iter()
+            .any(|i| i.detail.contains("2020-01-01T00:00:00Z"))
+    );
+}
+
+#[test]
+fn storage_map_uses_retained_git_evidence_without_new_checks_or_database_writes() {
+    let f = Fixture::new();
+    let query = StorageMapQuery {
+        session_id: "scan".into(),
+        parent: f.root.to_str().unwrap().into(),
+        metric: "allocated".into(),
+        limit: 60,
+    };
+    let map = database::storage_map(&f.db, &query).unwrap();
+    assert!(map
+        .nodes
+        .iter()
+        .find(|n| n.entry.name == "target")
+        .unwrap()
+        .development
+        .iter()
+        .any(|i| i.label == "Git not checked"));
+    f.analyze();
+    let before = f.db.total_changes();
+    let map = database::storage_map(&f.db, &query).unwrap();
+    let output = map.nodes.iter().find(|n| n.entry.name == "target").unwrap();
+    assert!(output
+        .development
+        .iter()
+        .any(|i| i.label == "Clean worktree"));
+    assert!(output
+        .development
+        .iter()
+        .any(|i| i.label == "Remote backup unverified"));
+    assert!(!output
+        .development
+        .iter()
+        .any(|i| i.label == "Git not checked"));
+    assert_eq!(f.db.total_changes(), before);
+}
 #[test]
 fn dirty_staged_untracked_and_tracked_artifacts_are_protected() {
     let mut f = Fixture::new();
@@ -279,7 +408,15 @@ fn excluded_disappeared_and_linked_outputs_never_get_reviewed() {
     fs::remove_file(f.root.join("target/cache.bin")).unwrap();
     fs::remove_dir(f.root.join("target")).unwrap();
     std::os::unix::fs::symlink(f._dir.path(), f.root.join("target")).unwrap();
-    assert!(f.analyze().artifacts.is_empty());
+    let linked = f.analyze();
+    assert!(linked
+        .artifacts
+        .iter()
+        .all(|a| a.technology == "Git" && a.assessment == "Protected"));
+    assert!(!linked
+        .artifacts
+        .iter()
+        .any(|a| a.path == f.root.join("target").to_string_lossy()));
 }
 #[test]
 fn cancellation_channel_loss_recovery_migration_and_purge() {
@@ -435,4 +572,43 @@ fn cloud_placeholder_metadata_prevents_git_content_inspection() {
         .qualification
         .contains("cloud placeholders"));
     assert_eq!(r.artifacts[0].assessment, "Protected");
+}
+
+#[test]
+fn repository_without_outputs_and_linked_agent_worktree_are_analysis_only() {
+    let mut f = Fixture::new();
+    fs::remove_dir_all(f.root.join("target")).unwrap();
+    f.index();
+    let a = f.analyze().artifacts.remove(0);
+    assert_eq!(a.technology, "Git");
+    assert_eq!(a.assessment, "Protected");
+    assert!(a
+        .development
+        .iter()
+        .any(|i| i.label == "Git history · keep"));
+    let linked = f
+        ._dir
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join(".codex/worktrees/fixture");
+    fs::create_dir_all(linked.parent().unwrap()).unwrap();
+    git(
+        &f.root,
+        &["worktree", "add", "--detach", linked.to_str().unwrap()],
+    );
+    f.root = linked;
+    f.index();
+    let a = f
+        .analyze()
+        .artifacts
+        .into_iter()
+        .find(|a| a.path == f.root.join(".git").to_string_lossy())
+        .unwrap();
+    assert_eq!(a.technology, "Git");
+    assert_eq!(a.git.status, "clean");
+    assert_eq!(a.assessment, "Protected");
+    assert_eq!(a.indexed_file_count, 1); // The .git pointer, not the shared Git store.
+    assert!(a.development.iter().any(|i| i.label == "Agent workspace"));
+    assert_eq!(a.git.worktrees.len(), 2);
 }

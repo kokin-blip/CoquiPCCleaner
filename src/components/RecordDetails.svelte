@@ -2,6 +2,13 @@
   import type { createAppStore } from '../state';
   import type { RetainedRecord } from '../bindings/RetainedRecord';
   import Evidence from './Evidence.svelte';
+  import AdviceContext from './AdviceContext.svelte';
+  import RecommendationPlanView from './RecommendationPlanView.svelte';
+  import WorkloadTrialView from './WorkloadTrialView.svelte';
+  import TrialComparisonView from './TrialComparisonView.svelte';
+  import AppUpdateReportView from './AppUpdateReportView.svelte';
+  import ScanObservationView from './ScanObservationView.svelte';
+  import DuplicateContext from './DuplicateContext.svelte';
   import FirmwareComparisonView from './FirmwareComparisonView.svelte';
   import FirmwareReportView from './FirmwareReportView.svelte';
   import FirmwarePlanView from './FirmwarePlanView.svelte';
@@ -33,7 +40,22 @@
 </script>
 
 {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
-{#if record.kind === 'firmwareComparison'}<FirmwareComparisonView comparison={record.data}/>{:else if record.kind === 'firmware'}<FirmwareReportView
+{#if record.kind === 'scanObservations'}<ScanObservationView
+    {controller}
+    report={record.data}
+  />{:else if record.kind === 'appUpdateReport'}<AppUpdateReportView
+    {controller}
+    report={record.data}
+  />{:else if record.kind === 'workloadTrial'}<WorkloadTrialView
+    trial={record.data}
+  />{:else if record.kind === 'trialComparison'}<TrialComparisonView
+    comparison={record.data}
+  />{:else if record.kind === 'recommendationPlan'}<RecommendationPlanView
+    {controller}
+    plan={record.data}
+  />{:else if record.kind === 'firmwareComparison'}<FirmwareComparisonView
+    comparison={record.data}
+  />{:else if record.kind === 'firmware'}<FirmwareReportView
     report={record.data}
   />{:else if record.kind === 'firmwarePlan'}<FirmwarePlanView
     {controller}
@@ -117,17 +139,7 @@
     <Evidence items={f.evidence} />{/each}<Evidence
     items={record.data.scenarios}
   />
-  <div class="source-links">
-    {#each record.data.sources as href}<a
-        {href}
-        onclick={(e) => {
-          e.preventDefault();
-          void controller.run(() => controller.service.reference(href));
-        }}
-        target="_blank"
-        rel="noreferrer">{href}</a
-      >{/each}
-  </div>
+  <AdviceContext report={record.data} {controller} />
 {:else if record.kind === 'resources'}<h2>
     Developer resources and organization
   </h2>
@@ -140,6 +152,7 @@
     <p>{f.explanation}</p>{/each}
 {:else if record.kind === 'duplicates'}<h2>Duplicate content report</h2>
   <Status value={record.data.status} />
+  <DuplicateContext report={record.data} />
   <p>
     {record.data.examined} of {record.data.total} files examined · {bytes(
       record.data.hashedBytes,

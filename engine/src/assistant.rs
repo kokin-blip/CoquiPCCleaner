@@ -2,6 +2,10 @@
 use crate::{database, model::*, records};
 use anyhow::Result;
 use rusqlite::Connection;
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
 pub fn ask(
     c: &Connection,
     id: Option<&str>,
@@ -15,7 +19,7 @@ pub fn ask(
     let mut i = if let Some(id) = id {
         records::get::<Investigation>(c, "investigation", id)?
     } else {
-        Investigation{id:uuid::Uuid::new_v4().to_string(),created_at:now(),title:text.chars().take(80).collect(),session_id:session_id.map(str::to_string),messages:vec![],tasks:vec![],findings:vec![],actions:vec![],status:"clarification".into(),qualification:"Local guided investigation, not a generative model. Answers use only retained scan/baseline observations and explicit rules. No data leaves this Mac. A saved observation is not a current measurement or confirmed cause.".into()}
+        Investigation{id:uuid::Uuid::new_v4().to_string(),created_at:now(),title:text.chars().take(80).collect(),session_id:session_id.map(str::to_string),baseline_id:None,messages:vec![],tasks:vec![],findings:vec![],actions:vec![],status:"clarification".into(),qualification:"Local guided investigation, not a generative model. Answers use retained observations and explicit rules. Fresh read-only tasks require your separate selection. No data leaves this Mac; no observation alone establishes a confirmed cause.".into()}
     };
     anyhow::ensure!(
         i.messages.len() < 100,
@@ -145,17 +149,24 @@ pub fn ask(
     .iter()
     .any(|w| t.contains(w))
     {
-        let baseline = records::latest::<Baseline>(c, "baseline")?;
+        let baseline = i
+            .baseline_id
+            .as_deref()
+            .map(|id| crate::baseline::get(c, id))
+            .transpose()?;
         let evidence = baseline
             .as_ref()
             .map(|b| b.summary.clone())
             .unwrap_or_default();
         i.tasks.push(DiagnosticTask {
             name: "ReviewWorkloadBaseline".into(),
-            status: if evidence.is_empty() {
-                "needsMeasurement"
-            } else {
+            status: if baseline
+                .as_ref()
+                .is_some_and(|b| b.status == "complete" && b.samples.len() >= 3)
+            {
                 "complete"
+            } else {
+                "needsMeasurement"
             }
             .into(),
             evidence,
@@ -190,5 +201,153 @@ pub fn ask(
         &i.title,
         &i,
     )?;
+    Ok(i)
+}
+
+/// The enum, not conversation text, selects one of three read-only engines.
+pub fn collect(
+    c: &Connection,
+    id: &str,
+    task: InvestigationCollection,
+    exclusions: &[PathBuf],
+    cancel: &AtomicBool,
+    mut emit: impl FnMut(Investigation) -> bool,
+) -> Result<Investigation> {
+    let mut i: Investigation = records::get(c, "investigation", id)?;
+    anyhow::ensure!(
+        i.messages.len() < 100,
+        "Start a new investigation after 50 exchanges or task reports"
+    );
+    anyhow::ensure!(
+        i.status != "running",
+        "This investigation already has an active task"
+    );
+    let session_id = i.session_id.clone().ok_or_else(|| {
+        anyhow::anyhow!("Select a saved scan before requesting diagnostic collection")
+    })?;
+    let s = database::session(c, &session_id)?;
+    anyhow::ensure!(
+        s.status != "running",
+        "Wait for the source analysis to finish"
+    );
+    let name = match &task {
+        InvestigationCollection::Baseline(_) => "MeasureWorkload",
+        InvestigationCollection::Developer => "RecheckDeveloperArtifacts",
+        InvestigationCollection::Resources => "ReviewResources",
+    };
+    i.tasks.retain(|t| {
+        t.name != name && !(name == "MeasureWorkload" && t.name == "ReviewWorkloadBaseline")
+    });
+    i.tasks.push(DiagnosticTask {
+        name: name.into(),
+        status: "running".into(),
+        evidence: vec![],
+        detail: "Starting the explicitly requested read-only task.".into(),
+    });
+    i.status = "running".into();
+    records::save(
+        c,
+        "investigation",
+        &i.id,
+        &i.created_at,
+        &i.status,
+        &i.title,
+        &i,
+    )?;
+    if !emit(i.clone()) {
+        cancel.store(true, Ordering::SeqCst);
+    }
+    let mut observed_status = "complete".to_string();
+    let result: Result<()> = if cancel.load(Ordering::SeqCst) {
+        Ok(())
+    } else {
+        (|| {
+            match task {
+                InvestigationCollection::Baseline(request) => {
+                    let b = crate::baseline::capture(c, request, cancel, |b| {
+                        let task = i.tasks.last_mut().unwrap();
+                        task.detail = format!(
+                            "{} actual samples recorded for {}. Expected result: {}",
+                            b.samples.len(),
+                            b.request.workload,
+                            b.request.target
+                        );
+                        emit(i.clone())
+                    })?;
+                    i.baseline_id = Some(b.id.clone());
+                    observed_status = b.status.clone();
+                    let task = i.tasks.last_mut().unwrap();
+                    task.evidence = b.summary;
+                    task.detail = format!(
+                        "Baseline {}: {}; {} samples; {}. Saved readings do not confirm a cause.",
+                        b.id,
+                        b.status,
+                        b.samples.len(),
+                        b.qualification
+                    );
+                    i.actions = vec!["Performance".into(), "System Analysis".into()];
+                }
+                InvestigationCollection::Developer => {
+                    let r = crate::developer::analyze(c, &session_id, exclusions, cancel, |r| {
+                        i.tasks.last_mut().unwrap().detail = format!(
+                            "{} indexed artifact candidates examined; {}",
+                            r.examined, r.status
+                        );
+                        emit(i.clone())
+                    })?;
+                    i.tasks.last_mut().unwrap().detail = format!(
+                        "{} artifacts; {}; {}. Review and removal remain separate.",
+                        r.artifacts.len(),
+                        r.status,
+                        r.qualification
+                    );
+                    observed_status = r.status;
+                    i.actions = vec!["Optimization".into()];
+                }
+                InvestigationCollection::Resources => {
+                    let r = crate::resources::analyze(c, &session_id, exclusions, cancel)?;
+                    let task = i.tasks.last_mut().unwrap();
+                    task.evidence = r.evidence;
+                    task.detail = r.qualification;
+                    i.findings = r.suggestions;
+                    i.actions = vec!["Optimization".into(), "Storage".into()];
+                }
+            }
+            Ok(())
+        })()
+    };
+    let state = if cancel.load(Ordering::SeqCst) {
+        "cancelled"
+    } else if result.is_err() {
+        "failed"
+    } else {
+        observed_status.as_str()
+    };
+    let task = i.tasks.last_mut().unwrap();
+    task.status = state.into();
+    if let Err(e) = result {
+        task.detail = format!("Read-only task failed: {e}");
+    }
+    i.status = if state == "complete" {
+        "evidenceReady"
+    } else {
+        state
+    }
+    .into();
+    i.messages.push(InvestigationMessage {
+        role: "assistant".into(),
+        created_at: now(),
+        text: format!("Requested read-only task {name}: {state}. {}", task.detail),
+    });
+    records::save(
+        c,
+        "investigation",
+        &i.id,
+        &i.created_at,
+        &i.status,
+        &i.title,
+        &i,
+    )?;
+    emit(i.clone());
     Ok(i)
 }

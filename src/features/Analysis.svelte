@@ -1,5 +1,6 @@
 <script lang="ts">
   import Advisor from './Advisor.svelte';
+  import Recommendations from './Recommendations.svelte';
   import { tabKeys } from '../keyboard';
   import {
     ShieldAlert,
@@ -21,6 +22,13 @@
     $props();
   let session = $derived($controller.session);
   let tab = $state('Overview');
+  $effect(() => {
+    const target = $controller.reviewTarget;
+    if (target === 'coverage' || target === 'workload') {
+      tab = target === 'workload' ? 'Workload & Upgrade' : 'Coverage';
+      controller.clearReviewTarget();
+    }
+  });
   function exportReport() {
     if (session && controller.service.exportReport)
       void controller.run(() => controller.service.exportReport!(session!.id));
@@ -29,7 +37,7 @@
 
 <div class="page-heading">
   <div>
-    <h1>System Analysis</h1>
+    <h1>Scan results</h1>
     <p class="muted">
       Observations, supporting evidence, and the limits of this scan.
     </p>
@@ -56,7 +64,7 @@
     onkeydown={tabKeys}
     aria-label="Analysis views"
   >
-    {#each ['Overview', 'Findings', 'Coverage', 'Report', 'Workload & Upgrade'] as name}<button
+    {#each ['Overview', 'Findings', 'Bottlenecks', 'Coverage', 'Report', 'Workload & Upgrade'] as name}<button
         role="tab"
         tabindex={tab === name ? 0 : -1}
         aria-selected={tab === name}
@@ -67,7 +75,10 @@
           : ''}</button
       >{/each}
   </div>
-  {#if tab === 'Workload & Upgrade'}<Advisor
+  {#if tab === 'Bottlenecks'}<Recommendations
+      {controller}
+      mode="bottlenecks"
+    />{:else if tab === 'Workload & Upgrade'}<Advisor
       {controller}
     />{:else if tab === 'Overview'}
     <section class="panel">
@@ -101,7 +112,9 @@
       <p class="muted small">
         Started {date(session.startedAt)} · {session.finishedAt
           ? `Finished ${date(session.finishedAt)}`
-          : 'Analysis in progress'}
+          : session.status === 'running'
+            ? 'Analysis in progress'
+            : 'Finish time not recorded'}
       </p>
     </section>
     <div class="callout">

@@ -1,0 +1,420 @@
+{
+  "target": {
+    "path": "/Applications/CleanMyMac_5_MAS.app",
+    "version": "5.2.4",
+    "build": "50204.0.2509040908",
+    "bundleIdentifier": "com.macpaw.CleanMyMac-mas",
+    "mainBinarySHA256": "edb21004c03dc589268bebde97afdcd6169c28d8a39812ee0657d27195f89cdb"
+  },
+  "evidence": {
+    "macho": "ev_afd334166eaed01f281669ab4515cd12229b7790320f3e0f047cabaf05f048dd",
+    "artifact": "ev_476a61dd1fe202d8d02bbb76b52791b34471211c50120dabe06f0c1755669c86",
+    "plist": "ev_8cc47f8a545b093bbe5fe96246bc7c1bf1a6ceb2ae5df433926892da701d310b",
+    "projection": "ev_0b866dac3105863f2e404d4355bb6567d45ad1e84dbbd3c1f17864879a3df19e",
+    "signature": "ev_61fc3a53a63e6e080327aa7b87287d3326a4e47098dce1fc845ae41eee760d1c"
+  },
+  "strings": {
+    "SmartCareModule": "ev_fc8fce87f21aae23034e17157ae37642f694f202958b97e00f6f33cd20f9a808",
+    "JunkCleanupModule": "ev_40e77aa8dfa6a256e770fd2942cda773ea149fd879f1d36918df50b6ebb9ac3e",
+    "PerformanceModule": "ev_c1f871a8bc76447c08b2d7c3de1e99a363e6013d895cdedb0f6ca1934deb34ed",
+    "ApplicationsModule": "ev_4818448ad234d98de945df1e10106c1ffcedfb844ba132d41160cfbec3398556",
+    "OrganizeModule": "ev_a314bf75b9e1ac88581bce869b52f72f1a05e4bccfdc6a94423fe1ec434206fc",
+    "AssistantModule": "ev_e6c36e53863a08710b69d63e8e05d6e8ea92c97fd9866a615e143d8b95bf9f7a"
+  },
+  "limitations": [
+    "Temporary official Ghidra 12.1.4 was configured for focused REA CLI analysis. Selected cache, download, startup and updater bodies are traced; action execution, exact knowledge-base rules and complete matching/validation remain unverified.",
+    "Packaged strings and framework paths are static evidence, not proof of enabled or executed behavior.",
+    "App Store distribution is the investigated target; other editions and paid feature activation were not examined.",
+    "Live review did not execute cleanup, update applications, change startup items, run maintenance, empty Trash or grant permissions."
+  ],
+  "nativeIdentities": [
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/DownloadsScanning.framework/Versions/A/DownloadsScanning",
+      "sourceSha256": "5810a99396dd4de64b4892312b9d52aa1a82c866d20e248f3ae46dfdfacc7e4f",
+      "derived": "/private/tmp/coqui-cmm-native/DownloadsScanning-arm64",
+      "derivedSha256": "d565652d28414f0707e5c58ad44be47788b8e4bb8aefeff145f5f2ea19c473ac",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/SystemJunkScanning.framework/Versions/A/SystemJunkScanning",
+      "sourceSha256": "c2a4a218630453b658341866f464d826165ccda00130c2bc073e657a96fe693d",
+      "derived": "/private/tmp/coqui-cmm-native/SystemJunkScanning-arm64",
+      "derivedSha256": "8faf8a03869ed3740272a62f2d65a963e974042935f044ca492a76957130b57b",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/PerformanceScanning.framework/Versions/A/PerformanceScanning",
+      "sourceSha256": "09df649ee19e3ece9a01f5e0dcd8157e91509ac4cd79c87c95b7ceb54858bdc0",
+      "derived": "/private/tmp/coqui-cmm-native/PerformanceScanning-arm64",
+      "derivedSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/UpdaterScanning.framework/Versions/A/UpdaterScanning",
+      "sourceSha256": "d5c06dcc1c84db3ece5851cdef98a2dec190e1172d0defa2747df49636614439",
+      "derived": "/private/tmp/coqui-cmm-native/UpdaterScanning-arm64",
+      "derivedSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/OrganizeScanning.framework/Versions/A/OrganizeScanning",
+      "sourceSha256": "3c806a5e805eb5078b959634673e6cd258b94c11b91df5eccd4de1aa4f9d7c03",
+      "derived": "/private/tmp/coqui-cmm-native/OrganizeScanning-arm64",
+      "derivedSha256": "86bcf9da38e788d4d6c0aed344e5b09418d25c1c50eef15ebd2dcc2fc665c57c",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/UninstallerScanning.framework/Versions/A/UninstallerScanning",
+      "sourceSha256": "6b6148000357c349a07ce99aec2b98f4941ccc3aad3dcb7c890bbb5956559795",
+      "derived": "/private/tmp/coqui-cmm-native/UninstallerScanning-arm64",
+      "derivedSha256": "5193e97f13d96ab78e7861f4b25175358b51498bf355acd770ecedbfae79a10c",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/ScanningCore.framework/Versions/A/ScanningCore",
+      "sourceSha256": "b0e96d8bd21b14e361e864fe1c254ad66372d12870b3224464e129f942971660",
+      "derived": "/private/tmp/coqui-cmm-native/ScanningCore-arm64",
+      "derivedSha256": "8480903b0b8ffd41602dcaba7f27f48326f1ac987832d687c6723e3c5ce806f1",
+      "operation": "lipo -thin arm64; original left unchanged"
+    },
+    {
+      "source": "/Applications/CleanMyMac_5_MAS.app/Contents/Frameworks/SmartCareModule.framework/Versions/A/SmartCareModule",
+      "sourceSha256": "cceee109f89214d4079ff7fb5abd5a1c4122b05cb3185c95daea26b13457a4be",
+      "derived": "/private/tmp/coqui-cmm-native/SmartCareModule-arm64",
+      "derivedSha256": "9db01c35986f59fcf6cba8d62cabb3640ce3aa602d72a2c8bc7d32e973d696ba",
+      "operation": "lipo -thin arm64; original left unchanged"
+    }
+  ],
+  "nativeEvidence": [
+    {
+      "path": "/private/tmp/coqui-cmm-downloads-procedures.json",
+      "evidenceId": "ev_591265eea580353ab9cd0d37e6c9d45e6169a8718175f82d99cd17361489c035",
+      "operation": "search_procedures",
+      "parameters": {
+        "pattern": "duplicate|scan|hash|download|size|date|group|keep",
+        "mode": "regex",
+        "case_sensitive": false
+      },
+      "subjectSha256": "d565652d28414f0707e5c58ad44be47788b8e4bb8aefeff145f5f2ea19c473ac",
+      "fileSha256": "444111c8622110b2508d12d60ac17ead7464a5b5cb972a8068fe410ff4625b8b",
+      "bytes": 43462,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-downloads-compare.json",
+      "evidenceId": "ev_05c1c590d1ae51404cb2d163fc42102907c71642e2b10255d20ed39a488ac355",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x4190"
+      },
+      "subjectSha256": "d565652d28414f0707e5c58ad44be47788b8e4bb8aefeff145f5f2ea19c473ac",
+      "fileSha256": "02d3e859fa807ed99699a56cb643fe869511f910b45869e6bee3ef0962517f60",
+      "bytes": 372062,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-downloads-predicate.json",
+      "evidenceId": "ev_b25a5ade6f2b8a3f747566479a82a07a3fcb43fb6ddb9a94d4d012c2e45712a4",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x4304"
+      },
+      "subjectSha256": "d565652d28414f0707e5c58ad44be47788b8e4bb8aefeff145f5f2ea19c473ac",
+      "fileSha256": "3e4e051f134b5c1f99e5605e18bbf761b62e0f56223567f25bec88151b7f5d2b",
+      "bytes": 58839,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-junk-procedures.json",
+      "evidenceId": "ev_e0625a80579e1066f99705edbff79c467bf54682c097b609e7f19382cbd6b41a",
+      "operation": "search_procedures",
+      "parameters": {
+        "pattern": "Cache|Logs|Xcode|scan|execute|Knowledge|Junk|factory",
+        "mode": "regex",
+        "case_sensitive": false
+      },
+      "subjectSha256": "8faf8a03869ed3740272a62f2d65a963e974042935f044ca492a76957130b57b",
+      "fileSha256": "95d183af7fb79b8f46538be17766b5e20e89c94ae497dcf99696b6706207233e",
+      "bytes": 161513,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-junk-cache.json",
+      "evidenceId": "ev_b013f005f7f54f8eab0a9d60ce2812788909917508574d5a403fb39a2b8af695",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x640c"
+      },
+      "subjectSha256": "8faf8a03869ed3740272a62f2d65a963e974042935f044ca492a76957130b57b",
+      "fileSha256": "ee01ba97f3aea7989fcf444a66d8c3ec0651edcbb61728121ce28f58cdaaa3e9",
+      "bytes": 556242,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-search.json",
+      "evidenceId": "ev_9b0e81bfe25c4bca9143f63426f42a17b1091550f0af3fb26e6530569bc99601",
+      "operation": "search_procedures",
+      "parameters": {
+        "pattern": "scan|login|background|maint|run|task",
+        "mode": "regex",
+        "case_sensitive": false
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "95e14945ee4d11100ff165baca8c1ad516bc2ff75a74b219c39f5e98e9b7c511",
+      "bytes": 16271,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-launchagents.json",
+      "evidenceId": "ev_5d3921678b27d62696ed6e9ba3dc693a45f156034ee88353711b569566dceb9e",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x3530"
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "f7def9e3a9663b7112c7a55fcb4ec28c9d2cfda70e382570c4f42cde3b52f3cf",
+      "bytes": 1947549,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-loginitems.json",
+      "evidenceId": "ev_a8e484ded4449fb21166c56b7540b9eb8181c6bc88a033fab7635ce3f264cb5b",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x45d4"
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "508b2ddfe4fa994716497e82af8e89fdf61d57722ccccf21c4c0506e5ec3c7c6",
+      "bytes": 356193,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-maintenance.json",
+      "evidenceId": "ev_32ab073d2b26cc9d7074418cd16e283a7be494b51cf2cddf53d8a09a8fdee363",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x1e10"
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "082fd71a5f73db57b3988029feb28ed4f9b77ed4b59c28c2c5b962929f245b4a",
+      "bytes": 82295,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-launchagent-map.json",
+      "evidenceId": "ev_76b26597a0df767f407a2e524e9df3a8d804adf8979a4fed9e2ccb1771f7a544",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x3d7c"
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "d28f5da52911465bc9afba9591d3fde96bab91f5b07188c2cd0822e59b600316",
+      "bytes": 628806,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-ram-factory.json",
+      "evidenceId": "ev_7faf68ac1cc9d779fa1e1782fbcb24a7869bd6c66a289177dae74e8ad11b69a7",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x2208"
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "54faf326977b1ab253e0865d336ec1f985bc0dcd0aea830ba72607d199a726db",
+      "bytes": 32600,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-perf-factory-gate.json",
+      "evidenceId": "ev_5e7eecc6ca40e793e66ea110189779a5ae4cd2d8c938b4f0e0bdd8c3b1609448",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x23c8"
+      },
+      "subjectSha256": "4549aca44dcf7c1dbdc87763b0c006019d42dc5afc9b3a827c52ed9b1c6a8630",
+      "fileSha256": "7124c111cb5494c8d450eb6c6b3afad7f183b499e2bc8e470b7624b61fe04e97",
+      "bytes": 167837,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-updater-search.json",
+      "evidenceId": "ev_125fb6f4890a3546c187420a3c03dd862bcabace70dc4bb8bbfb9ba183b1ae81",
+      "operation": "search_procedures",
+      "parameters": {
+        "pattern": "scan|update|app|valid|version|fetch|download",
+        "mode": "regex",
+        "case_sensitive": false
+      },
+      "subjectSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "fileSha256": "64413d95f2804b9196b9528c418a296a35e2704571c04978a5f58dd17a384dea",
+      "bytes": 15391,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-updater-execute.json",
+      "evidenceId": "ev_4be368aae9c9906f0f1dc1dc7be6649a9c10e0cdad298e3dad7ba38b5d1e24bb",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x8130"
+      },
+      "subjectSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "fileSha256": "c92669ecd743cb040773ca1eb9e893e36bc7b22ccb4def7a7fb1685ee7a8f2c6",
+      "bytes": 1699403,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-updater-factory.json",
+      "evidenceId": "ev_23ea851fd682dc52fac05af47fdcb03e683742420b559bcb8e48bd87eaf3c2b5",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x3450"
+      },
+      "subjectSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "fileSha256": "f72a54737749d69ef22cce66526f00a171c695d32248672adab92c313cd7f194",
+      "bytes": 759731,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-updater-match.json",
+      "evidenceId": "ev_435b14de93ae0fa428fd3f5b236a4b4ff514f389668b239b40c5ce5cb22a32bc",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x9978"
+      },
+      "subjectSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "fileSha256": "a5705c69687a7cd3718eee5748c56c8ac4faa144995dcf338cd1fc6894755a19",
+      "bytes": 1080117,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-updater-models.json",
+      "evidenceId": "ev_d952749f32e0289d8fae8c9afea019d6d7d0e49b20e42a3c2083ee210b13982b",
+      "operation": "analyze_function",
+      "parameters": {
+        "procedure": "0x9d28"
+      },
+      "subjectSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "fileSha256": "0362cf0b0d370e3176a3e9a26ae9ea7b62ee86e3233e07c00f487d6ba64ec912",
+      "bytes": 277885,
+      "completeJson": true
+    },
+    {
+      "path": "/private/tmp/coqui-cmm-updater-dispatch.json",
+      "evidenceId": "ev_bd406dda32851079e12409e51ce149a07b8c43800536a30aa8f30f60a053b917",
+      "operation": "inspect_native_dispatch_metadata",
+      "parameters": {
+        "max_records": 5000
+      },
+      "subjectSha256": "6469bf290a72d818b07513d23bc32c84839f070bf6d45fe0701bb6a04fb03e4f",
+      "fileSha256": "b753acdc636e7a50eb4620b1937bab4dac6525df7f77b10d1d8a2d0b9625b1b7",
+      "bytes": 164864,
+      "completeJson": true
+    }
+  ],
+  "nativePerformanceUpdaterFindings": [
+    {
+      "key": "launchAgentScan",
+      "statement": "Consumes injected scan locations, enumerates with FileManager options argument 1, collects plist-extension entries, checks pause/cancel and maps them. Mapping applies an injected ignore predicate, asks startupApplicationPathFor:accurate:, then builds models and increments progress.",
+      "evidenceIds": [
+        "ev_5d3921678b27d62696ed6e9ba3dc693a45f156034ee88353711b569566dceb9e",
+        "ev_76b26597a0df767f407a2e524e9df3a8d804adf8979a4fed9e2ccb1771f7a544"
+      ],
+      "addresses": [
+        "0x3530",
+        "0x3d7c"
+      ]
+    },
+    {
+      "key": "legacyLoginItemScan",
+      "statement": "Calls injected manager validLoginItemsList, derives total progress, checks pause/cancel and maps listed entries through helper 0x47d4. The manager implementation was not followed.",
+      "evidenceIds": [
+        "ev_a8e484ded4449fb21166c56b7540b9eb8181c6bc88a033fab7635ce3f264cb5b"
+      ],
+      "addresses": [
+        "0x45d4",
+        "0x47d4"
+      ]
+    },
+    {
+      "key": "maintenanceScanBoundary",
+      "statement": "Generic execute sets total work to one, delegates through an injected model-factory/protocol witness, then completes one work unit. RAM factory returns a generic MaintenanceScanTask<FreeUpRAMTaskModel>? through construction helper 0x23c8; the recovered generic construction body has no eligibility branch. This establishes a constructible scan/model path, not an executed maintenance action.",
+      "evidenceIds": [
+        "ev_32ab073d2b26cc9d7074418cd16e283a7be494b51cf2cddf53d8a09a8fdee363",
+        "ev_7faf68ac1cc9d779fa1e1782fbcb24a7869bd6c66a289177dae74e8ad11b69a7",
+        "ev_5e7eecc6ca40e793e66ea110189779a5ae4cd2d8c938b4f0e0bdd8c3b1609448"
+      ],
+      "addresses": [
+        "0x1e10",
+        "0x2208",
+        "0x23c8"
+      ]
+    },
+    {
+      "key": "maintenanceNameInventory",
+      "statement": "Procedure inventory has factories named FreeUpRAM, PeriodicScripts, FlushDNSCache, SpeedUpMail, RepairDiskPermissions, ReindexSpotlight, ThinLocalSnapshots and FreeUpPurgeableSpace. Except the RAM factory/generic construction path, these were not individually decompiled; names do not establish enabled features.",
+      "evidenceIds": [
+        "ev_9b0e81bfe25c4bca9143f63426f42a17b1091550f0af3fb26e6530569bc99601"
+      ],
+      "addresses": []
+    },
+    {
+      "key": "updaterSourceSelection",
+      "statement": "Factory has two option-bit branches controlling candidate-provider inclusion and constructs the app-update scan using metadata, providers and an injected network service. One provider construction reads NSProcessInfo operatingSystemVersion. Static metadata declares MASApplicationsDataSource and SparkleApplicationsDataSource conformances, without proving they are selected by a live module.",
+      "evidenceIds": [
+        "ev_23ea851fd682dc52fac05af47fdcb03e683742420b559bcb8e48bd87eaf3c2b5",
+        "ev_bd406dda32851079e12409e51ce149a07b8c43800536a30aa8f30f60a053b917"
+      ],
+      "addresses": [
+        "0x3450"
+      ]
+    },
+    {
+      "key": "appUpdateScan",
+      "statement": "Collects arrays from injected candidate providers, combines/filters via 0x7ef8, checks pause/cancel, invokes an injected update-network service, handles failed result by throwing, and progresses through candidate/response processing. It builds a local dictionary using bundleID plus appstore or sparkle source strings.",
+      "evidenceIds": [
+        "ev_4be368aae9c9906f0f1dc1dc7be6649a9c10e0cdad298e3dad7ba38b5d1e24bb"
+      ],
+      "addresses": [
+        "0x8130",
+        "0x7ef8"
+      ]
+    },
+    {
+      "key": "updateResponseCorrelation",
+      "statement": "For each received result, looks up the local-candidate dictionary by result identifier plus source. Missing matches become nil and are omitted. Matched records go to model construction. A final injected predicate filters reconciled models; exact predicate implementation is untraced.",
+      "evidenceIds": [
+        "ev_435b14de93ae0fa428fd3f5b236a4b4ff514f389668b239b40c5ce5cb22a32bc",
+        "ev_d952749f32e0289d8fae8c9afea019d6d7d0e49b20e42a3c2083ee210b13982b"
+      ],
+      "addresses": [
+        "0x9978",
+        "0x2e98",
+        "0x9d28"
+      ]
+    },
+    {
+      "key": "validatorMetadataLimit",
+      "statement": "Static metadata observes SparkleAppValidator class/conformance but returns zero/unresolved implementation addresses for its recovered vtable/witness slot. Pointer-fixup and Swift-witness coverage is partial. No validator function body was selected or analyzed, and no signature/authenticity validation claim is made.",
+      "evidenceIds": [
+        "ev_bd406dda32851079e12409e51ce149a07b8c43800536a30aa8f30f60a053b917"
+      ],
+      "addresses": []
+    }
+  ],
+  "nativeUnknowns": [
+    "Runtime module/UI selection, feature entitlement/gating and actual action execution in this MAS build",
+    "Exact injected Performance scan roots, ignore knowledge bases, underlying legacy-login/launchd-manager behavior and modern managed-login-item completeness",
+    "App candidate validation/provider bodies; SparkleAppValidator could not be resolved by this bounded dispatch read",
+    "Exact update request serialization, catalog endpoints, authentication, trust/freshness and catalog completeness in external AppInfoNetworkService implementations",
+    "App-specific version semantics, canBeUpdatedProgrammatically logic, installer/download/signature verification, authorization and post-install validation",
+    "SystemUpdateScanTask identified but not decompiled in this pass",
+    "Actual performance improvement, reclaimed memory/storage, measured runtime state, successful installation/cancellation/restart"
+  ],
+  "analysisEngine": {
+    "provider": "Ghidra 12.1.4",
+    "reaVersion": "6.4.0",
+    "distribution": "https://github.com/NationalSecurityAgency/ghidra/releases/tag/Ghidra_12.1.4_build",
+    "archiveSha256": "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db",
+    "scope": "Per-process temporary configuration; original app unchanged; no global registration or system toolchain replacement."
+  }
+}

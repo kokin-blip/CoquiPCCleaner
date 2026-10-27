@@ -38,7 +38,7 @@ pub fn list(
     kind: Option<&str>,
     offset: u32,
 ) -> Result<Vec<crate::model::ActivityRecord>> {
-    let mut q=c.prepare("SELECT id,kind,created_at,title,status FROM records WHERE (?1 IS NULL OR kind=?1) ORDER BY created_at DESC LIMIT 50 OFFSET ?2")?;
+    let mut q=c.prepare("SELECT id,kind,created_at,title,status FROM records WHERE kind!='appUpdatePlan' AND (?1 IS NULL OR kind=?1) ORDER BY created_at DESC LIMIT 50 OFFSET ?2")?;
     let rows = q.query_map(params![kind, offset], |r| {
         Ok(crate::model::ActivityRecord {
             id: r.get(0)?,

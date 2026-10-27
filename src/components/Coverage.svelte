@@ -10,6 +10,7 @@
     error = $state(''),
     loading = $state(false),
     revision = $state(0);
+  let reason = $state('');
   const labels: Record<string, string> = {
     notStarted: 'Not started',
     running: 'Traversing',
@@ -33,12 +34,13 @@
   $effect(() => {
     const key = id;
     const page = offset;
+    const filter = reason;
     void revision;
     let alive = true;
     loading = true;
     error = '';
     controller.service
-      .coverage(key, page)
+      .coverage(key, page, filter || undefined)
       .then((r) => {
         if (alive) rows = r;
       })
@@ -91,6 +93,11 @@
   {#if error}<p class="inline-error" role="alert">
       {error}
     </p>{/if}{#if loading}<p role="status">Loading coverage records…</p>{/if}
+  <label class="inline-wrap">Show omissions
+    <select aria-label="Coverage reason" value={reason} onchange={(e) => { reason = e.currentTarget.value; offset = 0; }}>
+      <option value="">All reasons</option><option value="permissionDenied">Permission denials only</option>
+    </select>
+  </label>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Root</th><th>Exact path</th><th>Reason</th></tr></thead
@@ -98,7 +105,7 @@
         >{#each rows as row}<tr
             ><td class="path">{row.root}</td><td class="path selectable"
               >{row.path}</td
-            ><td>{label(row.reason)}</td></tr
+            ><td>{label(row.reason)}{#if row.guidance}<details><summary>Access guidance</summary><p class="muted small">{row.guidance}</p></details>{/if}</td></tr
           >{/each}</tbody
       >
     </table>

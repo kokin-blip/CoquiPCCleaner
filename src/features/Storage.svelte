@@ -24,6 +24,7 @@
   import RemovalReview from '../components/RemovalReview.svelte';
   import RemovalHistory from '../components/RemovalHistory.svelte';
   import Coverage from '../components/Coverage.svelte';
+  import DevelopmentIndicators from '../components/DevelopmentIndicators.svelte';
   import type { RemovalRequest } from '../bindings/RemovalRequest';
   let {
     controller,
@@ -31,6 +32,17 @@
   }: { controller: ReturnType<typeof createAppStore>; onScan: () => void } =
     $props();
   let tab = $state('Explorer');
+  $effect(() => {
+    if ($controller.reviewTarget === 'largeFiles') {
+      tab = 'Large files';
+      category = '';
+      search = '';
+      sort = 'allocated';
+      descending = true;
+      offset = 0;
+      controller.clearReviewTarget();
+    }
+  });
   let metric = $state<'allocated' | 'logical'>('allocated');
   let map = $state<StorageMap | null>(null);
   let mapLoading = $state(false);
@@ -540,6 +552,9 @@
                             >
                           </span>
                         {/if}
+                        <DevelopmentIndicators
+                          indicators={detail?.development}
+                        />
                       </td>
                       <td class="numeric"
                         >{totalsUnavailable(row)
@@ -758,6 +773,7 @@
     {#if stats.get(selected.path)}
       {@const detail = stats.get(selected.path)!}
       <h3>{detail.title}</h3>
+      <DevelopmentIndicators indicators={detail.development} />
       <p>{detail.reason}</p>
       <p class="muted">{detail.consequences}</p>
       {#if detail.fileCount !== null}<p class="muted small">

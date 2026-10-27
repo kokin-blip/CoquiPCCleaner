@@ -128,4 +128,7 @@ PYCOMP
 fi
 python3 scripts/verify-administrator-package.py
 if [ "${1:-}" = '--with-fixtures' ]; then python3 scripts/verify-administrator-package.py "$output/CoquiPCCleaner-$version-administrator-validation-arm64.pkg"; fi
-/usr/bin/shasum -a 256 "$output"/*.pkg "$output"/*.zip > "$output/SHA256SUMS"
+(
+  cd "$output"
+  /usr/bin/shasum -a 256 ./*.pkg ./*.zip > SHA256SUMS
+)

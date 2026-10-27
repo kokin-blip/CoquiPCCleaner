@@ -11,6 +11,7 @@
   import { bytes, date } from '../format';
   import RemovalReview from '../components/RemovalReview.svelte';
   import RemovalHistory from '../components/RemovalHistory.svelte';
+  import AppUpdates from './AppUpdates.svelte';
   let { controller }: { controller: ReturnType<typeof createAppStore> } =
     $props();
   let tab = $state('Installed Apps'),
@@ -18,6 +19,12 @@
     sort = $state('name'),
     offset = $state(0),
     revision = $state(0);
+  $effect(() => {
+    if ($controller.reviewTarget === 'updates') {
+      tab = 'Updates';
+      controller.clearReviewTarget();
+    }
+  });
   let rows = $state<ApplicationFootprint[]>([]),
     total = $state(0),
     qualification = $state(''),
@@ -26,7 +33,7 @@
   let selected = $state<ApplicationFootprint | null>(null),
     paths = $state<string[]>([]),
     request = $state<RemovalRequest | null>(null);
-  let chooseButton: HTMLButtonElement;
+  let chooseButton = $state<HTMLButtonElement>();
   let inspectionHeading = $state<HTMLHeadingElement>();
   let returnTab = 'Installed Apps';
   let returnControl: HTMLElement | null = null;
@@ -51,7 +58,6 @@
     }
   }
   onMount(() => {
-    void refreshInventory();
     void controller.service
       .applicationPreferences()
       .then((p) => (prefs = p))
@@ -118,7 +124,7 @@
   let visible = $derived(rows);
   async function inspect(
     path: string,
-    origin: HTMLElement = chooseButton,
+    origin: HTMLElement | null = chooseButton ?? null,
     administrator = false,
   ) {
     error = '';
@@ -145,7 +151,7 @@
       error = String(e);
     }
   }
-  async function choose(origin: HTMLElement = chooseButton) {
+  async function choose(origin: HTMLElement | null = chooseButton ?? null) {
     const path = await controller.service.selectApplication();
     if (path) await inspect(path, origin);
   }
@@ -187,18 +193,20 @@
   <div>
     <h1>Applications</h1>
     <p class="muted">
-      Inspect a bundle and review its associated data separately.
+      {tab === 'Updates'
+        ? 'Review offered versions, then update through the vendor.'
+        : 'Inspect a bundle and review its associated data separately.'}
     </p>
   </div>
-  <button
-    bind:this={chooseButton}
-    onclick={(e) => {
-      const origin = e.currentTarget;
-      void controller.run(() => choose(origin));
-    }}
-    disabled={$controller.workRunning || $controller.scanning}
-    ><FolderOpen size={16} />Choose application…</button
-  >
+  {#if tab !== 'Updates'}<button
+      bind:this={chooseButton}
+      onclick={(e) => {
+        const origin = e.currentTarget;
+        void controller.run(() => choose(origin));
+      }}
+      disabled={$controller.workRunning || $controller.scanning}
+      ><FolderOpen size={16} />Choose application…</button
+    >{/if}
 </div>
 <div
   class="tabs"
@@ -207,7 +215,7 @@
   aria-label="Application views"
   onkeydown={tabKeys}
 >
-  {#each ['Installed Apps', 'Leftovers', 'Protected Apps', 'Removal records'] as name}<button
+  {#each ['Installed Apps', 'Updates', 'Leftovers', 'Protected Apps', 'Removal records'] as name}<button
       role="tab"
       aria-selected={tab === name}
       tabindex={tab === name ? 0 : -1}
@@ -223,7 +231,8 @@
 {#if error}<div class="inline-error" role="alert">
     {error}<button onclick={() => revision++}>Retry inventory</button>
   </div>{/if}
-{#if tab === 'Removal records' && !selected}<RemovalHistory {controller} />
+{#if tab === 'Updates' && !selected}<AppUpdates {controller} />
+{:else if tab === 'Removal records' && !selected}<RemovalHistory {controller} />
 {:else if tab === 'Leftovers' && !selected}<section class="panel">
     <h2>Review associated files</h2>
     <p>

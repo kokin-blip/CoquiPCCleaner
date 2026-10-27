@@ -10,6 +10,412 @@ use std::{
 };
 use sysinfo::{Disks, System};
 
+/// Optional application-update transport. It never follows redirects or obtains
+/// credentials, downloads packages, or launches returned source content.
+#[cfg(target_os = "macos")]
+pub(crate) fn fetch_app_update(
+    target: &crate::app_updates::FetchTarget,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> crate::app_updates::FetchResult {
+    use crate::app_updates::{public_address, FetchFailure, FetchResponse, MAX_RESPONSE_BYTES};
+    use std::{net::IpAddr, sync::atomic::Ordering};
+    let deadline = Instant::now() + Duration::from_secs(15);
+    // Pinning a destination cannot safely delegate DNS to a configured proxy.
+    // Preserve that policy by withholding this direct checker, never bypassing it.
+    if [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ]
+    .iter()
+    .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
+    {
+        return Err(FetchFailure::Unavailable);
+    }
+    let proxies = update_read_command(
+        "/usr/sbin/scutil",
+        &["--proxy".into()],
+        64 * 1024,
+        (Instant::now() + Duration::from_secs(3)).min(deadline),
+        cancel,
+    )?;
+    if !update_proxy_configuration_clear(&proxies) {
+        return Err(FetchFailure::Unavailable);
+    }
+    let resolved = update_read_command(
+        "/usr/bin/dscacheutil",
+        &[
+            "-q".into(),
+            "host".into(),
+            "-a".into(),
+            "name".into(),
+            target.host().into(),
+        ],
+        64 * 1024,
+        (Instant::now() + Duration::from_secs(5)).min(deadline),
+        cancel,
+    )?;
+    let resolved = std::str::from_utf8(&resolved).map_err(|_| FetchFailure::Unavailable)?;
+    let mut addresses = Vec::new();
+    for line in resolved.lines() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        if key.trim() == "ip_address" || key.trim() == "ipv6_address" {
+            let address: IpAddr = value
+                .trim()
+                .parse()
+                .map_err(|_| FetchFailure::Unavailable)?;
+            if !public_address(address) {
+                return Err(FetchFailure::Unavailable);
+            }
+            if !addresses.contains(&address) {
+                addresses.push(address);
+            }
+        }
+    }
+    if cancel.load(Ordering::SeqCst) {
+        return Err(FetchFailure::Cancelled);
+    }
+    // Keep the complete validated set in one pinned DNS entry. Selecting only
+    // the first IPv6 address prevents curl's normal IPv4/IPv6 fallback when that
+    // family is unreachable, even though DNS supplied a reachable public peer.
+    let pin = update_resolve_pin(target.host(), &addresses)?;
+    let remaining = deadline
+        .saturating_duration_since(Instant::now())
+        .as_secs_f64();
+    if remaining <= 0. {
+        return Err(FetchFailure::Unavailable);
+    }
+    let args = vec![
+        "-q".into(),
+        "--silent".into(),
+        "--show-error".into(),
+        "--proto".into(),
+        "=https".into(),
+        "--proto-redir".into(),
+        "=https".into(),
+        "--max-redirs".into(),
+        "0".into(),
+        "--connect-timeout".into(),
+        "5".into(),
+        "--max-time".into(),
+        format!("{remaining:.3}"),
+        "--max-filesize".into(),
+        MAX_RESPONSE_BYTES.to_string(),
+        "--resolve".into(),
+        pin,
+        "--request".into(),
+        "GET".into(),
+        "--user-agent".into(),
+        "CoquiPCCleaner".into(),
+        "--write-out".into(),
+        "\n%{http_code}".into(),
+        "--url".into(),
+        target.url().into(),
+    ];
+    let output = update_read_command(
+        "/usr/bin/curl",
+        &args,
+        MAX_RESPONSE_BYTES + 4,
+        deadline,
+        cancel,
+    )?;
+    let split = output
+        .len()
+        .checked_sub(4)
+        .ok_or(FetchFailure::Unavailable)?;
+    if output[split] != b'\n' {
+        return Err(FetchFailure::Unavailable);
+    }
+    let status = std::str::from_utf8(&output[split + 1..])
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .ok_or(FetchFailure::Unavailable)?;
+    Ok(FetchResponse {
+        status,
+        body: output[..split].to_vec(),
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn update_resolve_pin(
+    host: &str,
+    addresses: &[std::net::IpAddr],
+) -> std::result::Result<String, crate::app_updates::FetchFailure> {
+    use crate::app_updates::{public_address, FetchFailure};
+    use std::net::IpAddr;
+    if addresses.is_empty() || addresses.iter().any(|address| !public_address(*address)) {
+        return Err(FetchFailure::Unavailable);
+    }
+    let peers = addresses
+        .iter()
+        .map(|address| match address {
+            IpAddr::V4(ip) => ip.to_string(),
+            IpAddr::V6(ip) => format!("[{ip}]"),
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    Ok(format!("{host}:443:{peers}"))
+}
+
+#[cfg(target_os = "macos")]
+fn update_proxy_configuration_clear(bytes: &[u8]) -> bool {
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let lines = source
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    if lines.first() != Some(&"<dictionary> {") || lines.last() != Some(&"}") {
+        return false;
+    }
+    let mut in_exceptions = false;
+    for line in &lines[1..lines.len() - 1] {
+        if *line == "ExceptionsList : <array> {" && !in_exceptions {
+            in_exceptions = true;
+            continue;
+        }
+        if *line == "}" && in_exceptions {
+            in_exceptions = false;
+            continue;
+        }
+        let Some((key, value)) = line.split_once(" : ") else {
+            return false;
+        };
+        if in_exceptions {
+            if key.parse::<u32>().is_err() || value.is_empty() || value.contains(['{', '}']) {
+                return false;
+            }
+            continue;
+        }
+        match key {
+            "HTTPEnable"
+            | "HTTPSEnable"
+            | "SOCKSEnable"
+            | "FTPEnable"
+            | "ProxyAutoConfigEnable"
+            | "ProxyAutoDiscoveryEnable" => {
+                if value != "0" {
+                    return false;
+                }
+            }
+            "FTPPassive" | "ExcludeSimpleHostnames" => {
+                if value != "0" && value != "1" {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    !in_exceptions
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod update_transport_tests {
+    use super::*;
+    #[test]
+    fn proxy_policy_is_never_bypassed_and_unknown_outputs_fail_closed() {
+        assert!(update_proxy_configuration_clear(b"<dictionary> {\n  ExceptionsList : <array> {\n    0 : *.local\n    1 : 169.254/16\n  }\n  FTPPassive : 1\n}"));
+        assert!(update_proxy_configuration_clear(
+            b"<dictionary> {\nHTTPSEnable : 0\n}"
+        ));
+        for field in [
+            "HTTPEnable",
+            "HTTPSEnable",
+            "SOCKSEnable",
+            "ProxyAutoConfigEnable",
+            "ProxyAutoDiscoveryEnable",
+        ] {
+            assert!(!update_proxy_configuration_clear(
+                format!("<dictionary> {{\n{field} : 1\n}}").as_bytes()
+            ));
+        }
+        for output in [
+            b"".as_slice(),
+            b"unexpected",
+            b"<dictionary> {\nHTTPProxy : secret.internal\n}",
+            b"<dictionary> {\n__SCOPED__ : <dictionary> {\n}\n}",
+            b"<dictionary> {\nHTTPSEnable : perhaps\n}",
+        ] {
+            assert!(!update_proxy_configuration_clear(output));
+        }
+    }
+    #[test]
+    fn complete_public_dns_set_preserves_dual_stack_fallback_without_unpinning() {
+        let peers = [
+            "2600:1406:5e00:39d::2a1".parse().unwrap(),
+            "2600:1406:5e00:384::2a1".parse().unwrap(),
+            "23.61.212.30".parse().unwrap(),
+        ];
+        assert_eq!(
+            update_resolve_pin("itunes.apple.com", &peers).unwrap(),
+            "itunes.apple.com:443:[2600:1406:5e00:39d::2a1],[2600:1406:5e00:384::2a1],23.61.212.30"
+        );
+        assert!(update_resolve_pin("itunes.apple.com", &[]).is_err());
+        let mixed = [
+            "23.61.212.30".parse().unwrap(),
+            "127.0.0.1".parse().unwrap(),
+        ];
+        assert!(update_resolve_pin("itunes.apple.com", &mixed).is_err());
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn fetch_app_update(
+    _: &crate::app_updates::FetchTarget,
+    _: &std::sync::atomic::AtomicBool,
+) -> crate::app_updates::FetchResult {
+    Err(crate::app_updates::FetchFailure::Unavailable)
+}
+
+#[cfg(target_os = "macos")]
+fn update_read_command(
+    program: &str,
+    args: &[String],
+    limit: usize,
+    deadline: Instant,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> std::result::Result<Vec<u8>, crate::app_updates::FetchFailure> {
+    use crate::app_updates::FetchFailure;
+    use std::{os::fd::AsRawFd, sync::atomic::Ordering};
+    if cancel.load(Ordering::SeqCst) {
+        return Err(FetchFailure::Cancelled);
+    }
+    if ![
+        "/usr/bin/curl",
+        "/usr/bin/dscacheutil",
+        "/usr/sbin/scutil",
+        "/usr/sbin/system_profiler",
+    ]
+    .contains(&program)
+        || Instant::now() >= deadline
+    {
+        return Err(FetchFailure::Unavailable);
+    }
+    let mut child = Command::new(program)
+        .args(args)
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| FetchFailure::Unavailable)?;
+    let Some(mut output) = child.stdout.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(FetchFailure::Unavailable);
+    };
+    let fd = output.as_raw_fd();
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(FetchFailure::Unavailable);
+    }
+    let mut bytes = Vec::new();
+    let result = loop {
+        if cancel.load(Ordering::SeqCst) {
+            break Err(FetchFailure::Cancelled);
+        }
+        if Instant::now() >= deadline {
+            break Err(FetchFailure::Unavailable);
+        }
+        let drain =
+            |output: &mut dyn Read, bytes: &mut Vec<u8>| -> std::result::Result<(), FetchFailure> {
+                let mut buffer = [0u8; 8192];
+                for _ in 0..16 {
+                    match output.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            bytes.extend_from_slice(&buffer[..n]);
+                            if bytes.len() > limit {
+                                return Err(FetchFailure::Unavailable);
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(_) => return Err(FetchFailure::Unavailable),
+                    }
+                }
+                Ok(())
+            };
+        if let Err(error) = drain(&mut output, &mut bytes) {
+            break Err(error);
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if let Err(error) = drain(&mut output, &mut bytes) {
+                    break Err(error);
+                }
+                break if status.success() {
+                    Ok(bytes)
+                } else {
+                    Err(FetchFailure::Unavailable)
+                };
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(_) => break Err(FetchFailure::Unavailable),
+        }
+    };
+    if result.is_err() {
+        let _ = child.kill();
+    }
+    let _ = child.wait();
+    result
+}
+
+pub(crate) fn open_app_update_handoff(handoff: crate::app_updates::Handoff) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("/usr/bin/open");
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        match handoff {
+            crate::app_updates::Handoff::AppStore => {
+                command.arg("macappstore://showUpdatesPage");
+            }
+            crate::app_updates::Handoff::VendorApplication(path) => {
+                command.arg("-a").arg(path);
+            }
+        }
+        anyhow::ensure!(
+            command.status()?.success(),
+            "Native update handoff was unavailable"
+        );
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = handoff;
+        anyhow::bail!("Native application-update handoff requires macOS")
+    }
+}
+
+/// Space available to this process on the filesystem that will hold scan metadata.
+pub(crate) fn available_storage(path: &Path) -> Result<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes())?;
+    let mut stats: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(path.as_ptr(), &mut stats) } != 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    (stats.f_bavail as u64)
+        .checked_mul(stats.f_frsize as u64)
+        .filter(|_| stats.f_frsize > 0)
+        .context("Available scan storage could not be measured")
+}
+
 pub fn home() -> Result<PathBuf> {
     std::env::var_os("HOME")
         .map(PathBuf::from)
@@ -84,6 +490,84 @@ pub fn startup_from_plist(path: &Path, value: &plist::Value) -> Option<StartupIt
     let label = d.get("Label").and_then(plist::Value::as_string)?;
     let disabled = d.get("Disabled").and_then(plist::Value::as_boolean);
     Some(StartupItem {name:label.into(),path:path.to_string_lossy().into_owned(),mechanism:if path.to_string_lossy().contains("LaunchDaemons") {"LaunchDaemon"}else{"LaunchAgent"}.into(),state:if disabled==Some(true){"Disabled in plist; runtime override unknown"}else{"Configured; runtime enabled state unknown"}.into(),explanation:"Configuration detected on disk. This does not establish launchd runtime state, startup timing, or all modern login items.".into()})
+}
+
+/// Bounded, cancellable system-only observation for the explicit scan workflow.
+/// Startup/app metadata are separately selected checks, never implicit here.
+pub fn scan_system(cancel: &std::sync::atomic::AtomicBool) -> Result<MachineSnapshot> {
+    use std::sync::atomic::Ordering;
+    anyhow::ensure!(!cancel.load(Ordering::SeqCst), "System check cancelled");
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu_list(sysinfo::CpuRefreshKind::everything());
+    anyhow::ensure!(
+        sys.total_memory() > 0 && !sys.cpus().is_empty(),
+        "Basic system inventory unavailable"
+    );
+    let mut model = System::name().unwrap_or_else(|| "Unavailable".into());
+    let mut gpu = "Unavailable".to_owned();
+    let mut capabilities = vec![];
+    #[cfg(target_os = "macos")]
+    {
+        let output = update_read_command(
+            "/usr/sbin/system_profiler",
+            &[
+                "-json".into(),
+                "-detailLevel".into(),
+                "mini".into(),
+                "SPHardwareDataType".into(),
+                "SPDisplaysDataType".into(),
+            ],
+            4 * 1024 * 1024,
+            Instant::now() + Duration::from_secs(12),
+            cancel,
+        );
+        match output.ok().and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()) {
+            Some(value) => {
+                if let Some(value) = json_string(&value, &["machine_model"]) { model = value; }
+                if let Some(display) = value.get("SPDisplaysDataType") { gpu = json_string(display, &["sppci_model", "_name"]).unwrap_or(gpu); }
+            }
+            None => capabilities.push(SystemCapability { name: "Extended inventory".into(), state: CapabilityState::TemporarilyUnavailable, explanation: "The bounded hardware report was unavailable, timed out or cancelled. Basic observed fields remain available.".into() }),
+        }
+    }
+    anyhow::ensure!(!cancel.load(Ordering::SeqCst), "System check cancelled");
+    capabilities.push(SystemCapability { name: "Scan check scope".into(), state: CapabilityState::ManualOnly, explanation: "System details only. Startup and application metadata have separate recorded check states. Firmware/security audits, sensor readings and network updates are separate tools.".into() });
+    Ok(MachineSnapshot {
+        observed_at: now(),
+        device_name: System::host_name().unwrap_or_else(|| "This computer".into()),
+        model,
+        os_version: System::long_os_version().unwrap_or_else(|| "Unavailable".into()),
+        architecture: std::env::consts::ARCH.into(),
+        cpu: sys
+            .cpus()
+            .first()
+            .map(|cpu| cpu.brand().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "Unavailable".into()),
+        core_count: sys.cpus().len() as u32,
+        memory_bytes: sys.total_memory() as f64,
+        gpu,
+        disks: Disks::new_with_refreshed_list()
+            .iter()
+            .map(|disk| DiskInfo {
+                name: disk.name().to_string_lossy().into_owned(),
+                mount: disk.mount_point().to_string_lossy().into_owned(),
+                filesystem: disk.file_system().to_string_lossy().into_owned(),
+                total_bytes: disk.total_space() as f64,
+                available_bytes: disk.available_space() as f64,
+                removable: disk.is_removable(),
+            })
+            .collect(),
+        evidence: vec![DiagnosticEvidence::observed(
+            "Installed memory",
+            sys.total_memory().to_string(),
+            "bytes",
+            "Operating-system inventory",
+        )],
+        capabilities,
+        startup_items: vec![],
+        applications: vec![],
+    })
 }
 
 pub fn snapshot() -> Result<MachineSnapshot> {

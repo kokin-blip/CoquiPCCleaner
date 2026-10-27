@@ -188,6 +188,8 @@ The implementation reference is `src/tokens.css`, `src/styles.css`, the reusable
 
 The optional administrator-session extension preserves this world. Its checked helper/session captures, task order, separate setup permissions and validation limits are recorded in [the administrator design handoff](docs/phases/administrator-helper-design-handoff.md). No raster asset was generated or replaced for this extension.
 
+The 0.10 original-plan batch reuses these surfaces for Dashboard question entry, prioritized recommendation reviews, explicit investigation-task forms and on-demand photo previews. Recommendations lead with the next review and disclose evidence, risk and verification; workload/measurement limits remain visible. Native plan/photo captures and labeled illustrative light/dark/minimum-size captures are recorded in [the completion ledger](docs/phases/original-plan-completion.md) and status. They do not establish a completed Figma handoff, full VoiceOver review or additional-hardware acceptance.
+
 Kit reuse follows the established mapping: Music for shell/navigation, shared foundations for controls/settings, Numbers for tables/graphs, Notes for evidence/reports, Mail for finding reading, App Store for application inventory, and iMovie for scan stages/history. Messages, Reminders and Calendar inform later troubleshooting, action queues and maintenance. Original kit content stays intact. Existing ledgers are `docs/figma-foundations.json`, `docs/figma-components.json`, `docs/figma-icons.json`, `docs/figma-screens.json`, `docs/figma-prototype.json` and `docs/figma-handoff.json`.
 
 ## Colors
@@ -298,6 +300,18 @@ The helper extends the existing Settings panel and switch-row pattern. Keep the 
 Live charts use quiet separator grids, a readable accent line and labeled percentages. Fewer than two samples show a waiting message rather than a synthetic trace; an accessible chart label describes the recorded sample count and latest value. Monitoring failure displays an explicit unavailable message and retry action, and current values remain marked unrecorded or stale as appropriate. Monitoring only runs while the app is open.
 
 Storage tiles reflect inspected allocated bytes, not promised recoverable storage. Category names, values and equivalent legend/table controls remain available; narrow tiles may omit their interior label. Capacity qualifications and skipped/protected scope disclosures stay visible.
+
+### Straightforward Scan and Review
+
+The scan-first Overview extends the existing native system with a centered opening action, flat category review tiles and disclosed supporting evidence. Preserve the charcoal/light surfaces, system font stack, mint actions, line icons and approved frog raster. Five primary destinations stay visible; More tools holds secondary routes without changing their existing review or permission boundaries. This is a surface composition, not a replacement visual direction.
+
+Selected navigation must update its theme immediately: use the selected fill, primary ink and readable accent icon together, without a background transition across appearance changes. Category values retain their source, date and measurement qualification; a recorded footprint is never a removable-space promise. The implemented composition, final captures and bounded finish verdict are recorded in [the straightforward design handoff](docs/phases/straightforward-design-handoff.md).
+
+### Opt-in Application Updates
+
+Applications → Updates extends the existing compact tabs, search, table, controls and text-first evidence. Keep the selected count and **Review update sources** action above the paginated inventory so the continuation remains reachable with a full page of apps. Selection starts empty and is limited to ten exact applications. Source review replaces the picker with exact paths, installed versions, endpoints, source-rule review dates and expiry; the separate network acknowledgement starts unchecked.
+
+Stage changes preserve orientation: entering source review focuses its heading, returning or starting another check focuses app search, and a terminal check focuses its result region. Results replace the picker and keep readable per-item states, check/publication dates, source qualifications and compatibility limits beside installed/listed versions. A listed offer exposes an explicit App Store or application handoff. Saved Overview and History evidence retains its date and is not presented as refreshed by a scan. The [application-updates design handoff](docs/phases/application-updates-design-handoff.md) records the captures, resolved finish findings and bounded acceptance. This extension introduces no new visual world, token or shipping raster.
 
 ## Do's and Don'ts
 

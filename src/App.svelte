@@ -14,13 +14,16 @@
     ShieldCheck,
     History as HistoryIcon,
     Settings as SettingsIcon,
-    ChevronDown,
+    ChevronRight,
     Bell,
     ArrowRight,
     Info,
     X,
     LoaderCircle,
     Check,
+    Code,
+    Timer,
+    Lightbulb,
   } from '@lucide/svelte';
   import { app, type createAppStore, type Page } from './state';
   import { date } from './format';
@@ -30,6 +33,7 @@
   import Storage from './features/Storage.svelte';
   import Applications from './features/Applications.svelte';
   import type { DiskScanPlan } from './bindings/DiskScanPlan';
+  import type { ScanModules } from './bindings/ScanModules';
   import Hardware from './features/Hardware.svelte';
   import Firmware from './features/Firmware.svelte';
   import Performance from './features/Performance.svelte';
@@ -45,28 +49,115 @@
   let query = $state('');
   let deepConfirm = $state(false);
   let administratorScan = $state(false);
+  let scanModules = $state<ScanModules>({
+    system: true,
+    startup: true,
+    applications: true,
+  });
   let volumePlan = $state<DiskScanPlan | null>(null),
     volumeError = $state(''),
     volumeLoading = $state(false),
     volumeRoots = $state<string[]>([]);
   let notifications = $state(false);
-  const pages: { name: Page; icon: typeof LayoutDashboard; group: string }[] = [
-    { name: 'Ask Coqui', icon: MessageCircle, group: 'Main' },
-    { name: 'Dashboard', icon: LayoutDashboard, group: 'Main' },
-    { name: 'System Analysis', icon: ScanLine, group: 'Analysis' },
-    { name: 'Hardware', icon: Cpu, group: 'Analysis' },
-    { name: 'Storage', icon: HardDrive, group: 'Analysis' },
-    { name: 'Applications', icon: Package, group: 'Analysis' },
-    { name: 'Optimization', icon: BrushCleaning, group: 'Analysis' },
-    { name: 'Performance', icon: Activity, group: 'Analysis' },
-    { name: 'Firmware & Security', icon: ShieldCheck, group: 'Analysis' },
-    { name: 'Maintenance', icon: CalendarClock, group: 'Application' },
-    { name: 'History', icon: HistoryIcon, group: 'Application' },
-    { name: 'Settings', icon: SettingsIcon, group: 'Application' },
+  let toolsOpen = $state(false);
+  const secondaryTools: {
+    label: string;
+    page: Page;
+    target: string;
+    icon: typeof Code;
+  }[] = [
+    {
+      label: 'Developer files',
+      page: 'Optimization',
+      target: 'developer',
+      icon: Code,
+    },
+    {
+      label: 'Build & test trials',
+      page: 'Performance',
+      target: 'task',
+      icon: Timer,
+    },
+    {
+      label: 'Workload advice',
+      page: 'System Analysis',
+      target: 'workload',
+      icon: Lightbulb,
+    },
   ];
+  const pages: {
+    name: Page;
+    label: string;
+    icon: typeof LayoutDashboard;
+    group: string;
+  }[] = [
+    {
+      name: 'Dashboard',
+      label: 'Overview',
+      icon: LayoutDashboard,
+      group: 'Main',
+    },
+    {
+      name: 'Optimization',
+      label: 'Cleanup',
+      icon: BrushCleaning,
+      group: 'Main',
+    },
+    {
+      name: 'Performance',
+      label: 'Performance',
+      icon: Activity,
+      group: 'Main',
+    },
+    {
+      name: 'Applications',
+      label: 'Applications',
+      icon: Package,
+      group: 'Main',
+    },
+    { name: 'Storage', label: 'Storage', icon: HardDrive, group: 'Main' },
+    {
+      name: 'System Analysis',
+      label: 'Scan results',
+      icon: ScanLine,
+      group: 'Tools',
+    },
+    { name: 'Hardware', label: 'Hardware', icon: Cpu, group: 'Tools' },
+    {
+      name: 'Firmware & Security',
+      label: 'Firmware & Security',
+      icon: ShieldCheck,
+      group: 'Tools',
+    },
+    {
+      name: 'Maintenance',
+      label: 'Maintenance',
+      icon: CalendarClock,
+      group: 'Tools',
+    },
+    {
+      name: 'Ask Coqui',
+      label: 'Ask Coqui',
+      icon: MessageCircle,
+      group: 'Utility',
+    },
+    { name: 'History', label: 'History', icon: HistoryIcon, group: 'Utility' },
+    {
+      name: 'Settings',
+      label: 'Settings',
+      icon: SettingsIcon,
+      group: 'Utility',
+    },
+  ];
+  let currentPage = $derived(pages.find((p) => p.name === $controller.page));
+  $effect(() => {
+    if (currentPage?.group === 'Tools') toolsOpen = true;
+  });
   let results = $derived(
     query.trim()
-      ? pages.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
+      ? pages.filter((p) =>
+          `${p.label} ${p.name}`.toLowerCase().includes(query.toLowerCase()),
+        )
       : [],
   );
   let findingResults = $derived(
@@ -83,7 +174,6 @@
           .slice(0, 8)
       : [],
   );
-  let machine = $derived($controller.session?.snapshot);
   onMount(() => {
     void controller.initialize();
     return () => {
@@ -102,6 +192,8 @@
   }
   function scan() {
     administratorScan = false;
+    scanModules = { system: true, startup: true, applications: true };
+    deepConfirm = true;
     if ($controller.settings?.scanMode === 'deep') {
       deepConfirm = true;
       administratorScan = false;
@@ -116,7 +208,11 @@
         })
         .catch((e) => (volumeError = String(e)))
         .finally(() => (volumeLoading = false));
-    } else void controller.scan();
+    } else {
+      volumeLoading = false;
+      volumeError = '';
+      volumePlan = null;
+    }
   }
 </script>
 
@@ -148,6 +244,7 @@
   </div>
 {:else if !$controller.settings.onboardingComplete}<Onboarding
     {controller}
+    onScan={scan}
   />{#if $controller.error}<div class="floating-error" role="alert">
       {$controller.error}<button onclick={() => controller.dismiss()}
         >Dismiss</button
@@ -162,37 +259,43 @@
         <div><strong>coqui</strong><span>PC Cleaner</span></div>
       </div>
       <nav aria-label="Main navigation">
-        {#each pages as page, i}{#if i === 0 || pages[i - 1].group !== page.group}<p
-              class="nav-group"
-            >
-              {page.group}
-            </p>{/if}<button
+        {#each pages.filter((p) => p.group === 'Main') as page}<button
             class:active={$controller.page === page.name}
             aria-current={$controller.page === page.name ? 'page' : undefined}
             onclick={() => navigate(page.name)}
-            ><page.icon size={17} /><span>{page.name}</span
-            >{#if page.name === 'System Analysis' && $controller.session?.findings.length}<span
-                class="nav-count">{$controller.session.findings.length}</span
-              >{/if}</button
+            ><page.icon size={19} /><span>{page.label}</span></button
           >{/each}
+        <details class="nav-tools" bind:open={toolsOpen}>
+          <summary><ChevronRight size={15} /><span>More tools</span></summary>
+          {#each secondaryTools as tool}<button
+              onclick={() => {
+                navigate(tool.page);
+                controller.openRecommendation(tool.page, tool.target);
+              }}><tool.icon size={16} /><span>{tool.label}</span></button
+            >{/each}
+          {#each pages.filter((p) => p.group === 'Tools') as page}<button
+              class:active={$controller.page === page.name}
+              aria-current={$controller.page === page.name ? 'page' : undefined}
+              onclick={() => navigate(page.name)}
+              ><page.icon size={16} /><span>{page.label}</span></button
+            >{/each}
+        </details>
       </nav>
       <div class="sidebar-bottom">
-        <div class="sidebar-device">
-          <Cpu size={19} />
-          <div>
-            <strong>{machine?.model ?? 'This Mac'}</strong><span
-              >{machine?.architecture ?? 'Apple Silicon build'}</span
-            >
-          </div>
-        </div>
+        <nav aria-label="Application navigation">
+          {#each pages.filter((p) => p.group === 'Utility') as page}<button
+              class:active={$controller.page === page.name}
+              aria-current={$controller.page === page.name ? 'page' : undefined}
+              onclick={() => navigate(page.name)}
+              ><page.icon size={17} /><span>{page.label}</span></button
+            >{/each}
+        </nav>
       </div>
     </aside>
     <div class="workspace">
       <header class="toolbar" data-tauri-drag-region>
         <div class="toolbar-device">
-          <span>{machine?.deviceName ?? 'This Mac'}</span><ChevronDown
-            size={12}
-          />
+          <span>{currentPage?.label ?? $controller.page}</span>
         </div>
         <div class="global-search">
           <Search size={14} /><input
@@ -203,7 +306,7 @@
             bind:value={query}
           /><kbd>⌘ K</kbd>{#if query}<div class="search-results">
               {#each results as p}<button onclick={() => navigate(p.name)}
-                  ><p.icon size={15} />{p.name}<span class="muted small"
+                  ><p.icon size={15} />{p.label}<span class="muted small"
                     >Page</span
                   ></button
                 >{/each}{#each findingResults as f}<button
@@ -238,18 +341,21 @@
           />{#if $controller.session?.findings.some((f) => f.severity === 'attention') || $controller.firmwareCenter?.notices.length || $controller.firmwareNoticeError}<span
             ></span>{/if}</button
         >
-        <div class="toolbar-divider"></div>
-        <button
-          class="toolbar-scan"
-          disabled={$controller.scanning ||
-            $controller.cleanupRunning ||
-            $controller.cleanupPreparing ||
-            $controller.developerRunning}
-          onclick={scan}
-          ><ScanLine size={15} />{$controller.scanning
-            ? 'Analyzing…'
-            : 'Analyze'}</button
-        >{#if notifications}<div class="notification-popover">
+        {#if $controller.page !== 'Dashboard'}<div
+            class="toolbar-divider"
+          ></div>
+          <button
+            class="toolbar-scan"
+            disabled={$controller.scanning ||
+              $controller.workRunning ||
+              $controller.cleanupRunning ||
+              $controller.cleanupPreparing ||
+              $controller.developerRunning}
+            onclick={scan}
+            ><ScanLine size={15} />{$controller.scanning
+              ? 'Analyzing…'
+              : 'Scan Mac'}</button
+          >{/if}{#if notifications}<div class="notification-popover">
             <h3>Notifications</h3>
             {#if $controller.session}<Status
                 value={$controller.session.status}
@@ -305,13 +411,17 @@
               </article>{/each}
           </div>{/if}
       </header>
-      {#if $controller.scanning}<div class="scan-banner" role="status">
+      {#if $controller.scanning && $controller.page !== 'Dashboard'}<div
+          class="scan-banner"
+          role="status"
+        >
           <LoaderCircle class="spin" size={17} />
           <div>
             <strong
-              >{$controller.session?.stage ?? (administratorScan
-                ? 'Preparing administrator scan; check macOS authorization if prompted…'
-                : 'Preparing analysis…')}</strong
+              >{$controller.session?.stage ??
+                (administratorScan
+                  ? 'Preparing administrator scan; check macOS authorization if prompted…'
+                  : 'Preparing analysis…')}</strong
             ><span
               >{$controller.session?.fileCount.toLocaleString() ?? 0} files inspected
               · {$controller.cancelling
@@ -342,7 +452,7 @@
           <LoaderCircle class="spin" size={17} /><span
             >Checking developer artifacts and Git/worktree relationships…</span
           ><button onclick={() => controller.navigate('Optimization')}
-            >View optimization</button
+            >View cleanup</button
           ><button
             onclick={() =>
               controller.run(() => controller.service.cancelDeveloper())}
@@ -388,7 +498,17 @@
           <span
             ><LoaderCircle class="spin" size={15} />
             {$controller.workLabel}…</span
-          ><button
+          >{#if $controller.workloadTrial?.status === 'running' && $controller.workLabel === 'Timed task trial'}<button
+              disabled={$controller.trialFinishing}
+              onclick={() => controller.run(() => controller.finishTrial())}
+              >{$controller.trialFinishing
+                ? 'Recording completion…'
+                : 'Task completed — stop timer'}</button
+            ><button
+              onclick={() =>
+                controller.openRecommendation('Performance', 'task')}
+              >Open task timer</button
+            >{/if}<button
             onclick={() =>
               controller.run(() => controller.service.cancelWork())}
             >Cancel operation</button
@@ -427,14 +547,44 @@
   </div>
 {/if}
 {#if deepConfirm}<Dialog
-    title="Review whole internal disk scope"
+    title={$controller.settings?.scanMode === 'deep'
+      ? 'Review whole internal disk scope'
+      : 'Review scan checks'}
     onclose={() => (deepConfirm = false)}
   >
-    <p>
-      Scan readable metadata on the selected mounted internal volumes. Protected
-      locations can remain unavailable. External and network volumes require
-      separate selection.
-    </p>
+    {#if $controller.settings?.scanMode === 'deep'}<p>
+        Scan readable metadata on the selected mounted internal volumes.
+        Protected locations can remain unavailable. External and network volumes
+        require separate selection.
+      </p>{:else}<p>
+        Scan storage metadata in the configured locations. Protected locations
+        and exclusions remain explicit coverage gaps.
+      </p>{/if}
+    <fieldset class="scan-check-options">
+      <legend>Additional metadata checks</legend>
+      <p class="small muted">
+        These read standard system, startup and Applications locations
+        separately from the selected storage roots.
+      </p>
+      <label
+        ><input type="checkbox" bind:checked={scanModules.system} />System
+        details</label
+      >
+      <label
+        ><input type="checkbox" bind:checked={scanModules.startup} />Startup
+        configurations</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          bind:checked={scanModules.applications}
+        />Application inventory</label
+      >
+      <p class="small muted">
+        Content duplicates, similar photos and online updates need their own
+        checks. System maintenance stays manual.
+      </p>
+    </fieldset>
     {#if volumeLoading}<p role="status">Enumerating mounted volumes…</p>{/if}
     {#if volumeError}<p class="inline-error" role="alert">{volumeError}</p>
       <button onclick={scan}>Retry volume inventory</button>{/if}
@@ -482,15 +632,25 @@
         </table>
       </div>
       <p class="muted">{volumePlan.qualification}</p>{/if}
-    <div class="dialog-actions">
-      <button onclick={() => (deepConfirm = false)}>Cancel</button><button
-        class="primary"
-        disabled={!volumePlan || !volumeRoots.length || volumeLoading}
-        onclick={() => {
-          const p = volumePlan!;
-          deepConfirm = false;
-          void controller.scan(p.id, volumeRoots, administratorScan ? p : null);
-        }}>Scan selected volumes</button
-      >
-    </div>
+    {#snippet footer()}<div class="dialog-actions">
+        <button onclick={() => (deepConfirm = false)}>Cancel</button><button
+          class="primary"
+          disabled={$controller.settings?.scanMode === 'deep' &&
+            (!volumePlan || !volumeRoots.length || volumeLoading)}
+          onclick={() => {
+            const p =
+              $controller.settings?.scanMode === 'deep' ? volumePlan : null;
+            deepConfirm = false;
+            void controller.scan(
+              p?.id ?? null,
+              p ? volumeRoots : undefined,
+              administratorScan ? p : null,
+              { ...scanModules },
+            );
+          }}
+          >{$controller.settings?.scanMode === 'deep'
+            ? 'Scan selected volumes'
+            : 'Start scan'}</button
+        >
+      </div>{/snippet}
   </Dialog>{/if}

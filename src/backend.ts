@@ -22,17 +22,28 @@ import type { CleanupPlan } from './bindings/CleanupPlan';
 import type { CleanupRequest } from './bindings/CleanupRequest';
 import type { CleanupApproval } from './bindings/CleanupApproval';
 import type { CleanupFilePage } from './bindings/CleanupFilePage';
+import type { CleanupCategoryReport } from './bindings/CleanupCategoryReport';
+import type { CleanupCategoryQuery } from './bindings/CleanupCategoryQuery';
+import type { CleanupCategoryPage } from './bindings/CleanupCategoryPage';
 import type { ProjectCleanupPage } from './bindings/ProjectCleanupPage';
 
 import type { DeveloperReport } from './bindings/DeveloperReport';
 import type { DuplicateReport } from './bindings/DuplicateReport';
+import type { DuplicateAnalysisRequest } from './bindings/DuplicateAnalysisRequest';
+import type { PhotoPreview } from './bindings/PhotoPreview';
 import type { DuplicateCleanupRequest } from './bindings/DuplicateCleanupRequest';
 import type { Baseline } from './bindings/Baseline';
 import type { BaselineRequest } from './bindings/BaselineRequest';
 import type { BaselineComparison } from './bindings/BaselineComparison';
+import type { WorkloadTrial } from './bindings/WorkloadTrial';
+import type { WorkloadTrialRequest } from './bindings/WorkloadTrialRequest';
+import type { TrialComparison } from './bindings/TrialComparison';
+import type { TrialComparisonRequest } from './bindings/TrialComparisonRequest';
 import type { ManualPlan } from './bindings/ManualPlan';
 import type { Investigation } from './bindings/Investigation';
+import type { InvestigationCollection } from './bindings/InvestigationCollection';
 import type { AdviceReport } from './bindings/AdviceReport';
+import type { RecommendationPlan } from './bindings/RecommendationPlan';
 import type { AdviceRequest } from './bindings/AdviceRequest';
 import type { ResourceReview } from './bindings/ResourceReview';
 import type { ActivityRecord } from './bindings/ActivityRecord';
@@ -45,7 +56,22 @@ import type { FirmwarePlan } from './bindings/FirmwarePlan';
 import type { FirmwarePlanKind } from './bindings/FirmwarePlanKind';
 import type { FirmwareCenter } from './bindings/FirmwareCenter';
 import type { FirmwareComparison } from './bindings/FirmwareComparison';
+import type { ScanReview } from './bindings/ScanReview';
+import type { ScanModules } from './bindings/ScanModules';
+import type { ScanObservations } from './bindings/ScanObservations';
+import type { AppUpdatePlan } from './bindings/AppUpdatePlan';
+import type { AppUpdateReport } from './bindings/AppUpdateReport';
 export interface Backend {
+  prepareAppUpdates(paths: string[]): Promise<AppUpdatePlan>;
+  checkAppUpdates(
+    planId: string,
+    networkAcknowledged: boolean,
+    onEvent: (report: AppUpdateReport) => void,
+  ): Promise<AppUpdateReport>;
+  latestAppUpdates(): Promise<AppUpdateReport | null>;
+  openAppUpdate(reportId: string, path: string): Promise<void>;
+  scanReview(sessionId: string): Promise<ScanReview>;
+  scanObservations(id: string): Promise<ScanObservations | null>;
   administratorStatus(): Promise<HelperStatus>;
   administratorLock(): Promise<void>;
   administratorInspectApplication(path: string): Promise<ApplicationFootprint>;
@@ -54,7 +80,7 @@ export interface Backend {
   applicationLeftovers(offset: number): Promise<ApplicationFootprint[]>;
   applicationNotices(): Promise<number>;
   diskScanPlan(): Promise<DiskScanPlan>;
-  coverage(id: string, offset: number): Promise<CoverageGap[]>;
+  coverage(id: string, offset: number, reason?: string): Promise<CoverageGap[]>;
   refreshApplicationInventory(): Promise<void>;
   applicationPage(
     query: string,
@@ -98,12 +124,23 @@ export interface Backend {
     sessionId: string,
     onEvent: (r: DuplicateReport) => void,
   ): Promise<DuplicateReport>;
+  analyzeDuplicateScope(request: DuplicateAnalysisRequest, onEvent: (r: DuplicateReport) => void): Promise<DuplicateReport>;
   previewDuplicates(request: DuplicateCleanupRequest): Promise<CleanupPlan>;
+  previewDuplicatePhoto(reportId: string, path: string): Promise<PhotoPreview>;
   captureBaseline(
     request: BaselineRequest,
     onEvent: (r: Baseline) => void,
   ): Promise<Baseline>;
   compareBaselines(before: string, after: string): Promise<BaselineComparison>;
+  captureTrial(
+    request: WorkloadTrialRequest,
+    onEvent: (r: WorkloadTrial) => void,
+  ): Promise<WorkloadTrial>;
+  finishTrial(id: string): Promise<void>;
+  compareTrials(request: TrialComparisonRequest): Promise<TrialComparison>;
+  saveTrialComparison(
+    request: TrialComparisonRequest,
+  ): Promise<TrialComparison>;
   manualPlan(kind: string, requested: string): Promise<ManualPlan>;
   verifyManualPlan(id: string, performed: boolean): Promise<ManualPlan>;
   ask(
@@ -112,6 +149,21 @@ export interface Backend {
     text: string,
   ): Promise<Investigation>;
   assess(request: AdviceRequest): Promise<AdviceReport>;
+  collectInvestigation(
+    id: string,
+    task: InvestigationCollection,
+    onEvent: (r: Investigation) => void,
+  ): Promise<Investigation>;
+  recommendationPlan(
+    sessionId: string,
+    baselineId: string | null,
+    trialId?: string | null,
+  ): Promise<RecommendationPlan>;
+  saveRecommendationPlan(
+    sessionId: string,
+    baselineId: string | null,
+    trialId?: string | null,
+  ): Promise<RecommendationPlan>;
   resources(sessionId: string): Promise<ResourceReview>;
   records(kind: string | null, offset: number): Promise<ActivityRecord[]>;
   record(kind: string, id: string): Promise<RetainedRecord>;
@@ -127,6 +179,8 @@ export interface Backend {
   ): Promise<DeveloperReport>;
   cancelDeveloper(): Promise<void>;
   cleanupFiles(sessionId: string, offset: number): Promise<CleanupFilePage>;
+  cleanupCategories(sessionId: string): Promise<CleanupCategoryReport>;
+  cleanupCategoryEntries(query: CleanupCategoryQuery): Promise<CleanupCategoryPage>;
   previewCleanup(request: CleanupRequest): Promise<CleanupPlan>;
   previewProjectCleanup(request: CleanupRequest): Promise<CleanupPlan>;
   projectCleanupEntries(
@@ -149,6 +203,7 @@ export interface Backend {
     request: ScanRequest,
     onEvent: (event: ScanEvent) => void,
     administratorPlan?: DiskScanPlan | null,
+    modules?: ScanModules,
   ): Promise<void>;
   cancel(): Promise<void>;
   monitor(onEvent: (metrics: LiveMetrics) => void): Promise<void>;
@@ -160,6 +215,21 @@ export interface Backend {
   exportReport?(id: string): Promise<void>;
 }
 export const backend: Backend = {
+  prepareAppUpdates: (paths) => invoke('prepare_app_updates', { paths }),
+  checkAppUpdates: (planId, networkAcknowledged, onEvent) => {
+    const channel = new Channel<AppUpdateReport>();
+    channel.onmessage = onEvent;
+    return invoke('check_app_updates', {
+      planId,
+      networkAcknowledged,
+      onEvent: channel,
+    });
+  },
+  latestAppUpdates: () => invoke('latest_app_updates'),
+  openAppUpdate: (reportId, path) =>
+    invoke('open_app_update', { reportId, path }),
+  scanReview: (sessionId) => invoke('scan_review', { sessionId }),
+  scanObservations: (id) => invoke('scan_observations', { id }),
   administratorStatus: () => invoke('administrator_status'),
   administratorLock: () => invoke('administrator_lock'),
   administratorInspectApplication: (path) =>
@@ -171,7 +241,8 @@ export const backend: Backend = {
   applicationLeftovers: (offset) => invoke('application_leftovers', { offset }),
   applicationNotices: () => invoke('application_notices'),
   diskScanPlan: () => invoke('disk_scan_plan'),
-  coverage: (id, offset) => invoke('scan_coverage', { id, offset }),
+  coverage: (id, offset, reason) =>
+    invoke('scan_coverage', { id, offset, reason }),
   refreshApplicationInventory: () => invoke('refresh_application_inventory'),
   applicationPage: (query, sort, offset, protectedOnly = false) =>
     invoke('application_page', { query, sort, offset, protectedOnly }),
@@ -223,6 +294,11 @@ export const backend: Backend = {
     channel.onmessage = onEvent;
     return invoke('analyze_duplicates', { sessionId, onEvent: channel });
   },
+  analyzeDuplicateScope: (request, onEvent) => {
+    const channel = new Channel<DuplicateReport>();
+    channel.onmessage = onEvent;
+    return invoke('analyze_duplicate_scope', { request, onEvent: channel });
+  },
   previewDuplicates: (request) =>
     invoke('preview_duplicate_cleanup', { request }),
   captureBaseline: (request, onEvent) => {
@@ -232,12 +308,32 @@ export const backend: Backend = {
   },
   compareBaselines: (before, after) =>
     invoke('compare_baselines', { before, after }),
+  captureTrial: (request, onEvent) => {
+    const channel = new Channel<WorkloadTrial>();
+    channel.onmessage = onEvent;
+    return invoke('capture_workload_trial', { request, onEvent: channel });
+  },
+  finishTrial: (id) => invoke('finish_workload_trial', { id }),
+  compareTrials: (request) => invoke('compare_workload_trials', { request }),
+  saveTrialComparison: (request) =>
+    invoke('save_trial_comparison', { request }),
   manualPlan: (kind, requested) =>
     invoke('create_manual_plan', { kind, requested }),
   verifyManualPlan: (id, performed) =>
     invoke('verify_manual_plan', { id, performed }),
   ask: (id, sessionId, text) => invoke('ask_coqui', { id, sessionId, text }),
   assess: (request) => invoke('assess_workload', { request }),
+  previewDuplicatePhoto: (reportId, path) =>
+    invoke('preview_duplicate_photo', { reportId, path }),
+  collectInvestigation: (id, task, onEvent) => {
+    const channel = new Channel<Investigation>();
+    channel.onmessage = onEvent;
+    return invoke('collect_investigation', { id, task, onEvent: channel });
+  },
+  recommendationPlan: (sessionId, baselineId, trialId = null) =>
+    invoke('recommendation_plan', { sessionId, baselineId, trialId }),
+  saveRecommendationPlan: (sessionId, baselineId, trialId = null) =>
+    invoke('save_recommendation_plan', { sessionId, baselineId, trialId }),
   resources: (sessionId) => invoke('analyze_resources', { sessionId }),
   records: (kind, offset) => invoke('activity_records', { kind, offset }),
   record: (kind, id) => invoke('get_record', { kind, id }),
@@ -255,6 +351,8 @@ export const backend: Backend = {
   cancelDeveloper: () => invoke('cancel_developer'),
   cleanupFiles: (sessionId, offset) =>
     invoke('cleanup_files', { sessionId, offset }),
+  cleanupCategories: (sessionId) => invoke('cleanup_categories', { sessionId }),
+  cleanupCategoryEntries: (query) => invoke('cleanup_category_entries', { query }),
   previewCleanup: (request) => invoke('preview_cleanup', { request }),
   previewProjectCleanup: (request) =>
     invoke('preview_project_cleanup', { request }),
@@ -280,16 +378,24 @@ export const backend: Backend = {
   history: (offset, limit) => invoke('scan_history', { offset, limit }),
   files: (query) => invoke('storage_entries', { query }),
   storageMap: (query) => invoke('storage_map', { query }),
-  scan: (request, onEvent, administratorPlan) => {
+  scan: (request, onEvent, administratorPlan, modules) => {
     const channel = new Channel<ScanEvent>();
     channel.onmessage = onEvent;
     return administratorPlan
-      ? invoke('administrator_scan', {
+      ? invoke(
+          modules ? 'administrator_scan_with_modules' : 'administrator_scan',
+          {
+            request,
+            plan: administratorPlan,
+            events: channel,
+            ...(modules ? { modules } : {}),
+          },
+        )
+      : invoke(modules ? 'scan_with_modules' : 'scan', {
           request,
-          plan: administratorPlan,
-          events: channel,
-        })
-      : invoke('scan', { request, onEvent: channel });
+          onEvent: channel,
+          ...(modules ? { modules } : {}),
+        });
   },
   cancel: () => invoke('cancel_scan'),
   monitor: (onEvent) => {

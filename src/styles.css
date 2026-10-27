@@ -322,13 +322,6 @@ svg {
 .sidebar nav {
   padding: 0 12px;
 }
-.nav-group {
-  font-size: 11px;
-  color: var(--secondary);
-  font-weight: 600;
-  padding: 10px 10px 5px;
-  margin-top: 12px;
-}
 .sidebar nav button {
   width: 100%;
   border: 0;
@@ -336,10 +329,13 @@ svg {
   padding: 8px 10px;
   background: transparent;
   gap: 10px;
-  min-height: 36px;
-  margin-bottom: 3px;
+  min-height: 44px;
+  margin-bottom: 5px;
   border-radius: 7px;
-  font-size: 12px;
+  font-size: 13px;
+  /* WebKit can retain a transitioned custom-property background across an
+     appearance change. Native navigation updates its appearance immediately. */
+  transition: none;
 }
 .sidebar nav button svg {
   color: var(--secondary);
@@ -348,45 +344,57 @@ svg {
   background: var(--hover);
 }
 .sidebar nav button.active {
-  background: var(--selected);
+  background-color: var(--selected);
   color: var(--text);
 }
 .sidebar nav button.active svg {
   color: var(--accent-text);
 }
-.nav-count {
-  margin-left: auto;
-  font-size: 10px;
-  border-radius: 4px;
-  background: var(--tag);
-  color: var(--secondary);
-  padding: 1px 5px;
-}
 .sidebar-bottom {
   margin-top: auto;
-  padding: 24px 16px 16px;
+  padding: 24px 12px 16px;
 }
-.sidebar-device {
-  padding: 14px 6px 0;
+.sidebar-bottom nav {
+  padding: 0;
+}
+.sidebar-bottom nav button {
+  min-height: 36px;
+  font-size: 12px;
+}
+.nav-tools {
+  margin-top: 20px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+.nav-tools summary {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.sidebar-device div {
-  min-width: 0;
-}
-.sidebar-device strong {
-  font-size: 11px;
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar-device div span {
-  display: block;
-  font-size: 10px;
+  padding: 10px;
   color: var(--secondary);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 7px;
+}
+.nav-tools summary::-webkit-details-marker {
+  display: none;
+}
+.nav-tools[open] summary > svg {
+  transform: rotate(90deg);
+}
+.nav-tools summary:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.nav-tools summary:focus-visible,
+.overview-disclosure summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.sidebar .nav-tools button {
+  min-height: 34px;
+  font-size: 12px;
 }
 .workspace {
   min-width: 0;
@@ -672,105 +680,6 @@ button.toolbar-scan {
   font-size: 12px;
   margin-top: 8px;
 }
-.device-overview {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 12px 12px 24px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 24px;
-}
-.device-art {
-  width: 155px;
-  flex-shrink: 0;
-}
-.device-art svg {
-  display: block;
-  width: 100%;
-  height: 123px;
-  fill: var(--surface);
-  stroke: var(--secondary);
-  stroke-width: 1.5;
-}
-.device-art .screen-pulse {
-  stroke: var(--accent-text);
-  fill: none;
-  stroke-width: 2;
-}
-.device-description {
-  flex: 1;
-  min-width: 0;
-}
-.device-description h2 {
-  font-size: 20px;
-  letter-spacing: -0.02em;
-}
-.device-description p {
-  color: var(--secondary);
-  font-size: 12px;
-  margin: 5px 0 12px;
-}
-.device-scan {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  text-align: right;
-  align-items: flex-end;
-  padding-right: 5px;
-  max-width: 230px;
-}
-.device-scan span {
-  font-size: 10px;
-}
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 26px;
-}
-.summary-item {
-  display: block;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 17px 20px;
-  border-radius: 12px;
-}
-.summary-item > div {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: var(--secondary);
-  font-size: 11px;
-}
-.summary-item > div svg:first-child {
-  color: var(--accent-text);
-}
-.summary-item > div svg:last-child {
-  margin-left: auto;
-}
-.summary-item > strong {
-  display: block;
-  font-size: 25px;
-  letter-spacing: -0.03em;
-  line-height: 1.3;
-  margin: 11px 0 5px;
-  font-variant-numeric: tabular-nums;
-}
-.summary-item > p {
-  font-size: 10px;
-  color: var(--secondary);
-  margin: 0;
-}
-.dashboard-columns {
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 20px;
-}
-.dashboard-columns .panel {
-  min-width: 0;
-}
-.finding-row,
 .activity-row {
   display: flex;
   align-items: center;
@@ -783,40 +692,21 @@ button.toolbar-scan {
   padding: 15px 0;
   text-align: left;
 }
-.finding-row:hover,
 .activity-row:hover {
   background: var(--tag);
 }
-.finding-row > span:nth-child(2),
 .activity-row > span:first-of-type {
   flex: 1;
   min-width: 0;
 }
-.finding-row strong,
 .activity-row strong {
   display: block;
   font-size: 12px;
 }
-.finding-row .small,
 .activity-row .small {
   display: block;
   margin-top: 3px;
   font-size: 10px;
-}
-.finding-icon {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 31px;
-  height: 31px;
-  background: var(--accent-wash);
-  color: var(--accent-text);
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-.finding-icon.attention-icon {
-  background: var(--warning-wash);
-  color: var(--warning);
 }
 .chart {
   height: 145px;
@@ -1074,6 +964,23 @@ summary {
   gap: 20px;
   padding: 15px 18px;
   border-bottom: 1px solid var(--border);
+}
+
+.scan-check-options {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 18px 0;
+  padding: 14px;
+}
+.scan-check-options legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.scan-check-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
 }
 .breadcrumbs {
   display: flex;
@@ -1643,28 +1550,6 @@ tbody tr:last-child td {
   .sidebar-brand {
     padding-left: 18px;
   }
-  .dashboard-columns {
-    gap: 16px;
-    grid-template-columns: 1fr 1fr;
-  }
-  .summary-item {
-    padding: 15px;
-  }
-  .device-overview {
-    gap: 16px;
-  }
-  .device-art {
-    width: 125px;
-  }
-  .device-scan {
-    max-width: 185px;
-  }
-  .device-scan span {
-    font-size: 9px;
-  }
-  .summary-item > p {
-    font-size: 9px;
-  }
   .scan-facts {
     gap: 16px;
   }
@@ -1684,21 +1569,6 @@ tbody tr:last-child td {
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 205px minmax(0, 1fr);
-  }
-  .sidebar nav button {
-    font-size: 11px;
-  }
-  .device-scan {
-    display: none;
-  }
-  .dashboard-columns {
-    grid-template-columns: 1fr;
-  }
-  .summary-grid {
-    gap: 10px;
-  }
-  .summary-item > strong {
-    font-size: 22px;
   }
   .global-search {
     width: 200px;

@@ -225,8 +225,36 @@ pub fn identify(
         title: title.into(),
         reason: reason.into(),
         consequences: consequences.into(),
+        development: crate::development::path_indicators(&path, kind),
     }
 }
+/// Location context, not a diagnosis of which macOS enforcement mechanism denied access.
+pub fn permission_guidance(path: &str, reason: &str) -> Option<String> {
+    if reason != "permissionDenied" {
+        return None;
+    }
+    let path = Path::new(
+        path.strip_prefix("/System/Volumes/Data")
+            .filter(|s| s.starts_with('/'))
+            .unwrap_or(path),
+    );
+    let system = [
+        "/System",
+        "/private/var/db",
+        "/private/var/protected",
+        "/private/var/networkd",
+        "/private/var/OOPJit",
+        "/private/var/folders/zz",
+    ]
+    .iter()
+    .any(|p| path.starts_with(p));
+    Some(if system {
+        "macOS system/service location. Full Disk Access and administrator rights do not override every macOS restriction. If the paired helper already has access and this remains denied, keep the omission; do not change ownership, permissions or system protections to make the scan pass. The saved reason alone does not identify the exact protection."
+    } else {
+        "Review Full Disk Access for the process performing the scan (the paired helper for administrator scans), and the folder owner's access settings. Retry only after an intended access change. A denial does not prove the folder is empty; administrator rights do not override all protections."
+    }.into())
+}
+
 pub fn placeholder(path: &Path, metadata: &fs::Metadata) -> bool {
     #[cfg(target_os = "macos")]
     if metadata.st_flags() & 0x40000000 != 0 {
@@ -270,6 +298,7 @@ pub fn walk_with_gaps<
         exclusions,
         cancel,
         false,
+        &std::env::temp_dir(),
         |item| emit(item.entry),
         progress,
         gap,
@@ -289,7 +318,41 @@ pub fn walk_indexed_with_gaps<
     progress: P,
     gap: G,
 ) -> Result<WalkSummary> {
-    walk_indexed(roots, exclusions, cancel, true, emit, progress, gap)
+    walk_indexed(
+        roots,
+        exclusions,
+        cancel,
+        true,
+        &std::env::temp_dir(),
+        emit,
+        progress,
+        gap,
+    )
+}
+
+#[derive(Debug)]
+pub(crate) struct ScanDatabaseStep {
+    name: &'static str,
+    system_errno: i32,
+}
+impl std::fmt::Display for ScanDatabaseStep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} (OS error {})", self.name, self.system_errno)
+    }
+}
+pub(crate) fn scan_sql<T, E: Into<anyhow::Error>>(
+    connection: &rusqlite::Connection,
+    name: &'static str,
+    result: std::result::Result<T, E>,
+) -> Result<T> {
+    result.map_err(|error| {
+        // Capture SQLite's connection-local OS error before another statement runs.
+        // Persist only the step and numeric errno, never a raw temporary/user path.
+        let system_errno = unsafe { rusqlite::ffi::sqlite3_system_errno(connection.handle()) };
+        error
+            .into()
+            .context(ScanDatabaseStep { name, system_errno })
+    })
 }
 
 fn walk_indexed<
@@ -301,6 +364,7 @@ fn walk_indexed<
     exclusions: &[PathBuf],
     cancel: &AtomicBool,
     initial_folders: bool,
+    scratch_directory: &Path,
     mut emit: F,
     mut progress: P,
     mut gap: G,
@@ -313,15 +377,16 @@ fn walk_indexed<
         }
     }
     let scratch =
-        Scratch(std::env::temp_dir().join(format!("coqui-walk-{}.db", uuid::Uuid::new_v4())));
+        Scratch(scratch_directory.join(format!("coqui-walk-{}.db", uuid::Uuid::new_v4())));
     use std::os::unix::fs::OpenOptionsExt;
     fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(0o600)
         .open(&scratch.0)?;
+    let scratch_identity = fs::symlink_metadata(&scratch.0)?;
     let sql = Connection::open(&scratch.0)?;
-    sql.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; CREATE TABLE identities(dev INTEGER,ino INTEGER,PRIMARY KEY(dev,ino)) WITHOUT ROWID; CREATE TABLE folders(path TEXT PRIMARY KEY,parent TEXT,depth INTEGER,json TEXT,logical REAL DEFAULT 0,allocated REAL DEFAULT 0,file_count INTEGER DEFAULT 0,small_count INTEGER DEFAULT 0,small_allocated REAL DEFAULT 0,largest REAL DEFAULT 0); CREATE INDEX folder_depth ON folders(depth DESC,path); CREATE TABLE pending(path TEXT PRIMARY KEY,parent_dev INTEGER,parent_ino INTEGER);")?;
+    scan_sql(&sql, "Creating the temporary traversal index", sql.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; CREATE TABLE identities(dev INTEGER,ino INTEGER,PRIMARY KEY(dev,ino)) WITHOUT ROWID; CREATE TABLE folders(path TEXT PRIMARY KEY,parent TEXT,depth INTEGER,json TEXT,logical REAL DEFAULT 0,allocated REAL DEFAULT 0,file_count INTEGER DEFAULT 0,small_count INTEGER DEFAULT 0,small_allocated REAL DEFAULT 0,largest REAL DEFAULT 0); CREATE INDEX folder_depth ON folders(depth DESC,path); CREATE TABLE pending(path TEXT PRIMARY KEY,parent_dev INTEGER,parent_ino INTEGER);"))?;
     let mut summary = WalkSummary {
         stage: "Storage metadata • traversing readable locations".into(),
         coverage: roots
@@ -355,6 +420,10 @@ fn walk_indexed<
                     .to_string_lossy()
                     .into_owned(),
                 reason: reason.into(),
+                guidance: permission_guidance(
+                    &crate::volumes::friendly(path).to_string_lossy(),
+                    reason,
+                ),
             };
             if coverage.examples.len() < 25 {
                 coverage.examples.push(item.clone());
@@ -388,13 +457,16 @@ fn walk_indexed<
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
-            let next: Option<(String, u64, u64)> = sql
-                .query_row(
+            let next: Option<(String, u64, u64)> = scan_sql(
+                &sql,
+                "Reading the directory frontier",
+                sql.query_row(
                     "SELECT path,parent_dev,parent_ino FROM pending LIMIT 1",
                     [],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
-                .optional()?;
+                .optional(),
+            )?;
             let Some((next, parent_dev, parent_ino)) = next else {
                 break;
             };
@@ -422,10 +494,9 @@ fn walk_indexed<
                 progress(&summary)?;
                 last = std::time::Instant::now();
             }
-            if p == scratch.0
-                || exclusions
-                    .iter()
-                    .any(|x| crate::volumes::same_or_below(p, x))
+            if exclusions
+                .iter()
+                .any(|x| crate::volumes::same_or_below(p, x))
             {
                 note(&mut summary, p, "excluded")?;
                 continue;
@@ -442,6 +513,13 @@ fn walk_indexed<
                     continue;
                 }
             };
+            // The same temp file can be reached through /var, /private/var or a
+            // Data-volume alias. Never count the scanner's growing scratch index.
+            if metadata.dev() == scratch_identity.dev() && metadata.ino() == scratch_identity.ino()
+            {
+                note(&mut summary, p, "excluded")?;
+                continue;
+            }
             let reason = if metadata.dev() != root_dev
                 || (metadata.is_dir()
                     && crate::volumes::mounted_identity(p).is_ok_and(|v| v != root_mount))
@@ -466,9 +544,13 @@ fn walk_indexed<
                 note(&mut summary, p, "specialFile")?;
                 continue;
             }
-            if sql.execute(
-                "INSERT OR IGNORE INTO identities VALUES(?1,?2)",
-                params![metadata.dev(), metadata.ino()],
+            if scan_sql(
+                &sql,
+                "Recording a filesystem identity",
+                sql.execute(
+                    "INSERT OR IGNORE INTO identities VALUES(?1,?2)",
+                    params![metadata.dev(), metadata.ino()],
+                ),
             )? == 0
             {
                 note(&mut summary, p, "duplicateIdentity")?;
@@ -498,14 +580,18 @@ fn walk_indexed<
                 qualification: String::new(),
             };
             if metadata.is_dir() {
-                sql.execute(
-                    "INSERT OR IGNORE INTO folders(path,parent,depth,json) VALUES(?1,?2,?3,?4)",
-                    params![
-                        path,
-                        parent,
-                        p.components().count(),
-                        serde_json::to_string(&f)?
-                    ],
+                scan_sql(
+                    &sql,
+                    "Recording a folder",
+                    sql.execute(
+                        "INSERT OR IGNORE INTO folders(path,parent,depth,json) VALUES(?1,?2,?3,?4)",
+                        params![
+                            path,
+                            parent,
+                            p.components().count(),
+                            serde_json::to_string(&f)?
+                        ],
+                    ),
                 )?;
                 if initial_folders {
                     let mut pending = f.clone();
@@ -526,9 +612,13 @@ fn walk_indexed<
                                 Ok(e) => {
                                     let path = e.path();
                                     if let Some(text) = path.to_str() {
-                                        sql.execute(
-                                            "INSERT OR IGNORE INTO pending VALUES(?1,?2,?3)",
-                                            params![text, metadata.dev(), metadata.ino()],
+                                        scan_sql(
+                                            &sql,
+                                            "Extending the directory frontier",
+                                            sql.execute(
+                                                "INSERT OR IGNORE INTO pending VALUES(?1,?2,?3)",
+                                                params![text, metadata.dev(), metadata.ino()],
+                                            ),
                                         )?;
                                     } else {
                                         note(&mut summary, &path, "unrepresentableName")?;
@@ -556,7 +646,18 @@ fn walk_indexed<
                             },
                         )?;
                         if denied && summary.permissions.len() < 100 {
-                            summary.permissions.push(PermissionRequirement{path:crate::volumes::friendly(p).to_string_lossy().into_owned(),reason:"macOS denied directory access".into(),guidance:"Review Full Disk Access or folder permissions and retry. Administrator access does not override all protections.".into()});
+                            let path = crate::volumes::friendly(p).to_string_lossy().into_owned();
+                            summary.permissions.push(PermissionRequirement {
+                                guidance: permission_guidance(&path, "permissionDenied")
+                                    .unwrap_or_default(),
+                                path,
+                                reason: format!(
+                                    "macOS denied directory access (OS error {})",
+                                    e.raw_os_error()
+                                        .map(|n| n.to_string())
+                                        .unwrap_or_else(|| "unavailable".into())
+                                ),
+                            });
                         }
                         if !denied && summary.errors.len() < 100 {
                             summary
@@ -582,10 +683,10 @@ fn walk_indexed<
             c.logical_bytes += f.logical_bytes;
             c.allocated_bytes += f.allocated_bytes;
             c.file_count = c.file_count.saturating_add(1);
-            sql.execute(
+            scan_sql(&sql, "Accumulating file measurements", sql.execute(
                 "UPDATE folders SET logical=logical+?1,allocated=allocated+?2,file_count=file_count+1,small_count=small_count+?4,small_allocated=small_allocated+?5,largest=MAX(largest,?2) WHERE path=?3",
                 params![f.logical_bytes, f.allocated_bytes, parent,u32::from(f.logical_bytes<=65_536.),if f.logical_bytes<=65_536. {f.allocated_bytes} else {0.}],
-            )?;
+            ))?;
             emit(IndexedStorageEntry {
                 entry: f,
                 metrics: None,
@@ -621,8 +722,11 @@ fn walk_indexed<
         return Ok(summary);
     }
     sql.execute_batch("BEGIN")?;
-    let mut q =
-        sql.prepare("SELECT json,logical,allocated FROM folders ORDER BY depth DESC,path")?;
+    let mut q = scan_sql(
+        &sql,
+        "Preparing folder aggregation",
+        sql.prepare("SELECT json,logical,allocated FROM folders ORDER BY depth DESC,path"),
+    )?;
     let mut rows = q.query([])?;
     while let Some(row) = rows.next()? {
         if cancel.load(Ordering::Relaxed) {
@@ -630,17 +734,17 @@ fn walk_indexed<
         }
         let mut f: FileEntry = serde_json::from_str(&row.get::<_, String>(0)?)?;
         // Read the current total because children updated it after this ordered cursor began.
-        let (logical,allocated,metrics) = sql.query_row(
+        let (logical,allocated,metrics) = scan_sql(&sql, "Reading folder totals", sql.query_row(
             "SELECT logical,allocated,file_count,small_count,small_allocated,largest FROM folders WHERE path=?1",
             [&f.path],
             |r| Ok((r.get(0)?,r.get(1)?,StorageMetrics {file_count:r.get(2)?,small_file_count:r.get(3)?,small_allocated_bytes:r.get(4)?,largest_file_bytes:r.get(5)?})),
-        )?;
+        ))?;
         f.logical_bytes = logical;
         f.allocated_bytes = allocated;
-        sql.execute(
+        scan_sql(&sql, "Aggregating folder totals", sql.execute(
             "UPDATE folders SET logical=logical+?1,allocated=allocated+?2,file_count=file_count+?4,small_count=small_count+?5,small_allocated=small_allocated+?6,largest=MAX(largest,?7) WHERE path=?3",
             params![f.logical_bytes,f.allocated_bytes,f.parent,metrics.file_count,metrics.small_file_count,metrics.small_allocated_bytes,metrics.largest_file_bytes],
-        )?;
+        ))?;
         if f.path.ends_with("/Library/Caches") || f.path.ends_with("/private/var/tmp") {
             if summary.candidates.len() < 500 {
                 summary.candidates.push(CleanupCandidate{path:f.path.clone(),allocated_bytes:f.allocated_bytes,logical_bytes:f.logical_bytes,modified_at:f.modified_at.clone(),origin:"Known cache/temporary directory".into(),reason:"Directory name and size alone do not establish disposability.".into(),safety:"Review required".into(),consequences:"Applications may regenerate contents; removal can discard useful data or slow subsequent work.".into()});
@@ -662,4 +766,37 @@ fn walk_indexed<
         .sort_by(|a, b| b.allocated_bytes.total_cmp(&a.allocated_bytes));
     progress(&summary)?;
     Ok(summary)
+}
+
+#[cfg(test)]
+#[test]
+fn temporary_index_is_excluded_when_its_directory_has_another_path() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path().join("contents");
+    fs::create_dir(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    fs::write(root.join("keep.txt"), b"keep").unwrap();
+    let alias = fixture.path().join("temporary-alias");
+    std::os::unix::fs::symlink(&root, &alias).unwrap();
+    let mut gaps = vec![];
+    let summary = walk_indexed(
+        std::slice::from_ref(&root),
+        &[],
+        &AtomicBool::new(false),
+        false,
+        &alias,
+        |_| Ok(()),
+        |_| Ok(()),
+        |gap| {
+            gaps.push(gap);
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 1);
+    assert_eq!(summary.logical, 4.);
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0].reason, "excluded");
+    assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+    assert_eq!(fs::read(root.join("keep.txt")).unwrap(), b"keep");
 }

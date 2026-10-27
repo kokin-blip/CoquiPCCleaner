@@ -9,7 +9,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Read,
     os::unix::fs::{MetadataExt, OpenOptionsExt},
-    path::Path,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
@@ -47,7 +47,11 @@ pub(crate) struct CopySeal {
 }
 fn open(path: &Path, policy: &Policy) -> Result<(File, Stamp)> {
     anyhow::ensure!(
-        path.is_absolute() && !policy.exclusions.iter().any(|p| path.starts_with(p)),
+        path.is_absolute()
+            && !policy
+                .exclusions
+                .iter()
+                .any(|p| crate::volumes::same_or_below(path, p)),
         "Excluded or non-absolute path"
     );
     for a in path.ancestors() {
@@ -199,6 +203,78 @@ fn photo_hash(path: &Path, policy: &Policy) -> Result<u64> {
 pub fn get(c: &Connection, id: &str) -> Result<DuplicateReport> {
     records::get(c, "duplicates", id)
 }
+pub fn preview_photo(
+    c: &Connection,
+    report_id: &str,
+    path: &str,
+    policy: &Policy,
+    cancel: &AtomicBool,
+) -> Result<PhotoPreview> {
+    let report = get(c, report_id)?;
+    anyhow::ensure!(
+        report.status != "running",
+        "Wait for content analysis to finish"
+    );
+    anyhow::ensure!(
+        report
+            .groups
+            .iter()
+            .any(|g| g.files.iter().any(|f| f.path == path))
+            || report
+                .photo_matches
+                .iter()
+                .any(|p| p.left == path || p.right == path),
+        "Choose a photo from this retained report"
+    );
+    let path = Path::new(path);
+    anyhow::ensure!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| ["png", "jpg", "jpeg"].contains(&e.to_ascii_lowercase().as_str())),
+        "Only PNG and JPEG previews are supported"
+    );
+    let (mut f, stamp) = open(path, policy)?;
+    anyhow::ensure!(
+        stamp.size <= 32 * 1024 * 1024,
+        "Photo exceeds the 32 MiB preview bound"
+    );
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 65536];
+    loop {
+        anyhow::ensure!(!cancel.load(Ordering::SeqCst), "Preview cancelled");
+        let n = f.read(&mut chunk)?;
+        if n == 0 {
+            break;
+        }
+        anyhow::ensure!(
+            bytes.len() + n <= 32 * 1024 * 1024,
+            "Photo grew beyond the preview bound"
+        );
+        bytes.extend_from_slice(&chunk[..n]);
+    }
+    anyhow::ensure!(
+        Stamp::of(&f.metadata()?) == stamp && Stamp::of(&fs::symlink_metadata(path)?) == stamp,
+        "Photo changed during preview read"
+    );
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
+    anyhow::ensure!(
+        matches!(
+            reader.format(),
+            Some(image::ImageFormat::Png | image::ImageFormat::Jpeg)
+        ),
+        "Only PNG and JPEG content is supported"
+    );
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(12000);
+    limits.max_image_height = Some(12000);
+    limits.max_alloc = Some(96 * 1024 * 1024);
+    reader.limits(limits);
+    let image = reader.decode()?.thumbnail(512, 512);
+    anyhow::ensure!(!cancel.load(Ordering::SeqCst), "Preview cancelled");
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut encoded, image::ImageFormat::Png)?;
+    Ok(PhotoPreview { png_bytes:encoded.into_inner(), width:image.width(), height:image.height(), qualification:"Current bounded preview, not a renewed equality check or cleanup approval. PNG/JPEG only; orientation and color may differ from the original. Pixels are not saved in Coqui history.".into() })
+}
 fn save(c: &Connection, r: &DuplicateReport) -> Result<()> {
     records::save(
         c,
@@ -215,27 +291,151 @@ pub fn analyze(
     session_id: &str,
     policy: &Policy,
     cancel: &AtomicBool,
+    emit: impl FnMut(DuplicateReport) -> bool,
+) -> Result<DuplicateReport> {
+    analyze_scoped(
+        c,
+        DuplicateAnalysisRequest {
+            session_id: session_id.into(),
+            location: DuplicateLocation::Indexed,
+            similar_photos: true,
+        },
+        policy,
+        cancel,
+        emit,
+    )
+}
+
+fn downloads_roots(policy: &Policy) -> Result<Vec<PathBuf>> {
+    let root = crate::volumes::friendly(&policy.home.join("Downloads"));
+    anyhow::ensure!(
+        root.is_absolute(),
+        "Downloads requires an absolute account home"
+    );
+    for parent in root.ancestors() {
+        let metadata = fs::symlink_metadata(parent)
+            .context("Downloads is unavailable; check the folder and storage scan scope")?;
+        anyhow::ensure!(
+            metadata.is_dir()
+                && !metadata.file_type().is_symlink()
+                && !storage::placeholder(parent, &metadata),
+            "Linked or cloud-only Downloads folders are unsupported"
+        );
+    }
+    anyhow::ensure!(
+        !policy
+            .exclusions
+            .iter()
+            .any(|excluded| crate::volumes::same_or_below(&root, excluded)),
+        "Downloads is excluded in the current preferences"
+    );
+    let mut roots = vec![root.clone()];
+    let data = Path::new("/System/Volumes/Data").join(root.strip_prefix("/")?);
+    // Include only an alias recognized by the OS's published firmlink map.
+    if data != root && crate::volumes::friendly(&data) == root {
+        roots.push(data);
+    }
+    Ok(roots)
+}
+
+fn indexed_candidates(
+    c: &Connection,
+    session: &str,
+    roots: &[PathBuf],
+) -> Result<Vec<DuplicateFile>> {
+    let fields = "SELECT path,logical,allocated,modified FROM files WHERE session_id=?1 AND directory=0 AND logical>0";
+    let query = if roots.is_empty() {
+        format!("{fields} ORDER BY logical DESC,path LIMIT 2001")
+    } else {
+        format!("{fields} AND path>=?2 AND path<?3 ORDER BY logical DESC,path LIMIT 2001")
+    };
+    let mut statement = c.prepare(&query)?;
+    let mut files = vec![];
+    let decode = |row: &rusqlite::Row<'_>| {
+        Ok(DuplicateFile {
+            review_supported: false,
+            review_qualification: String::new(),
+            path: row.get(0)?,
+            logical_bytes: row.get(1)?,
+            allocated_bytes: row.get(2)?,
+            modified_at: row.get(3)?,
+        })
+    };
+    if roots.is_empty() {
+        files = statement
+            .query_map([session], decode)?
+            .collect::<rusqlite::Result<_>>()?;
+    } else {
+        for root in roots {
+            let root = root
+                .to_str()
+                .context("Downloads path is not representable")?;
+            files.extend(
+                statement
+                    .query_map(
+                        rusqlite::params![session, format!("{root}/"), format!("{root}0")],
+                        decode,
+                    )?
+                    .collect::<rusqlite::Result<Vec<_>>>()?,
+            );
+        }
+        for file in &mut files {
+            file.path = crate::volumes::friendly(Path::new(&file.path))
+                .to_string_lossy()
+                .into_owned();
+        }
+        files.sort_by(|a, b| {
+            b.logical_bytes
+                .total_cmp(&a.logical_bytes)
+                .then_with(|| a.path.cmp(&b.path))
+        });
+        let mut seen = HashSet::new();
+        files.retain(|file| seen.insert(file.path.clone()));
+    }
+    Ok(files)
+}
+
+pub fn analyze_scoped(
+    c: &Connection,
+    request: DuplicateAnalysisRequest,
+    policy: &Policy,
+    cancel: &AtomicBool,
     mut emit: impl FnMut(DuplicateReport) -> bool,
 ) -> Result<DuplicateReport> {
+    let session_id = request.session_id.as_str();
     let session = database::session(c, session_id)?;
     anyhow::ensure!(session.status != "running", "Wait for the storage scan");
-    let mut r=DuplicateReport{id:uuid::Uuid::new_v4().to_string(),session_id:session_id.into(),created_at:now(),status:"running".into(),stage:"Reading indexed candidates".into(),examined:0,total:0,hashed_bytes:0.,groups:vec![],photo_matches:vec![],gaps:vec![],qualification:"Explicit content reads. At most 2,000 indexed files, 256 MiB per file, 2 GiB of initial hashing and 120 seconds. PNG/JPEG visual candidates: at most 150 images up to 32 MiB and 12,000px; dHash distance ≤6 is only a similarity hint, never duplicate authority. Links/cloud placeholders/exclusions skipped. Intentional backups and project copies may be valuable. APFS clones/shared blocks mean sizes are not reclaimable-space promises.".into()};
+    let roots = if matches!(request.location, DuplicateLocation::Downloads) {
+        downloads_roots(policy)?
+    } else {
+        vec![]
+    };
+    let mut r=DuplicateReport{id:uuid::Uuid::new_v4().to_string(),session_id:session_id.into(),created_at:now(),status:"running".into(),stage:"Reading indexed candidates".into(),examined:0,total:0,hashed_bytes:0.,groups:vec![],photo_matches:vec![],gaps:vec![],qualification:"Explicit content reads. At most 2,000 indexed files from the selected location, 256 MiB per file, 2 GiB of initial hashing and 120 seconds. Optional PNG/JPEG visual candidates: at most 150 images up to 32 MiB and 12,000px; dHash distance ≤6 is only a similarity hint, never duplicate authority. Links/cloud placeholders/exclusions skipped. Location is not browser origin; no download history or URLs are read. Last-modified dates are not download dates or evidence of disuse. Intentional backups and project copies may be valuable. APFS clones/shared blocks mean sizes are not reclaimable-space promises.".into(), request:Some(request.clone()),scope_root:roots.first().map(|path|path.to_string_lossy().into_owned())};
+    if session.status != "complete" || !session.permissions.is_empty() || !session.errors.is_empty()
+    {
+        r.gaps.push(format!("The source storage scan is {} with qualified coverage; content results cover only its retained readable candidates.", session.status));
+    }
     save(c, &r)?;
-    let mut q=c.prepare("SELECT path,logical,allocated,modified FROM files WHERE session_id=?1 AND directory=0 AND logical>0 ORDER BY logical DESC,path LIMIT 2001")?;
-    let mut files = q
-        .query_map([session_id], |row| {
-            Ok(DuplicateFile {
-                review_supported: false,
-                review_qualification: String::new(),
-                path: row.get(0)?,
-                logical_bytes: row.get(1)?,
-                allocated_bytes: row.get(2)?,
-                modified_at: row.get(3)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    if files.is_empty() && session.file_count > 0 {
-        r.gaps.push("This saved scan no longer has a retained file index; rescan the scope before comparing contents.".into());
+    let mut files = indexed_candidates(c, session_id, &roots)?;
+    let indexed = if roots.is_empty() {
+        c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM files WHERE session_id=?1)",
+            [session_id],
+            |row| row.get::<_, bool>(0),
+        )?
+    } else {
+        let mut present = !files.is_empty();
+        for root in &roots {
+            present |= c.query_row(
+                "SELECT EXISTS(SELECT 1 FROM files WHERE session_id=?1 AND path=?2)",
+                rusqlite::params![session_id, root.to_string_lossy()],
+                |row| row.get::<_, bool>(0),
+            )?;
+        }
+        present
+    };
+    if !indexed {
+        r.gaps.push("No retained index entries establish the requested location. It may be outside the scan, omitted or no longer retained; scan that location before comparing contents.".into());
         r.status = "partial".into();
     }
     if files.len() > 2000 {
@@ -245,6 +445,9 @@ pub fn analyze(
         );
     }
     r.total = files.len() as u32;
+    if !emit(r.clone()) {
+        cancel.store(true, Ordering::SeqCst);
+    }
     let mut sizes = BTreeMap::<u64, usize>::new();
     for f in &files {
         *sizes.entry(f.logical_bytes as u64).or_default() += 1;
@@ -301,7 +504,9 @@ pub fn analyze(
                 .and_then(|s| s.to_str())
                 .unwrap_or("")
                 .to_lowercase();
-            let is_photo = ["png", "jpg", "jpeg"].contains(&ext.as_str()) && photos.len() < 150;
+            let is_photo = request.similar_photos
+                && ["png", "jpg", "jpeg"].contains(&ext.as_str())
+                && photos.len() < 150;
             if sizes.get(&(f.logical_bytes as u64)).copied().unwrap_or(0) > 1 {
                 anyhow::ensure!(
                     r.hashed_bytes + s.size as f64 <= MAX_TOTAL as f64,
@@ -402,7 +607,12 @@ pub fn analyze(
     if cancel.load(Ordering::SeqCst) {
         r.status = "cancelled".into()
     } else if r.status == "running" {
-        r.status = if errors > 0 { "partial" } else { "complete" }.into()
+        r.status = if errors > 0 || !r.gaps.is_empty() {
+            "partial"
+        } else {
+            "complete"
+        }
+        .into()
     }
     r.groups.sort_by(|a, b| {
         b.files[0]

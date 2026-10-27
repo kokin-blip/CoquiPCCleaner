@@ -44,6 +44,7 @@ async function setup(overrides: Parameters<typeof fakeBackend>[0] = {}) {
   const controller = createAppStore(service);
   await controller.initialize();
   render(Optimization, { controller, onScan: () => {} });
+  await fireEvent.click(screen.getByRole('tab', { name: 'Cache files' }));
   return { controller, service };
 }
 async function openReview() {

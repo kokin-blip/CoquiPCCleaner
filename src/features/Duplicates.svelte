@@ -5,6 +5,11 @@
   import type { CleanupPlan } from '../bindings/CleanupPlan';
   import { bytes, date } from '../format';
   import Status from '../components/Status.svelte';
+  import PhotoPreview from '../components/PhotoPreview.svelte';
+  import DuplicateContext from '../components/DuplicateContext.svelte';
+  import type { DuplicateLocation } from '../bindings/DuplicateLocation';
+  import type { DuplicateFile } from '../bindings/DuplicateFile';
+  import type { DuplicateGroup } from '../bindings/DuplicateGroup';
   let {
     controller,
     onReview,
@@ -16,6 +21,12 @@
     error = $state(''),
     loading = $state(false);
   let groupPage = $state(0);
+  let copyPages = $state<Record<string, number>>({});
+  let location = $state<DuplicateLocation>('downloads');
+  let similarPhotos = $state(false);
+  let search = $state('');
+  let age = $state('any');
+  let sort = $state('largest');
   let keep = $state<Record<string, string>>({}),
     selected = $state<string[]>([]);
   let busy = $derived(
@@ -25,6 +36,26 @@
       $controller.cleanupPreparing ||
       $controller.developerRunning,
   );
+  let groups = $derived.by(() => {
+    if (!report) return [];
+    const observed = Date.parse(report.createdAt);
+    const query = search.trim().toLocaleLowerCase();
+    const matches = report.groups.filter((group) => group.files.some((file) => {
+      if (query && !file.path.toLocaleLowerCase().includes(query)) return false;
+      if (age === 'any') return true;
+      const modified = Date.parse(file.modifiedAt);
+      if (age === 'unknown') return !Number.isFinite(modified) || !Number.isFinite(observed);
+      return Number.isFinite(observed) && Number.isFinite(modified)
+        && modified <= observed - Number(age) * 86_400_000;
+    }));
+    const oldest = (files: DuplicateFile[]) => Math.min(...files.map((file) => Date.parse(file.modifiedAt)).filter(Number.isFinite));
+    return matches.sort((a, b) => sort === 'oldest'
+      ? oldest(a.files) - oldest(b.files)
+      : sort === 'smallest' ? (a.files[0]?.logicalBytes ?? 0) - (b.files[0]?.logicalBytes ?? 0)
+      : (b.files[0]?.logicalBytes ?? 0) - (a.files[0]?.logicalBytes ?? 0));
+  });
+  function clearSelection() { selected = []; keep = {}; groupPage = 0; copyPages = {}; }
+  function changeLocation() { report = null; clearSelection(); age = 'any'; search = ''; }
   onMount(() => {
     void restore();
   });
@@ -39,6 +70,8 @@
           r.data.sessionId === $controller.session?.id
         ) {
           report = r.data;
+          location = r.data.request?.location ?? 'downloads';
+          similarPhotos = r.data.request?.similarPhotos ?? false;
           break;
         }
       }
@@ -54,11 +87,12 @@
     report = null;
     selected = [];
     groupPage = 0;
+    copyPages = {};
     keep = {};
     try {
       report = await controller.work('Duplicate content analysis', () =>
-        controller.service.analyzeDuplicates(
-          $controller.session!.id,
+        controller.service.analyzeDuplicateScope(
+          { sessionId: $controller.session!.id, location, similarPhotos },
           (r) => (report = r),
         ),
       );
@@ -85,9 +119,17 @@
   }
 </script>
 
+{#snippet copyNavigation(group: DuplicateGroup)}
+  {#if group.files.length > 100}<div class="pagination" aria-label="Copies in this exact group">
+    <button disabled={busy || !(copyPages[group.id] ?? 0)} onclick={() => copyPages = {...copyPages, [group.id]: (copyPages[group.id] ?? 0) - 1}}>Previous copies</button>
+    <span class="small muted">Copies {(copyPages[group.id] ?? 0) * 100 + 1}–{Math.min(group.files.length, ((copyPages[group.id] ?? 0) + 1) * 100)} of {group.files.length}</span>
+    <button disabled={busy || ((copyPages[group.id] ?? 0) + 1) * 100 >= group.files.length} onclick={() => copyPages = {...copyPages, [group.id]: (copyPages[group.id] ?? 0) + 1}}>Next copies</button>
+  </div>{/if}
+{/snippet}
+
 <div class="section-heading">
   <div>
-    <h2>Exact copies and similar photos</h2>
+    <h2>Exact copies</h2>
     <p class="muted">
       Content reads are opt-in. Intentional backups and project copies may be
       valuable.
@@ -95,10 +137,26 @@
   </div>
   <button
     class="primary"
-    disabled={busy || !$controller.session}
+    disabled={busy || loading || !$controller.session}
     onclick={analyze}>Analyze contents</button
   >
 </div>
+<div class="duplicate-options">
+  <label>Content-check location
+    <select bind:value={location} disabled={busy || loading} onchange={changeLocation}>
+      <option value="downloads">Downloads only</option>
+      <option value="indexed">All indexed locations</option>
+    </select>
+  </label>
+  <label class="duplicate-photo-option"><input type="checkbox" bind:checked={similarPhotos} disabled={busy || loading} />Include similar PNG/JPEG photos in the next check</label>
+</div>
+<p class="small muted">
+  {location === 'downloads'
+    ? 'Compare indexed files in your account’s Downloads folder.'
+    : 'Compare candidates across the saved scan’s indexed locations.'}
+  Browser history and download URLs are not read. Choosing a location starts no
+  analysis; Analyze contents starts the content reads.
+</p>
 <p class="muted small">
   Up to 2,000 indexed files, 256 MiB per file and 2 GiB of initial hashing.
   PNG/JPEG similarity is a review hint; only freshly byte-verified exact copies
@@ -118,28 +176,43 @@
     <p aria-live="polite">
       {report.examined} / {report.total} indexed files examined · {bytes(
         report.hashedBytes,
-      )} hashed · {report.groups.length} exact groups
+      )} hashed · {report.groups.length} exact {report.groups.length === 1 ? 'group' : 'groups'}
     </p>
-    <p class="muted small">{date(report.createdAt)} · {report.qualification}</p>
+    <p class="muted small">{date(report.createdAt)}</p>
+    <DuplicateContext {report} />
+    <details><summary>Read limits and verification</summary><p class="muted small">{report.qualification}</p></details>
     {#if report.gaps.length}<details>
         <summary>{report.gaps.length} coverage notes</summary
         >{#each report.gaps as gap}<p class="path small">{gap}</p>{/each}
       </details>{/if}
   </section>
-  {#if report.groups.length > 10}<div class="button-row">
+  {#if report.groups.length}
+    <div class="duplicate-filters" role="group" aria-label="Filter saved exact groups">
+      <label>Find a path<input type="search" bind:value={search} oninput={clearSelection} placeholder="Name or folder" disabled={busy} /></label>
+      <label>Last modified<select bind:value={age} onchange={clearSelection} disabled={busy}>
+        <option value="any">Any date</option><option value="30">At least 30 days before this report</option><option value="90">At least 90 days before this report</option><option value="365">At least 365 days before this report</option><option value="unknown">Age unavailable</option>
+      </select></label>
+      <label>Sort groups<select bind:value={sort} onchange={clearSelection} disabled={busy}>
+        <option value="largest">Largest copies first</option><option value="smallest">Smallest copies first</option><option value="oldest">Oldest modification first</option>
+      </select></label>
+    </div>
+    <p class="small muted" aria-live="polite">{groups.length} of {report.groups.length} exact groups shown · {selected.length} copies selected.</p>
+    <p class="small muted">Filters use this report’s recorded paths and last-modified dates, not download dates or last use. A matching group keeps every copy available for keeper review. Changing filters clears selections and starts no content reads.</p>
+  {/if}
+  {#if groups.length > 10}<div class="button-row">
       <button disabled={groupPage === 0} onclick={() => groupPage--}
         >Previous groups</button
       ><span class="muted small"
         >Groups {groupPage * 10 + 1}–{Math.min(
-          report.groups.length,
+          groups.length,
           groupPage * 10 + 10,
-        )} of {report.groups.length}</span
+        )} of {groups.length}</span
       ><button
-        disabled={(groupPage + 1) * 10 >= report.groups.length}
+        disabled={(groupPage + 1) * 10 >= groups.length}
         onclick={() => groupPage++}>Next groups</button
       >
     </div>{/if}
-  {#each report.groups.slice(groupPage * 10, groupPage * 10 + 10) as group}
+  {#each groups.slice(groupPage * 10, groupPage * 10 + 10) as group}
     <section class="panel">
       <div class="section-heading">
         <h2>
@@ -153,6 +226,11 @@
         Choose a keeper explicitly, then select copies to review. Equal contents
         do not imply equal purpose.
       </p>
+      {#if group.files.length > 100}
+        <p class="small muted">Every retained copy is available across these pages. Page changes keep your explicit choices; changing filters clears them.</p>
+        <p class="small">Keeper: <span class="path">{keep[group.id] || 'Not selected'}</span> · {group.files.filter((file) => selected.includes(file.path)).length} copies selected across pages.</p>
+      {/if}
+      {@render copyNavigation(group)}
       <div class="table-wrap">
         <table>
           <thead
@@ -161,7 +239,7 @@
               ><th>Allocated</th><th>Inspect</th></tr
             ></thead
           ><tbody
-            >{#each group.files.slice(0, 100) as file}<tr
+            >{#each group.files.slice((copyPages[group.id] ?? 0) * 100, ((copyPages[group.id] ?? 0) + 1) * 100) as file}<tr
                 ><td
                   ><input
                     type="radio"
@@ -206,10 +284,7 @@
           >
         </table>
       </div>
-      {#if group.files.length > 100}<p class="muted small">
-          First 100 copies shown; narrow the scan scope to inspect further
-          copies.
-        </p>{/if}
+      {@render copyNavigation(group)}
       <button
         disabled={busy ||
           !keep[group.id] ||
@@ -224,6 +299,10 @@
       >
     </section>
   {/each}
+  {#if report.groups.length && !groups.length}<div class="empty-state compact">
+    <h2>No groups match these filters.</h2><p>The report still retains its other groups. Clear filters to review them.</p>
+    <button onclick={() => { search = ''; age = 'any'; clearSelection(); }}>Clear filters</button>
+  </div>{/if}
   {#if report.status !== 'running' && !report.groups.length}<div
       class="empty-state compact"
     >
@@ -237,13 +316,15 @@
       <h2>Similar / possible modified photos</h2>
       <p class="muted">
         Perceptual matches can be wrong. Inspect both originals; no removal
-        controls apply to these pairs.
+        controls apply to these pairs. The exact-group filters above do not filter these photo hints.
       </p>
       {#each report.photoMatches as pair}<div class="resource-pair">
           <div>
             <strong>{pair.classification} · distance {pair.distance}/64</strong>
-            <p class="path small">{pair.left}</p>
-            <p class="path small">{pair.right}</p>
+            <div class="photo-pair-previews">
+              <PhotoPreview {controller} reportId={report.id} path={pair.left}/>
+              <PhotoPreview {controller} reportId={report.id} path={pair.right}/>
+            </div>
             <p class="muted small">{pair.qualification}</p>
           </div>
           <div class="button-row">
@@ -266,3 +347,13 @@
       qualified partial report.
     </p>
   </div>{/if}
+
+<style>
+  .duplicate-options, .duplicate-filters { display:flex; flex-wrap:wrap; align-items:end; gap:16px; margin-block:16px; }
+  .duplicate-options label:not(.duplicate-photo-option), .duplicate-filters label { display:grid; gap:6px; }
+  .duplicate-photo-option { display:flex; align-items:center; gap:8px; padding-block:6px; }
+  .duplicate-filters input, .duplicate-filters select { max-width:100%; }
+  .duplicate-filters label { min-width:0; }
+  .photo-pair-previews { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  @media(max-width:1100px) { .photo-pair-previews { grid-template-columns:1fr; } }
+</style>

@@ -23,8 +23,31 @@
       $controller.cleanupPreparing ||
       $controller.developerRunning,
   );
+  let collection = $state('baseline'), workload = $state(''), target = $state(''), context = $state(''), duration = $state(30);
+  async function collect() {
+    if (!current) return;
+    const id = current.id;
+    error = '';
+    try {
+      current = await controller.work('Run read-only investigation task', () =>
+        controller.service.collectInvestigation(id,
+          collection === 'baseline'
+            ? { kind: 'baseline', request: { workload, target, context, durationSeconds: duration } }
+            : { kind: collection === 'developer' ? 'developer' : 'resources' },
+          (r) => { current = r; }),
+      );
+      await refresh();
+    } catch (e) { error = String(e); }
+  }
   onMount(() => {
+    workload = $controller.settings?.workload.workloads[0] ?? '';
     void refresh();
+    const draft = $controller.askDraft;
+    if (draft) {
+      text = draft;
+      controller.clearAskDraft();
+      void ask();
+    }
   });
   async function refresh() {
     loading = true;
@@ -78,6 +101,13 @@
     >{contextOpen ? 'Hide context' : 'Show context'}</button
   >
 </div>
+
+<style>
+  .investigation-collection {
+    padding: 20px;
+    border-top: 1px solid var(--border);
+  }
+</style>
 <div class="investigation-layout" class:context-open={contextOpen}>
   <aside class="investigation-history" aria-label="Investigation history">
     <div class="section-heading">
@@ -94,6 +124,7 @@
     {#if loading}<p role="status">Loading…</p>{/if}{#each history as row}<button
         class:active={current?.id === row.id}
         class="conversation-row"
+        disabled={busy}
         onclick={() => select(row.id)}
         ><strong>{row.title}</strong><span class="muted small"
           >{date(row.createdAt)}</span
@@ -142,6 +173,25 @@
             >{/each}
         </div>{/if}
     </div>
+    {#if current}<section class="investigation-collection" aria-label="Read-only investigation task">
+      <h2>Gather fresh evidence</h2>
+      <p class="muted small">Choose a task for this investigation. A baseline records current activity; resource and Git checks use the saved scan's indexed scope. No cleanup or setting change is performed.</p>
+      <form class="feature-form" onsubmit={(e) => { e.preventDefault(); void collect(); }}>
+        <label>Read-only task<select bind:value={collection} disabled={busy}>
+          <option value="baseline">Measure a representative workload</option>
+          <option value="developer">Recheck developer artifacts and Git state</option>
+          <option value="resources">Review indexed resources and organization</option>
+        </select></label>
+        {#if collection === 'baseline'}
+          <label>Workload<input required maxlength="2000" bind:value={workload} disabled={busy}/></label>
+          <label>Expected task result<input required maxlength="2000" bind:value={target} disabled={busy} placeholder="For example, build completes in under two minutes"/></label>
+          <label>Comparison conditions<input required maxlength="2000" bind:value={context} disabled={busy} placeholder="Same project, inputs and power source"/></label>
+          <label>Capture duration (seconds)<input type="number" required min="6" max="600" step="1" bind:value={duration} disabled={busy}/></label>
+        {/if}
+        <button disabled={busy || !current.sessionId}>Run selected read-only task</button>
+      </form>
+      {#if current.baselineId}<p class="muted small">Linked baseline: {current.baselineId}. Open Performance → Baselines to compare its actual samples.</p>{/if}
+    </section>{/if}
     <form
       class="ask-composer"
       onsubmit={(e) => {

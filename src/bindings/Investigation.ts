@@ -3,4 +3,4 @@ import type { DiagnosticFinding } from "./DiagnosticFinding";
 import type { DiagnosticTask } from "./DiagnosticTask";
 import type { InvestigationMessage } from "./InvestigationMessage";
 
-export type Investigation = { id: string, createdAt: string, title: string, sessionId: string | null, messages: Array<InvestigationMessage>, tasks: Array<DiagnosticTask>, findings: Array<DiagnosticFinding>, actions: Array<string>, status: string, qualification: string, };
+export type Investigation = { id: string, createdAt: string, title: string, sessionId: string | null, messages: Array<InvestigationMessage>, tasks: Array<DiagnosticTask>, findings: Array<DiagnosticFinding>, actions: Array<string>, status: string, qualification: string, baselineId: string | null, };

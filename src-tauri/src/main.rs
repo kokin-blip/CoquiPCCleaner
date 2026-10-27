@@ -6,19 +6,55 @@ fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-use coqui_engine::privileged::{HelperStatus,Lifecycle};
+use coqui_engine::privileged::{HelperStatus, Lifecycle};
 #[tauri::command]
-async fn administrator_lock()->Response<()>{tauri::async_runtime::spawn_blocking(api::administrator_lock).await.map_err(error)?.map_err(error)}
+async fn administrator_lock() -> Response<()> {
+    tauri::async_runtime::spawn_blocking(api::administrator_lock)
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
 #[tauri::command]
-async fn administrator_status()->Response<HelperStatus>{tauri::async_runtime::spawn_blocking(api::administrator_status).await.map_err(error)?.map_err(error)}
+async fn administrator_status() -> Response<HelperStatus> {
+    tauri::async_runtime::spawn_blocking(api::administrator_status)
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
 #[tauri::command]
-async fn administrator_inspect_application(path:String)->Response<ApplicationFootprint>{tauri::async_runtime::spawn_blocking(move||api::administrator_inspect_application(path)).await.map_err(error)?.map_err(error)}
+async fn administrator_inspect_application(path: String) -> Response<ApplicationFootprint> {
+    tauri::async_runtime::spawn_blocking(move || api::administrator_inspect_application(path))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
 #[tauri::command]
-async fn administrator_preview_removal(request:RemovalRequest)->Response<RemovalPlan>{tauri::async_runtime::spawn_blocking(move||api::administrator_preview_removal(request)).await.map_err(error)?.map_err(error)}
+async fn administrator_preview_removal(request: RemovalRequest) -> Response<RemovalPlan> {
+    tauri::async_runtime::spawn_blocking(move || api::administrator_preview_removal(request))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
 #[tauri::command]
-async fn administrator_lifecycle(action:Lifecycle)->Response<()>{tauri::async_runtime::spawn_blocking(move||api::administrator_lifecycle(action)).await.map_err(error)?.map_err(error)}
+async fn administrator_lifecycle(action: Lifecycle) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || api::administrator_lifecycle(action))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
 #[tauri::command]
-async fn administrator_scan(request:ScanRequest,plan:DiskScanPlan,events:Channel<ScanEvent>)->Response<()>{tauri::async_runtime::spawn_blocking(move||api::administrator_scan(request,plan,|event|events.send(event).is_ok())).await.map_err(error)?.map_err(error)}
+async fn administrator_scan(
+    request: ScanRequest,
+    plan: DiskScanPlan,
+    events: Channel<ScanEvent>,
+) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::administrator_scan(request, plan, |event| events.send(event).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
 use coqui_engine::{applications::*, removal::*};
 #[tauri::command]
 fn application_leftovers(offset: u32) -> Response<Vec<ApplicationFootprint>> {
@@ -43,8 +79,15 @@ async fn disk_scan_plan() -> Response<DiskScanPlan> {
         .map_err(error)
 }
 #[tauri::command]
-async fn scan_coverage(id: String, offset: u32) -> Response<Vec<CoverageGap>> {
-    tauri::async_runtime::spawn_blocking(move || api::scan_coverage(id, offset)).await.map_err(error)?.map_err(error)
+async fn scan_coverage(
+    id: String,
+    offset: u32,
+    reason: Option<String>,
+) -> Response<Vec<CoverageGap>> {
+    tauri::async_runtime::spawn_blocking(move || api::scan_coverage(id, offset, reason))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 async fn application_page(
@@ -75,7 +118,10 @@ fn application_preferences() -> Response<ApplicationPreferences> {
 }
 #[tauri::command]
 async fn save_application_preferences(p: ApplicationPreferences) -> Response<()> {
-    tauri::async_runtime::spawn_blocking(move || api::save_application_preferences(p)).await.map_err(error)?.map_err(error)
+    tauri::async_runtime::spawn_blocking(move || api::save_application_preferences(p))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 async fn preview_removal(r: RemovalRequest) -> Response<RemovalPlan> {
@@ -93,7 +139,10 @@ async fn preview_restore(id: String, paths: Vec<String>) -> Response<RemovalPlan
 }
 #[tauri::command]
 async fn removal_history(offset: u32) -> Response<Vec<RemovalPlan>> {
-    tauri::async_runtime::spawn_blocking(move||api::removal_history(offset)).await.map_err(error)?.map_err(error)
+    tauri::async_runtime::spawn_blocking(move || api::removal_history(offset))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 async fn execute_removal(
@@ -122,7 +171,10 @@ fn get_settings() -> Response<AppSettings> {
 }
 #[tauri::command]
 async fn update_settings(settings: AppSettings) -> Response<()> {
-    tauri::async_runtime::spawn_blocking(move || api::update_settings(settings)).await.map_err(error)?.map_err(error)
+    tauri::async_runtime::spawn_blocking(move || api::update_settings(settings))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 fn scan_history(offset: u32, limit: u32) -> Response<Vec<DiagnosticSession>> {
@@ -133,12 +185,25 @@ fn get_session(id: String) -> Response<DiagnosticSession> {
     api::get_session(id).map_err(error)
 }
 #[tauri::command]
+async fn scan_review(session_id: String) -> Response<ScanReview> {
+    tauri::async_runtime::spawn_blocking(move || api::scan_review(session_id))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
 async fn storage_entries(query: StorageQuery) -> Response<Vec<FileEntry>> {
-    tauri::async_runtime::spawn_blocking(move || api::storage_entries(query)).await.map_err(error)?.map_err(error)
+    tauri::async_runtime::spawn_blocking(move || api::storage_entries(query))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 async fn storage_map(query: StorageMapQuery) -> Response<StorageMap> {
-    tauri::async_runtime::spawn_blocking(move || api::storage_map(query)).await.map_err(error)?.map_err(error)
+    tauri::async_runtime::spawn_blocking(move || api::storage_map(query))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 fn clear_diagnostic_data() -> Response<()> {
@@ -168,6 +233,19 @@ async fn scan(request: ScanRequest, on_event: Channel<ScanEvent>) -> Response<()
         .await
         .map_err(error)?
         .map_err(error)
+}
+
+#[tauri::command]
+async fn scan_with_modules(request: ScanRequest, modules: coqui_engine::scan_observations::ScanModules, on_event: Channel<ScanEvent>) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || api::scan_with_modules(request, modules, |event| on_event.send(event).is_ok())).await.map_err(error)?.map_err(error)
+}
+#[tauri::command]
+async fn administrator_scan_with_modules(request: ScanRequest, plan: DiskScanPlan, modules: coqui_engine::scan_observations::ScanModules, events: Channel<ScanEvent>) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || api::administrator_scan_with_modules(request, plan, modules, |event| events.send(event).is_ok())).await.map_err(error)?.map_err(error)
+}
+#[tauri::command]
+async fn scan_observations(id: String) -> Response<Option<coqui_engine::scan_observations::ScanObservations>> {
+    tauri::async_runtime::spawn_blocking(move || api::scan_observations(id)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 async fn monitor(on_event: Channel<LiveMetrics>) -> Response<()> {
@@ -216,6 +294,14 @@ fn open_system_settings(destination: String) -> Response<()> {
 #[tauri::command]
 fn cleanup_files(session_id: String, offset: u32) -> Response<CleanupFilePage> {
     api::cleanup_files(session_id, offset).map_err(error)
+}
+#[tauri::command]
+async fn cleanup_categories(session_id: String) -> Response<coqui_engine::cleanup_categories::CleanupCategoryReport> {
+    tauri::async_runtime::spawn_blocking(move ||api::cleanup_categories(session_id)).await.map_err(error)?.map_err(error)
+}
+#[tauri::command]
+async fn cleanup_category_entries(query: coqui_engine::cleanup_categories::CleanupCategoryQuery) -> Response<coqui_engine::cleanup_categories::CleanupCategoryPage> {
+    tauri::async_runtime::spawn_blocking(move ||api::cleanup_category_entries(query)).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 fn preview_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
@@ -286,6 +372,42 @@ fn cancel_work() -> Response<()> {
     api::cancel_work().map_err(error)
 }
 #[tauri::command]
+async fn prepare_app_updates(paths: Vec<String>) -> Response<AppUpdatePlan> {
+    tauri::async_runtime::spawn_blocking(move || api::prepare_app_updates(paths))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn check_app_updates(
+    plan_id: String,
+    network_acknowledged: bool,
+    on_event: Channel<AppUpdateReport>,
+) -> Response<AppUpdateReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::check_app_updates(plan_id, network_acknowledged, |event| {
+            on_event.send(event).is_ok()
+        })
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn latest_app_updates() -> Response<Option<AppUpdateReport>> {
+    tauri::async_runtime::spawn_blocking(api::latest_app_updates)
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn open_app_update(report_id: String, path: String) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || api::open_app_update(report_id, path))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
 async fn analyze_duplicates(
     session_id: String,
     on_event: Channel<DuplicateReport>,
@@ -296,6 +418,15 @@ async fn analyze_duplicates(
     .await
     .map_err(error)?
     .map_err(error)
+}
+#[tauri::command]
+async fn analyze_duplicate_scope(
+    request: DuplicateAnalysisRequest,
+    on_event: Channel<DuplicateReport>,
+) -> Response<DuplicateReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::analyze_duplicate_scope(request, |e| on_event.send(e).is_ok())
+    }).await.map_err(error)?.map_err(error)
 }
 #[tauri::command]
 async fn preview_duplicate_cleanup(request: DuplicateCleanupRequest) -> Response<CleanupPlan> {
@@ -319,6 +450,36 @@ async fn capture_baseline(
 #[tauri::command]
 fn compare_baselines(before: String, after: String) -> Response<BaselineComparison> {
     api::compare_baselines(before, after).map_err(error)
+}
+#[tauri::command]
+async fn capture_workload_trial(
+    request: WorkloadTrialRequest,
+    on_event: Channel<WorkloadTrial>,
+) -> Response<WorkloadTrial> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::capture_workload_trial(request, |r| on_event.send(r).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+fn finish_workload_trial(id: String) -> Response<()> {
+    api::finish_workload_trial(id).map_err(error)
+}
+#[tauri::command]
+async fn compare_workload_trials(request: TrialComparisonRequest) -> Response<TrialComparison> {
+    tauri::async_runtime::spawn_blocking(move || api::compare_workload_trials(request))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn save_trial_comparison(request: TrialComparisonRequest) -> Response<TrialComparison> {
+    tauri::async_runtime::spawn_blocking(move || api::save_trial_comparison(request))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 async fn create_manual_plan(kind: String, requested: String) -> Response<ManualPlan> {
@@ -345,6 +506,52 @@ fn ask_coqui(
 #[tauri::command]
 fn assess_workload(request: AdviceRequest) -> Response<AdviceReport> {
     api::assess_workload(request).map_err(error)
+}
+#[tauri::command]
+async fn collect_investigation(
+    id: String,
+    task: InvestigationCollection,
+    on_event: Channel<Investigation>,
+) -> Response<Investigation> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::collect_investigation(id, task, |r| on_event.send(r).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn recommendation_plan(
+    session_id: String,
+    baseline_id: Option<String>,
+    trial_id: Option<String>,
+) -> Response<RecommendationPlan> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::recommendation_plan(session_id, baseline_id, trial_id)
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn preview_duplicate_photo(report_id: String, path: String) -> Response<PhotoPreview> {
+    tauri::async_runtime::spawn_blocking(move || api::preview_duplicate_photo(report_id, path))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn save_recommendation_plan(
+    session_id: String,
+    baseline_id: Option<String>,
+    trial_id: Option<String>,
+) -> Response<RecommendationPlan> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::save_recommendation_plan(session_id, baseline_id, trial_id)
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
 }
 #[tauri::command]
 async fn analyze_resources(session_id: String) -> Response<ResourceReview> {
@@ -387,6 +594,9 @@ fn open_reference(url: String) -> Response<()> {
         coqui_engine::firmware::UPDATE_GUIDE,
         coqui_engine::firmware::POLICY_GUIDE,
         coqui_engine::firmware::RECOVERY_GUIDE,
+        coqui_engine::cleanup_categories::XCODE_GUIDE,
+        coqui_engine::cleanup_categories::BACKUP_GUIDE,
+        coqui_engine::cleanup_categories::SYMBOL_GUIDE,
     ];
     if !allowed.contains(&url.as_str()) {
         return Err("Unknown reference link".into());
@@ -454,7 +664,12 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            administrator_status,administrator_lock,administrator_inspect_application,administrator_preview_removal,administrator_lifecycle,administrator_scan,
+            administrator_status,
+            administrator_lock,
+            administrator_inspect_application,
+            administrator_preview_removal,
+            administrator_lifecycle,
+            administrator_scan,
             refresh_application_inventory,
             application_leftovers,
             application_notices,
@@ -479,14 +694,27 @@ fn main() {
             acknowledge_firmware_plan,
             observe_firmware_plan,
             cancel_work,
+            prepare_app_updates,
+            check_app_updates,
+            latest_app_updates,
+            open_app_update,
             analyze_duplicates,
+            analyze_duplicate_scope,
             preview_duplicate_cleanup,
             capture_baseline,
             compare_baselines,
+            capture_workload_trial,
+            finish_workload_trial,
+            compare_workload_trials,
+            save_trial_comparison,
             create_manual_plan,
             verify_manual_plan,
             ask_coqui,
+            collect_investigation,
             assess_workload,
+            recommendation_plan,
+            preview_duplicate_photo,
+            save_recommendation_plan,
             analyze_resources,
             activity_records,
             get_record,
@@ -497,6 +725,8 @@ fn main() {
             analyze_developer,
             cancel_developer,
             cleanup_files,
+            cleanup_categories,
+            cleanup_category_entries,
             preview_cleanup,
             preview_project_cleanup,
             project_cleanup_entries,
@@ -510,6 +740,10 @@ fn main() {
             update_settings,
             scan_history,
             get_session,
+            scan_review,
+            scan_with_modules,
+            administrator_scan_with_modules,
+            scan_observations,
             storage_entries,
             storage_map,
             clear_diagnostic_data,

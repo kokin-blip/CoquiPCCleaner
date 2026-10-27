@@ -5,6 +5,7 @@
   import type { StorageMapNode } from '../bindings/StorageMapNode';
   import { bytes } from '../format';
   import { storageColor, treemap } from '../treemap';
+  import DevelopmentIndicators from './DevelopmentIndicators.svelte';
   let {
     data,
     metric,
@@ -135,6 +136,7 @@
         <strong title={active.entry.path}>{active.entry.name}</strong>
       </div>
       <p class="context-kind">{active.title}</p>
+      <DevelopmentIndicators indicators={active.development} />
       <p class="muted small">{active.reason}</p>
       {#if active.entry.isDirectory && active.fileCount !== null}
         <p class="muted small">

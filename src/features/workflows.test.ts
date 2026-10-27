@@ -19,9 +19,10 @@ describe('desktop workflows', () => {
       monitoringError: 'Collector unavailable',
     }));
     c.dismiss();
+    c.openOverviewResults();
     const dashboard = render(Dashboard, { controller: c, onScan: () => {} });
     expect(
-      screen.getByText('Monitoring stopped · open Performance to retry'),
+      screen.getByText('Monitoring unavailable · open to retry'),
     ).toBeInTheDocument();
     expect(screen.queryByText('Live · sampled every 2 seconds')).toBeNull();
     dashboard.unmount();
@@ -54,7 +55,7 @@ describe('desktop workflows', () => {
     const service = fakeBackend();
     const c = createAppStore(service);
     await c.initialize();
-    render(Onboarding, { controller: c });
+    render(Onboarding, { controller: c, onScan: () => {} });
     await fireEvent.click(
       screen.getByRole('button', { name: /Set up my computer/ }),
     );

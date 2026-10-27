@@ -19,6 +19,7 @@ const report: DeveloperReport = {
     {
       path: '/fixture/target',
       projectRoot: '/fixture',
+      development: [],
       technology: 'Rust',
       kind: 'Build output',
       marker: 'Cargo.toml',
@@ -34,6 +35,7 @@ const report: DeveloperReport = {
       reasons: ['Git tracks files in this output. Preserve them.'],
       consequences: 'Rebuilding can be expensive.',
       git: {
+        recovery: null,
         status: 'dirty',
         root: '/fixture',
         gitDirectory: '/fixture/.git',
@@ -450,4 +452,24 @@ it('presents legacy declined project items as terminal while preserving their ev
   expect(
     screen.queryByRole('button', { name: 'Approve and move to Trash' }),
   ).toBeNull();
+});
+
+describe('development safety indicators', () => {
+  it('expands evidence without turning a cached remote match into deletion approval', async () => {
+    const current = structuredClone(report);
+    current.artifacts[0].development = [
+      { label: 'Build / tool output', attention: false, detail: 'Recognized pattern; regeneration is unverified.' },
+      { label: 'Review before deleting', attention: true, detail: 'Review unique contents before deleting.' },
+      { label: 'Matches cached remote', attention: false, detail: 'GitHub/remote was not contacted. Ignored files are not backed up.' },
+    ];
+    const { service, controller } = await setup({ developerReport: async () => current });
+    const summary = await screen.findByLabelText('Development and deletion evidence');
+    const disclosure = summary.closest('details')!;
+    await fireEvent.click(disclosure.querySelector('summary')!);
+    expect(disclosure).toHaveTextContent('Ignored files are not backed up.');
+    expect(disclosure).toHaveTextContent('Review before deleting');
+    expect(screen.queryByRole('button', { name: /safe to delete/i })).toBeNull();
+    expect(service.executeCleanup).not.toHaveBeenCalled();
+    await controller.dispose();
+  });
 });

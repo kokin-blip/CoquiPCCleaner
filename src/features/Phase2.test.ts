@@ -21,6 +21,7 @@ async function setup(overrides: Parameters<typeof fakeBackend>[0] = {}) {
   return { controller, service };
 }
 const investigation: Investigation = {
+  baselineId: null,
   id: 'ask',
   createdAt: '2026-10-22T12:00:00Z',
   title: 'Storage',
@@ -47,6 +48,8 @@ const investigation: Investigation = {
   qualification: 'Local guide; no external AI',
 };
 const report: DuplicateReport = {
+  request: null,
+  scopeRoot: null,
   id: 'duplicates',
   sessionId: 'fixture',
   createdAt: '',
@@ -111,7 +114,7 @@ describe('remaining Phase 2 workflows', () => {
   });
   it('requires an explicit keeper and selected removal copies before duplicate review', async () => {
     const { controller, service } = await setup({
-      analyzeDuplicates: vi.fn(async (_id, on) => {
+      analyzeDuplicateScope: vi.fn(async (_request, on) => {
         on(report);
         return report;
       }),

@@ -44,7 +44,7 @@ pub struct ApplicationPage {
     pub total: u32,
     pub qualification: String,
 }
-fn info(path: &Path) -> Result<plist::Value> {
+pub(crate) fn info_bytes(path: &Path) -> Result<Vec<u8>> {
     #[cfg(target_os = "macos")]
     let bytes = crate::safe_fs::read_bundle_info(path)?;
     #[cfg(not(target_os = "macos"))]
@@ -88,7 +88,12 @@ fn info(path: &Path) -> Result<plist::Value> {
         );
         bytes
     };
-    Ok(plist::Value::from_reader(std::io::Cursor::new(bytes))?)
+    Ok(bytes)
+}
+fn info(path: &Path) -> Result<plist::Value> {
+    Ok(plist::Value::from_reader(std::io::Cursor::new(
+        info_bytes(path)?,
+    ))?)
 }
 #[cfg(target_os = "macos")]
 fn running() -> Result<Vec<String>> {

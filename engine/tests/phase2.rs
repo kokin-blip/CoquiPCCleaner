@@ -328,10 +328,62 @@ fn local_assistant_clarifies_then_cites_retained_evidence_and_never_executes() {
     );
     assert_eq!(fs::read(f.home.join("Documents/a")).unwrap(), b"preserve");
 }
+
+#[test]
+fn requested_photo_previews_are_bounded_scoped_and_do_not_change_sources_or_records() {
+    let mut f = Fixture::new();
+    let image = image::DynamicImage::ImageRgb8(image::RgbImage::new(800, 600));
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    image
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .unwrap();
+    let bytes = encoded.into_inner();
+    let a = f.file("preview-a.png", &bytes);
+    let _b = f.file("preview-b.png", &bytes);
+    f.index();
+    let report = f.report();
+    let before = f.c.total_changes();
+    let preview =
+        duplicates::preview_photo(&f.c, &report.id, &a, &f.policy(), &AtomicBool::new(false))
+            .unwrap();
+    assert_eq!(preview.width, 512);
+    assert!(preview.height <= 512);
+    assert!(!preview.png_bytes.is_empty());
+    assert_eq!(f.c.total_changes(), before);
+    assert_eq!(fs::read(&a).unwrap(), bytes);
+    assert!(preview
+        .qualification
+        .contains("not a renewed equality check"));
+    assert!(duplicates::preview_photo(
+        &f.c,
+        &report.id,
+        "/unrelated.png",
+        &f.policy(),
+        &AtomicBool::new(false)
+    )
+    .is_err());
+    let mut excluded = f.policy();
+    excluded.exclusions.push(PathBuf::from(&a));
+    assert!(
+        duplicates::preview_photo(&f.c, &report.id, &a, &excluded, &AtomicBool::new(false))
+            .is_err()
+    );
+    assert!(
+        duplicates::preview_photo(&f.c, &report.id, &a, &f.policy(), &AtomicBool::new(true))
+            .is_err()
+    );
+    fs::remove_file(&a).unwrap();
+    symlink(&_b, &a).unwrap();
+    assert!(
+        duplicates::preview_photo(&f.c, &report.id, &a, &f.policy(), &AtomicBool::new(false))
+            .is_err()
+    );
+}
 fn advice_request() -> AdviceRequest {
     AdviceRequest {
         session_id: "scan".into(),
         baseline_id: None,
+        trial_id: None,
         workload: "Build".into(),
         expectation: "under 2 minutes".into(),
         annual_growth_percent: 10.,
@@ -348,6 +400,29 @@ fn advice_separates_assumptions_absent_baselines_health_support_and_costs() {
     let a = advice::assess(&f.c, advice_request()).unwrap();
     assert!(a.assessment.contains("measurements"));
     assert!(a.findings.is_empty());
+    assert_eq!(a.source_reviews.len(), a.sources.len());
+    assert!(a.source_reviews.iter().all(|s| s.publisher == "Apple"
+        && s.reviewed_on.as_deref() == Some("2026-10-23")
+        && a.sources.contains(&s.url)));
+    assert!(a
+        .source_reviews
+        .iter()
+        .any(|s| s.title.contains("Ventura") && s.scope.contains("Ventura-specific")));
+    assert!(a
+        .verification_limits
+        .iter()
+        .any(|s| s.starts_with("Software and peripheral requirements:")));
+    let saved: AdviceReport = records::get(&f.c, "advice", &a.id).unwrap();
+    assert_eq!(
+        saved.source_reviews[0].reviewed_on,
+        a.source_reviews[0].reviewed_on
+    );
+    assert_eq!(saved.verification_limits, a.verification_limits);
+    let mut legacy = serde_json::to_value(&a).unwrap();
+    legacy.as_object_mut().unwrap().remove("sourceReviews");
+    legacy.as_object_mut().unwrap().remove("verificationLimits");
+    let legacy: AdviceReport = serde_json::from_value(legacy).unwrap();
+    assert!(legacy.source_reviews.is_empty() && legacy.verification_limits.is_empty());
     assert_eq!(
         a.scenarios[0].source,
         "User-supplied demand model: demand × (1 + annual growth)^years"

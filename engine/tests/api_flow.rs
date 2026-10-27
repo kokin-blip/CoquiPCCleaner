@@ -198,6 +198,19 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     );
     let investigation =
         api::ask_coqui(None, Some(id.clone()), "Review project storage".into()).unwrap();
+    let requested = api::collect_investigation(
+        investigation.id.clone(),
+        InvestigationCollection::Resources,
+        |stage| stage.id == investigation.id,
+    )
+    .unwrap();
+    assert_eq!(requested.status, "evidenceReady");
+    assert_eq!(requested.tasks.last().unwrap().status, "complete");
+    let review = api::save_recommendation_plan(id.clone(), None, None).unwrap();
+    assert!(matches!(
+        api::get_record("recommendationPlan".into(), review.id).unwrap(),
+        RetainedRecord::RecommendationPlan(_)
+    ));
     let duplicate = api::analyze_duplicates(id.clone(), |_| true).unwrap();
     let resources = api::analyze_resources(id.clone()).unwrap();
     assert!(!resources.capabilities.is_empty());
@@ -216,6 +229,33 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     .unwrap();
     assert_eq!(baseline.status, "cancelled");
     assert!(!baseline.samples.is_empty());
+    let trial = api::capture_workload_trial(
+        WorkloadTrialRequest {
+            workload: "Software development".into(),
+            task: "Disposable integration timer".into(),
+            inputs: "test process".into(),
+            application: "test version".into(),
+            conditions: "test fixture".into(),
+            target_seconds: 10.,
+        },
+        |stage| {
+            if stage.status == "running" {
+                assert!(api::finish_workload_trial("wrong-id".into()).is_err());
+                assert!(api::create_manual_plan("power".into(), "fixture".into()).is_err());
+                assert!(matches!(
+                    api::get_record("workloadTrial".into(), stage.id.clone()).unwrap(),
+                    RetainedRecord::WorkloadTrial(_)
+                ));
+                api::finish_workload_trial(stage.id.clone()).unwrap();
+                assert!(api::finish_workload_trial(stage.id).is_err());
+            }
+            true
+        },
+    )
+    .unwrap();
+    assert_eq!(trial.status, "complete");
+    assert!(trial.completion_reported);
+    assert!(api::finish_workload_trial(trial.id.clone()).is_err());
     let maintenance = MaintenanceRule {
         enabled: true,
         mode: "reminder".into(),
@@ -233,6 +273,9 @@ fn real_inventory_scan_reopen_metrics_cancel_and_purge() {
     assert_eq!(api::maintenance_tick().unwrap().unwrap().status, "reminder");
     assert!(api::maintenance_tick().unwrap().is_none());
     api::init_engine(data.path().to_string_lossy().into()).unwrap();
+    assert!(
+        matches!(api::get_record("workloadTrial".into(), trial.id).unwrap(), RetainedRecord::WorkloadTrial(t) if t.status == "complete")
+    );
     assert!(matches!(
         api::get_record("investigation".into(), investigation.id).unwrap(),
         RetainedRecord::Investigation(_)

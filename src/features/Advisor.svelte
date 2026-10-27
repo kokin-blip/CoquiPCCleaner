@@ -4,17 +4,20 @@
   import type { AdviceReport } from '../bindings/AdviceReport';
   import type { ActivityRecord } from '../bindings/ActivityRecord';
   import Evidence from '../components/Evidence.svelte';
+  import AdviceContext from '../components/AdviceContext.svelte';
   let { controller }: { controller: ReturnType<typeof createAppStore> } =
     $props();
   let workload = $state(''),
     expectation = $state(''),
     baselineId = $state(''),
+    trialId = $state(''),
     demand = $state(60),
     growth = $state(10),
     low = $state<number | undefined>(),
     high = $state<number | undefined>(),
     source = $state(''),
     records = $state<ActivityRecord[]>([]),
+    trials = $state<ActivityRecord[]>([]),
     report = $state<AdviceReport | null>(null),
     error = $state('');
   let busy = $derived(
@@ -30,6 +33,10 @@
       .records('baseline', 0)
       .then((r) => (records = r))
       .catch((e) => (error = String(e)));
+    void controller.service
+      .records('workloadTrial', 0)
+      .then((r) => (trials = r.filter((row) => row.kind === 'workloadTrial')))
+      .catch((e) => (error = String(e)));
   });
   async function assess() {
     if (!$controller.session) return;
@@ -39,6 +46,7 @@
         controller.service.assess({
           sessionId: $controller.session!.id,
           baselineId: baselineId || null,
+          trialId: trialId || null,
           workload,
           expectation,
           currentDemandPercent: demand,
@@ -91,6 +99,21 @@
             value={r.id}>{r.title} · {r.createdAt}</option
           >{/each}</select
       ></label
+    >
+    <label
+      >Measured task result<select bind:value={trialId}
+        ><option value="">No task result selected</option
+        >{#each trials.filter((r) => r.status === 'complete') as r}<option
+            value={r.id}>{r.title} · {r.createdAt}</option
+          >{/each}</select
+      ></label
+    >
+    <button
+      type="button"
+      class="text-button"
+      disabled={busy}
+      onclick={() => controller.openRecommendation('Performance', 'task')}
+      >Time a build or test</button
     >
     <div class="form-grid">
       <label
@@ -156,21 +179,5 @@
       <Evidence items={finding.evidence} />{/each}<Evidence
       items={report.scenarios}
     />
-    <h3>Verify model, mode and compatibility</h3>
-    <div class="source-links">
-      {#each report.sources as href}<a
-          {href}
-          onclick={(e) => {
-            e.preventDefault();
-            void controller.run(() => controller.service.reference(href));
-          }}
-          target="_blank"
-          rel="noreferrer">{href}</a
-        >{/each}
-    </div>
-    <p class="muted small">
-      Sources are reference links; Coqui does not fetch current prices or
-      compatibility automatically. Confirm exact model and software requirements
-      before buying.
-    </p>
+    <AdviceContext {report} {controller} />
   </section>{/if}

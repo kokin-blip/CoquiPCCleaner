@@ -114,6 +114,8 @@ pub enum Operation {
     Coverage {
         id: String,
         offset: u32,
+        #[serde(default)]
+        reason: Option<String>,
     },
     ExportCoverage {
         id: String,
@@ -741,7 +743,7 @@ fn run(uid: u32, op: Operation, cancel: &AtomicBool, j: &mut Job) -> Result<()> 
             // The helper already validated/saved policy; avoid a second uncancellable
             // retention pass through the general GUI preference operation.
             database::save_settings(&c, &settings)?;
-            crate::api::scan(request, |event| {
+            crate::api::scan_storage_only(request, |event| {
                 j.session = Some(event.session);
                 save(&c, j).is_ok() && !cancel.load(Ordering::SeqCst)
             })?;
@@ -821,9 +823,9 @@ pub fn dispatch(text: &str, uid: u32, pid: i32) -> Result<serde_json::Value> {
         Operation::ExportStorage { id, after } => {
             serde_json::to_value(database::indexed_files_after(&c, &id, &after)?)?
         }
-        Operation::Coverage { id, offset } => {
-            serde_json::to_value(database::coverage(&c, &id, offset)?)?
-        }
+        Operation::Coverage { id, offset, reason } => serde_json::to_value(
+            database::coverage_filtered(&c, &id, offset, reason.as_deref())?,
+        )?,
         Operation::ExportCoverage { id, after } => {
             serde_json::to_value(database::gaps_after(&c, &id, after)?)?
         }

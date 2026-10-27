@@ -30,6 +30,7 @@ const node: StorageMapNode = {
   smallFileCount: 110_000,
   smallAllocatedBytes: 2_200_000_000,
   largestFileBytes: 4_000_000,
+  development: [],
   kind: 'buildOutput',
   title: 'Rust build output',
   reason: 'A target/debug folder within a recognized Rust output layout.',

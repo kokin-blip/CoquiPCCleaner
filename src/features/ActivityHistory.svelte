@@ -38,6 +38,11 @@
     }
   }
   const names: Record<string, string> = {
+    scanObservations: 'Scan metadata checks',
+    appUpdateReport: 'App update checks',
+    workloadTrial: 'Task trials',
+    trialComparison: 'Task comparisons',
+    recommendationPlan: 'Recommendation plans',
     firmwareComparison: 'Firmware audit comparisons',
     firmware: 'Firmware & security audits',
     firmwarePlan: 'Apple manual guidance plans',

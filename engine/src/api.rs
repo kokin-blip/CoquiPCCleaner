@@ -18,6 +18,7 @@ struct Engine {
     cancel_cleanup: AtomicBool,
     cancel_developer: AtomicBool,
     cancel_work: AtomicBool,
+    trial: Mutex<Option<Arc<crate::trials::TrialControl>>>,
 }
 static ENGINE: OnceLock<Mutex<Option<Arc<Engine>>>> = OnceLock::new();
 fn engine() -> Result<Arc<Engine>> {
@@ -40,7 +41,7 @@ fn internal_scan_database_is_the_journal_database() {
     std::fs::write(root.join("disposable.txt"), "fixture").unwrap();
     let path = data.join("diagnostics.sqlite3");
     init_engine_database(path.clone()).unwrap();
-    scan(
+    scan_storage_only(
         ScanRequest {
             mode: "selected".into(),
             roots: vec![root.to_string_lossy().into_owned()],
@@ -53,6 +54,10 @@ fn internal_scan_database_is_the_journal_database() {
     let c = database::open(&path).unwrap();
     let sessions = database::history(&c, 0, 10).unwrap();
     assert_eq!(sessions.len(), 1);
+    assert!(sessions[0].snapshot.is_none());
+    assert!(crate::scan_observations::read(&c, &sessions[0].id)
+        .unwrap()
+        .is_none());
     let count: u32 = c
         .query_row("SELECT count(*) FROM files", [], |r| r.get(0))
         .unwrap();
@@ -127,6 +132,7 @@ fn init_database(path: PathBuf, cancel: Option<&AtomicBool>) -> Result<AppSettin
         cancel_cleanup: AtomicBool::new(false),
         cancel_developer: AtomicBool::new(false),
         cancel_work: AtomicBool::new(false),
+        trial: Mutex::new(None),
     }));
     Ok(settings)
 }
@@ -175,6 +181,9 @@ pub fn scan_history(offset: u32, limit: u32) -> Result<Vec<DiagnosticSession>> {
 }
 pub fn get_session(id: String) -> Result<DiagnosticSession> {
     database::session(&database::open(&engine()?.path)?, &id)
+}
+pub fn scan_review(session_id: String) -> Result<ScanReview> {
+    crate::scan_review::build(&database::open(&engine()?.path)?, &session_id)
 }
 pub fn storage_entries(query: StorageQuery) -> Result<Vec<FileEntry>> {
     let c = database::open(&engine()?.path)?;
@@ -235,7 +244,33 @@ impl Drop for ActiveGuard<'_> {
     }
 }
 
-pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Result<()> {
+pub fn scan(request: ScanRequest, send: impl FnMut(ScanEvent) -> bool) -> Result<()> {
+    scan_inner(request, None, true, send)
+}
+// The privileged worker traverses storage only. Explicit metadata checks run in
+// the requesting app after its public import, never implicitly as root.
+pub(crate) fn scan_storage_only(
+    request: ScanRequest,
+    send: impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
+    scan_inner(request, None, false, send)
+}
+pub fn scan_with_modules(
+    request: ScanRequest,
+    modules: crate::scan_observations::ScanModules,
+    send: impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
+    scan_inner(request, Some(modules), false, send)
+}
+pub fn scan_observations(id: String) -> Result<Option<crate::scan_observations::ScanObservations>> {
+    crate::scan_observations::read(&database::open(&engine()?.path)?, &id)
+}
+fn scan_inner(
+    request: ScanRequest,
+    modules: Option<crate::scan_observations::ScanModules>,
+    legacy_snapshot: bool,
+    mut send: impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
     let e = engine()?;
     anyhow::ensure!(
         e.active
@@ -259,6 +294,7 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
     } else {
         storage::roots(&request)?
     };
+    let space = crate::scan_space::ScanSpace::new(&e.path)?;
     let mut excluded = request
         .excluded_paths
         .iter()
@@ -291,7 +327,12 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
         started_at: now(),
         finished_at: None,
         status: "running".into(),
-        stage: "Hardware inventory".into(),
+        stage: if legacy_snapshot {
+            "Hardware inventory"
+        } else {
+            "Preparing storage metadata scan"
+        }
+        .into(),
         scope: if roots.is_empty() {
             request.roots.join("; ")
         } else {
@@ -313,13 +354,20 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
         errors: root_errors,
     };
     database::save_session(&c, &s)?;
-    let _ = send(ScanEvent { session: s.clone() });
-    let result = (|| -> Result<()> {
-        match platform::snapshot() {
-            Ok(v) => s.snapshot = Some(v),
-            Err(_) => s
-                .errors
-                .push("Hardware inventory could not be completed.".into()),
+    if !send(ScanEvent { session: s.clone() }) {
+        e.cancel.store(true, Ordering::SeqCst);
+    }
+    let mut result = (|| -> Result<()> {
+        if let Some(modules) = &modules {
+            crate::scan_observations::save(&c, &crate::scan_observations::begin(&s.id, modules))?;
+        }
+        if legacy_snapshot {
+            match platform::snapshot() {
+                Ok(v) => s.snapshot = Some(v),
+                Err(_) => s
+                    .errors
+                    .push("Hardware inventory could not be completed.".into()),
+            }
         }
         s.stage = "Storage metadata • counting accessible files".into();
         database::save_session(&c, &s)?;
@@ -340,20 +388,13 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                 let mut b = batch.borrow_mut();
                 b.push(f);
                 if b.len() >= 250 {
-                    database::insert_indexed_files(&mut connection.borrow_mut(), &id, &b)?;
+                    space.check()?;
+                    save_scan_entries(&mut connection.borrow_mut(), &id, &b)?;
                     b.clear();
                 }
                 Ok(())
             },
             |w| {
-                if !batch.borrow().is_empty() {
-                    database::insert_indexed_files(
-                        &mut connection.borrow_mut(),
-                        &id,
-                        &batch.borrow(),
-                    )?;
-                    batch.borrow_mut().clear();
-                }
                 let mut s = session.borrow_mut();
                 s.file_count = w.files;
                 s.logical_bytes = w.logical;
@@ -368,6 +409,11 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
                     }
                 }
                 s.stage = w.stage.clone();
+                space.check()?;
+                if !batch.borrow().is_empty() {
+                    save_scan_entries(&mut connection.borrow_mut(), &id, &batch.borrow())?;
+                    batch.borrow_mut().clear();
+                }
                 if last_event.elapsed() >= Duration::from_millis(250) || w.files == 0 {
                     database::save_session(&connection.borrow(), &s)?;
                     if !send(ScanEvent {
@@ -390,7 +436,7 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
             },
         )?;
         if !batch.borrow().is_empty() {
-            database::insert_indexed_files(&mut connection.borrow_mut(), &id, &batch.borrow())?;
+            save_scan_entries(&mut connection.borrow_mut(), &id, &batch.borrow())?;
         }
         if !gaps.borrow().is_empty() {
             database::insert_gaps(&mut connection.borrow_mut(), &id, &gaps.borrow())?;
@@ -410,8 +456,21 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
         s.candidates = summary.candidates;
         Ok(())
     })();
+    if let Some(modules) = &modules {
+        if let Err(error) = collect_scan_observations(
+            &c,
+            &mut s,
+            modules,
+            result.is_ok(),
+            &request.excluded_paths,
+            &e.cancel,
+            &mut send,
+        ) {
+            result = Err(error);
+        }
+    }
     if let Err(error) = &result {
-        s.errors.push(format!("Scan stopped because collection or persistence failed: {}. Retained results may be incomplete; check available application storage before retrying.",scan_error(error)));
+        s.errors.push(format!("Scan stopped during {} because collection or persistence failed: {}. Retained results may be incomplete; check available application storage before retrying.",s.stage,scan_error(error)));
         for coverage in &mut s.coverage {
             if coverage.state == "running" {
                 coverage.state = "interrupted".into();
@@ -449,12 +508,79 @@ pub fn scan(request: ScanRequest, mut send: impl FnMut(ScanEvent) -> bool) -> Re
     Ok(())
 }
 
+fn collect_scan_observations(
+    c: &rusqlite::Connection,
+    session: &mut DiagnosticSession,
+    modules: &crate::scan_observations::ScanModules,
+    collect: bool,
+    exclusions: &[String],
+    cancel: &AtomicBool,
+    send: &mut impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
+    use crate::scan_observations as observations;
+    let mut report = observations::read(c, &session.id)?
+        .unwrap_or_else(|| observations::begin(&session.id, modules));
+    let mut persistence_error = None;
+    if collect {
+        let result = observations::collect_excluding(&mut report, cancel, exclusions, |report| {
+            if let Err(error) = observations::save(c, report) {
+                persistence_error = Some(error);
+                return false;
+            }
+            let mut progress = session.clone();
+            progress.status = "running".into();
+            progress.stage = report
+                .checks
+                .iter()
+                .find(|check| check.status == "running")
+                .map(|check| format!("Checking {} metadata", check.module))
+                .unwrap_or_else(|| "Saving scan metadata checks".into());
+            send(ScanEvent { session: progress })
+        });
+        if result.is_err() {
+            observations::finish(&mut report, cancel.load(Ordering::SeqCst));
+        }
+    } else {
+        observations::finish(&mut report, cancel.load(Ordering::SeqCst));
+    }
+    if let Some(error) = persistence_error {
+        return Err(error);
+    }
+    session.snapshot = report.system.clone();
+    for application in &report.applications {
+        if cancel.load(Ordering::SeqCst) {
+            break;
+        }
+        c.execute("INSERT INTO application_observations VALUES(?1,?2,NULL) ON CONFLICT(path) DO UPDATE SET json=excluded.json,missing_at=NULL", rusqlite::params![application.path, serde_json::to_string(application)?])?;
+    }
+    if report.status == "partial" {
+        session.errors.push("Some selected foreground metadata checks were partial or unavailable. Review their dated results; storage coverage is separate.".into());
+    }
+    observations::save(c, &report)
+}
+
+fn save_scan_entries(
+    c: &mut rusqlite::Connection,
+    id: &str,
+    entries: &[IndexedStorageEntry],
+) -> Result<()> {
+    let result = database::insert_indexed_files(c, id, entries);
+    storage::scan_sql(c, "Saving scanned file/folder metadata", result)
+}
+
 fn scan_error(error: &anyhow::Error) -> String {
+    if let Some(space) = error.downcast_ref::<crate::scan_space::LowSpace>() {
+        return space.to_string();
+    }
     // Keep actionable SQLite/I/O classes without persisting raw paths or command output.
     for cause in error.chain() {
         if let Some(sql) = cause.downcast_ref::<rusqlite::Error>() {
             if let rusqlite::Error::SqliteFailure(code, _) = sql {
-                return format!("SQLite {:?} (code {})", code.code, code.extended_code);
+                let step = error
+                    .downcast_ref::<storage::ScanDatabaseStep>()
+                    .map(|step| format!("{step}: "))
+                    .unwrap_or_default();
+                return format!("{step}SQLite {:?} (code {})", code.code, code.extended_code);
             }
         }
         if let Some(io) = cause.downcast_ref::<std::io::Error>() {
@@ -462,6 +588,25 @@ fn scan_error(error: &anyhow::Error) -> String {
         }
     }
     "collection or persistence error (detail unavailable)".into()
+}
+
+#[cfg(test)]
+#[test]
+fn scan_database_failure_retains_the_step_and_errno_without_a_raw_path() {
+    let fixture = tempfile::tempdir().unwrap();
+    let missing = fixture.path().join("missing/private-metadata.db");
+    let c = rusqlite::Connection::open_in_memory().unwrap();
+    let result = c.execute(
+        "ATTACH DATABASE ?1 AS unavailable",
+        [missing.to_str().unwrap()],
+    );
+    let error = storage::scan_sql(&c, "Extending the directory frontier", result).unwrap_err();
+    let retained = scan_error(&error);
+    assert!(retained.contains("Extending the directory frontier"));
+    assert!(retained.contains("OS error"));
+    assert!(retained.contains("SQLite CannotOpen"));
+    assert!(!retained.contains("private-metadata"));
+    assert!(!retained.contains(&fixture.path().to_string_lossy().to_string()));
 }
 
 fn findings(s: &DiagnosticSession) -> Vec<DiagnosticFinding> {
@@ -537,6 +682,18 @@ pub fn cleanup_files(session_id: String, offset: u32) -> Result<CleanupFilePage>
         offset,
         &cleanup_policy(&e)?,
     )
+}
+pub fn cleanup_categories(
+    session_id: String,
+) -> Result<crate::cleanup_categories::CleanupCategoryReport> {
+    let e = engine()?;
+    crate::cleanup_categories::report(&database::open(&e.path)?, &session_id, &cleanup_policy(&e)?)
+}
+pub fn cleanup_category_entries(
+    query: crate::cleanup_categories::CleanupCategoryQuery,
+) -> Result<crate::cleanup_categories::CleanupCategoryPage> {
+    let e = engine()?;
+    crate::cleanup_categories::entries(&database::open(&e.path)?, query, &cleanup_policy(&e)?)
 }
 pub fn preview_cleanup(request: CleanupRequest) -> Result<CleanupPlan> {
     let e = engine()?;
@@ -647,6 +804,33 @@ pub fn cancel_work() -> Result<()> {
     engine()?.cancel_work.store(true, Ordering::SeqCst);
     Ok(())
 }
+pub fn prepare_app_updates(paths: Vec<String>) -> Result<AppUpdatePlan> {
+    with_work(|e, c| crate::app_updates::prepare(c, paths, &e.cancel_work))
+}
+pub fn check_app_updates(
+    plan_id: String,
+    network_acknowledged: bool,
+    send: impl FnMut(AppUpdateReport) -> bool,
+) -> Result<AppUpdateReport> {
+    with_work(|e, c| {
+        crate::app_updates::check_with_fetcher(
+            c,
+            &plan_id,
+            network_acknowledged,
+            &e.cancel_work,
+            send,
+            platform::fetch_app_update,
+        )
+    })
+}
+pub fn latest_app_updates() -> Result<Option<AppUpdateReport>> {
+    crate::app_updates::latest(&database::open(&engine()?.path)?)
+}
+pub fn open_app_update(report_id: String, path: String) -> Result<()> {
+    with_work(|_, c| {
+        platform::open_app_update_handoff(crate::app_updates::handoff(c, &report_id, &path)?)
+    })
+}
 fn with_work<T>(action: impl FnOnce(&Engine, &rusqlite::Connection) -> Result<T>) -> Result<T> {
     let e = engine()?;
     anyhow::ensure!(
@@ -670,6 +854,19 @@ pub fn analyze_duplicates(
 pub fn preview_duplicate_cleanup(request: DuplicateCleanupRequest) -> Result<CleanupPlan> {
     with_work(|e, c| cleanup::preview_duplicates(c, request, &cleanup_policy(e)?, &e.cancel_work))
 }
+pub fn analyze_duplicate_scope(
+    request: DuplicateAnalysisRequest,
+    send: impl FnMut(DuplicateReport) -> bool,
+) -> Result<DuplicateReport> {
+    with_work(|e, c| {
+        crate::duplicates::analyze_scoped(c, request, &cleanup_policy(e)?, &e.cancel_work, send)
+    })
+}
+pub fn preview_duplicate_photo(report_id: String, path: String) -> Result<PhotoPreview> {
+    with_work(|e, c| {
+        crate::duplicates::preview_photo(c, &report_id, &path, &cleanup_policy(e)?, &e.cancel_work)
+    })
+}
 pub fn capture_baseline(
     request: BaselineRequest,
     send: impl FnMut(Baseline) -> bool,
@@ -678,6 +875,46 @@ pub fn capture_baseline(
 }
 pub fn compare_baselines(before: String, after: String) -> Result<BaselineComparison> {
     crate::baseline::compare(&database::open(&engine()?.path)?, &before, &after)
+}
+pub fn capture_workload_trial(
+    request: WorkloadTrialRequest,
+    send: impl FnMut(WorkloadTrial) -> bool,
+) -> Result<WorkloadTrial> {
+    crate::trials::validate(&request)?;
+    with_work(|e, c| {
+        let control = Arc::new(crate::trials::TrialControl::default());
+        *e.trial
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Task control lock failed"))? = Some(control.clone());
+        let result = crate::trials::capture(c, request, &control, &e.cancel_work, send);
+        *e.trial
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Task control lock failed"))? = None;
+        result
+    })
+}
+// Finishing only signals the active timer. It must not wait behind its database/work guard.
+pub fn finish_workload_trial(id: String) -> Result<()> {
+    let e = engine()?;
+    let control = e
+        .trial
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Task control lock failed"))?;
+    let control = control
+        .as_ref()
+        .filter(|t| t.id == id)
+        .context("This task timer is no longer active")?;
+    anyhow::ensure!(
+        e.active.load(Ordering::SeqCst) && !e.cancel_work.load(Ordering::SeqCst),
+        "This task timer is no longer active"
+    );
+    control.finish()
+}
+pub fn compare_workload_trials(request: TrialComparisonRequest) -> Result<TrialComparison> {
+    crate::trials::compare(&database::open(&engine()?.path)?, request)
+}
+pub fn save_trial_comparison(request: TrialComparisonRequest) -> Result<TrialComparison> {
+    with_work(|_, c| crate::trials::save_comparison(c, request))
 }
 pub fn create_manual_plan(kind: String, requested: String) -> Result<ManualPlan> {
     with_work(|_, c| crate::baseline::plan(c, &kind, &requested))
@@ -695,6 +932,48 @@ pub fn ask_coqui(
 pub fn assess_workload(request: AdviceRequest) -> Result<AdviceReport> {
     with_work(|_, c| crate::advice::assess(c, request))
 }
+pub fn collect_investigation(
+    id: String,
+    task: InvestigationCollection,
+    send: impl FnMut(Investigation) -> bool,
+) -> Result<Investigation> {
+    with_work(|e, c| {
+        crate::assistant::collect(
+            c,
+            &id,
+            task,
+            &cleanup_policy(e)?.exclusions,
+            &e.cancel_work,
+            send,
+        )
+    })
+}
+pub fn recommendation_plan(
+    session_id: String,
+    baseline_id: Option<String>,
+    trial_id: Option<String>,
+) -> Result<RecommendationPlan> {
+    crate::recommendations::build_with_trial(
+        &database::open(&engine()?.path)?,
+        &session_id,
+        baseline_id.as_deref(),
+        trial_id.as_deref(),
+    )
+}
+pub fn save_recommendation_plan(
+    session_id: String,
+    baseline_id: Option<String>,
+    trial_id: Option<String>,
+) -> Result<RecommendationPlan> {
+    with_work(|_, c| {
+        crate::recommendations::save_with_trial(
+            c,
+            &session_id,
+            baseline_id.as_deref(),
+            trial_id.as_deref(),
+        )
+    })
+}
 pub fn analyze_resources(session_id: String) -> Result<ResourceReview> {
     with_work(|e, c| {
         crate::resources::analyze(
@@ -711,6 +990,15 @@ pub fn activity_records(kind: Option<String>, offset: u32) -> Result<Vec<Activit
 pub fn get_record(kind: String, id: String) -> Result<RetainedRecord> {
     let c = database::open(&engine()?.path)?;
     Ok(match kind.as_str() {
+        "scanObservations" => {
+            RetainedRecord::ScanObservations(crate::records::get(&c, &kind, &id)?)
+        }
+        "appUpdateReport" => RetainedRecord::AppUpdateReport(crate::records::get(&c, &kind, &id)?),
+        "workloadTrial" => RetainedRecord::WorkloadTrial(crate::records::get(&c, &kind, &id)?),
+        "trialComparison" => RetainedRecord::TrialComparison(crate::records::get(&c, &kind, &id)?),
+        "recommendationPlan" => {
+            RetainedRecord::RecommendationPlan(crate::records::get(&c, &kind, &id)?)
+        }
         "firmwareComparison" => {
             RetainedRecord::FirmwareComparison(crate::records::get(&c, &kind, &id)?)
         }
@@ -802,7 +1090,7 @@ pub fn dismiss_firmware_notice(id: String) -> Result<FirmwareCenter> {
 pub fn disk_scan_plan() -> Result<DiskScanPlan> {
     crate::volumes::plan(&database::open(&engine()?.path)?)
 }
-pub fn scan_coverage(id: String, offset: u32) -> Result<Vec<CoverageGap>> {
+pub fn scan_coverage(id: String, offset: u32, reason: Option<String>) -> Result<Vec<CoverageGap>> {
     let c = database::open(&engine()?.path)?;
     if database::settings(&c)?.administrator_enabled
         && c.query_row(
@@ -812,11 +1100,11 @@ pub fn scan_coverage(id: String, offset: u32) -> Result<Vec<CoverageGap>> {
         )?
     {
         return Ok(serde_json::from_value(crate::helper::production(
-            crate::privileged::Operation::Coverage { id, offset },
+            crate::privileged::Operation::Coverage { id, offset, reason },
             false,
         )?)?);
     }
-    database::coverage(&c, &id, offset)
+    database::coverage_filtered(&c, &id, offset, reason.as_deref())
 }
 
 fn removal_policy(e: &Engine) -> Result<crate::removal::Policy> {
@@ -1175,6 +1463,22 @@ pub fn administrator_lifecycle(action: crate::privileged::Lifecycle) -> Result<(
 pub fn administrator_scan(
     request: ScanRequest,
     plan: DiskScanPlan,
+    send: impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
+    administrator_scan_inner(request, plan, None, send)
+}
+pub fn administrator_scan_with_modules(
+    request: ScanRequest,
+    plan: DiskScanPlan,
+    modules: crate::scan_observations::ScanModules,
+    send: impl FnMut(ScanEvent) -> bool,
+) -> Result<()> {
+    administrator_scan_inner(request, plan, Some(modules), send)
+}
+fn administrator_scan_inner(
+    request: ScanRequest,
+    plan: DiskScanPlan,
+    modules: Option<crate::scan_observations::ScanModules>,
     mut send: impl FnMut(ScanEvent) -> bool,
 ) -> Result<()> {
     use crate::privileged::Operation;
@@ -1189,7 +1493,9 @@ pub fn administrator_scan(
     e.cancel.store(false, Ordering::SeqCst);
     let preferences = administrator_preferences(&e)?;
     let mut c = database::open(&e.path)?;
+    let space = crate::scan_space::ScanSpace::new(&e.path)?;
     let mut latest = None;
+    let metadata_exclusions = request.excluded_paths.clone();
     let job = wait_administrator(
         Operation::Scan {
             request,
@@ -1254,6 +1560,7 @@ pub fn administrator_scan(
     let import = (|| -> Result<()> {
         let mut after = String::new();
         while !e.cancel.load(Ordering::SeqCst) {
+            space.check()?;
             let entries: Vec<IndexedStorageEntry> =
                 serde_json::from_value(crate::helper::production(
                     Operation::ExportStorage {
@@ -1288,6 +1595,7 @@ pub fn administrator_scan(
         c.execute("DELETE FROM scan_gaps WHERE session_id=?1", [&s.id])?;
         let mut after = 0;
         while !e.cancel.load(Ordering::SeqCst) {
+            space.check()?;
             let page: database::CoverageExport =
                 serde_json::from_value(crate::helper::production(
                     Operation::ExportCoverage {
@@ -1316,11 +1624,23 @@ pub fn administrator_scan(
         s.finished_at = Some(now());
         s.errors.push("Local index import is incomplete after cancellation; saved coverage and bytes describe collection, while local folder/file results may contain only a subset. The helper retains its index until retention or explicit purge.".into());
     }
+    let import_complete = import.is_ok() && imported_files == s.file_count;
     if let Err(error) = import {
         s.status = "partial".into();
         s.stage = "Administrator index import interrupted".into();
         s.finished_at = Some(now());
         s.errors.push(format!("Administrator result import failed: {error}. Local file and coverage results contain only the imported subset; the helper retains its index."));
+    }
+    if let Some(modules) = &modules {
+        finish_administrator_metadata(
+            &c,
+            &mut s,
+            modules,
+            import_complete,
+            &metadata_exclusions,
+            &e.cancel,
+            &mut send,
+        );
     }
     s.stage = format!(
         "{} • administrator metadata; TCC/SIP access gaps remain qualified",
@@ -1338,4 +1658,84 @@ pub fn administrator_scan(
     }
     let _ = send(ScanEvent { session: s });
     Ok(())
+}
+
+fn finish_administrator_metadata(
+    c: &rusqlite::Connection,
+    session: &mut DiagnosticSession,
+    modules: &crate::scan_observations::ScanModules,
+    import_complete: bool,
+    exclusions: &[String],
+    cancel: &AtomicBool,
+    send: &mut impl FnMut(ScanEvent) -> bool,
+) {
+    let collect = import_complete
+        && !["cancelled", "failed", "interrupted"].contains(&session.status.as_str());
+    if let Err(error) =
+        collect_scan_observations(c, session, modules, collect, exclusions, cancel, send)
+    {
+        session.errors.push(format!(
+            "Foreground metadata checks could not be saved: {}. No completed check is established.",
+            scan_error(&error)
+        ));
+        session.status = "partial".into();
+    }
+    if cancel.load(Ordering::SeqCst) {
+        session.status = "cancelled".into();
+        session.stage = "Scan metadata checks cancelled; collected storage results retained".into();
+    } else if session.status == "complete" && !session.errors.is_empty() {
+        session.status = "partial".into();
+    }
+    session.finished_at = Some(now());
+}
+
+#[cfg(test)]
+#[test]
+fn failed_administrator_import_retains_unavailable_checks_without_collection() {
+    let temp = tempfile::tempdir().unwrap();
+    let c = database::open(&temp.path().join("fixture.sqlite3")).unwrap();
+    let mut session: DiagnosticSession = serde_json::from_value(serde_json::json!({
+        "id":"import-failure", "startedAt":"2026-10-26T12:00:00Z", "finishedAt":null,
+        "status":"partial", "stage":"Administrator index import interrupted", "scope":"disposable fixture",
+        "fileCount":1, "logicalBytes":7, "allocatedBytes":0, "skippedCount":0, "snapshot":null,
+        "findings":[], "permissions":[], "categories":[], "candidates":[], "errors":["Fixture import failed"]
+    })).unwrap();
+    let modules = crate::scan_observations::ScanModules {
+        system: true,
+        startup: true,
+        applications: true,
+    };
+    let mut events = 0;
+    finish_administrator_metadata(
+        &c,
+        &mut session,
+        &modules,
+        false,
+        &[],
+        &AtomicBool::new(false),
+        &mut |_| {
+            events += 1;
+            true
+        },
+    );
+    assert_eq!(events, 0);
+    assert_eq!(session.status, "partial");
+    assert!(session.snapshot.is_none());
+    assert_eq!(session.file_count, 1);
+    let report = crate::scan_observations::read(&c, &session.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(report.status, "partial");
+    assert!(
+        report.system.is_none()
+            && report.startup_items.is_empty()
+            && report.applications.is_empty()
+    );
+    assert!(report
+        .checks
+        .iter()
+        .all(|check| check.status == "unavailable"
+            && check.started_at.is_none()
+            && check.finished_at.is_none()
+            && check.count.is_none()));
 }

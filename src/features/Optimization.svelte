@@ -13,6 +13,8 @@
   import Duplicates from './Duplicates.svelte';
   import Resources from './Resources.svelte';
   import DeveloperArtifacts from './DeveloperArtifacts.svelte';
+  import Recommendations from './Recommendations.svelte';
+  import CleanupCategories from './CleanupCategories.svelte';
   import Dialog from '../components/Dialog.svelte';
   import Status from '../components/Status.svelte';
   import { bytes, date } from '../format';
@@ -22,7 +24,23 @@
     onScan,
   }: { controller: ReturnType<typeof createAppStore>; onScan: () => void } =
     $props();
-  let tab = $state('Cache files');
+  let tab = $state('Categories');
+  $effect(() => {
+    const target = $controller.reviewTarget;
+    if (
+      target === 'cache' ||
+      target === 'developer' ||
+      target === 'duplicates'
+    ) {
+      tab =
+        target === 'developer'
+          ? 'Developer artifacts'
+          : target === 'duplicates'
+            ? 'Duplicates'
+            : 'Cache files';
+      controller.clearReviewTarget();
+    }
+  });
   let rows = $state<CleanupFile[]>([]);
   let selected = $state<string[]>([]);
   let offset = $state(0);
@@ -146,13 +164,16 @@
       : [...selected, path];
   }
   async function preview() {
+    await previewPaths([...selected]);
+  }
+  async function previewPaths(paths: string[]) {
     if (!session) return;
     pending = true;
     error = '';
     try {
       review = await controller.service.previewCleanup({
         sessionId: session.id,
-        paths: [...selected],
+        paths,
       });
       closed = false;
       understood = false;
@@ -213,9 +234,9 @@
 
 <div class="page-heading">
   <div>
-    <h1>Optimization</h1>
+    <h1>Cleanup</h1>
     <p class="muted">
-      Choose what to change. Review each path before anything moves.
+      Review caches, build output and duplicates before removing anything.
     </p>
   </div>
   <button
@@ -234,7 +255,7 @@
   onkeydown={tabKeys}
   aria-label="Optimization views"
 >
-  {#each ['Cache files', 'Developer artifacts', 'Duplicates', 'Resources', 'Action history'] as name}<button
+  {#each ['Categories', 'Cache files', 'Duplicates', 'Developer artifacts', 'Recommended plan', 'Resources', 'Action history'] as name}<button
       role="tab"
       tabindex={tab === name ? 0 : -1}
       aria-selected={tab === name}
@@ -285,7 +306,9 @@
     </div>
   </section>
 {/if}
-{#if tab === 'Cache files'}
+{#if tab === 'Categories'}
+  <CleanupCategories {controller} {onScan} onPreview={previewPaths} {pending} />
+{:else if tab === 'Cache files'}
   <section class="cleanup-intro">
     <h2>Review individual cache files</h2>
     <p>
@@ -424,7 +447,9 @@
       </div>
     </section>
   {/if}
-{:else if tab === 'Duplicates'}<Duplicates
+{:else if tab === 'Recommended plan'}<Recommendations
+    {controller}
+  />{:else if tab === 'Duplicates'}<Duplicates
     {controller}
     onReview={(plan) => {
       review = plan;

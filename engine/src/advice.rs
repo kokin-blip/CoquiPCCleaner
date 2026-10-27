@@ -1,6 +1,30 @@
 use crate::{baseline, database, model::*, records};
 use anyhow::Result;
 use rusqlite::Connection;
+
+// Reference content reviewed during development, not fetched by an assessment.
+// Retain these dates in each report; never substitute its creation time.
+fn source_reviews() -> Vec<AdviceSourceReview> {
+    [
+        ("https://support.apple.com/en-us/101613", "Power modes on Mac", "Explains power modes and model-specific availability. Coqui does not verify that a mode is offered or enabled on this Mac."),
+        ("https://support.apple.com/en-ie/102328", "Mac mini memory installation and upgrades", "Mac mini guidance only. It does not establish upgrade feasibility for another Mac family or a particular service option."),
+        ("https://support.apple.com/macos/upgrade", "macOS Ventura upgrade guide", "Ventura-specific guidance. This link does not establish eligibility for a current or future macOS release."),
+        ("https://www.apple.com/mac/compare/", "Compare Mac models", "Vendor model comparison. Coqui does not import current configurations, prices, availability or compatibility from this page."),
+    ].into_iter().map(|(url, title, scope)| AdviceSourceReview {
+        url: url.into(), title: title.into(), publisher: "Apple".into(),
+        reviewed_on: Some("2026-10-23".into()), scope: scope.into(),
+    }).collect()
+}
+
+fn verification_limits() -> Vec<String> {
+    vec![
+        "Software and peripheral requirements: exact application versions, plug-ins, drivers and peripherals are not checked against this Mac.".into(),
+        "Upgrade feasibility: model-specific service options, component compatibility and an upgrade's performance benefit are not verified.".into(),
+        "Prices and availability: no current vendor quote is fetched. Any supplied cost range remains an unverified user quote.".into(),
+        "Future support and hardware life: no future macOS eligibility or remaining hardware lifespan is established.".into(),
+        "Workload performance: activity samples and user-reported task intervals do not establish an automated benchmark, a limiting component or the cause of a delay.".into(),
+    ]
+}
 pub fn assess(c: &Connection, r: AdviceRequest) -> Result<AdviceReport> {
     anyhow::ensure!(
         !r.workload.trim().is_empty()
@@ -35,6 +59,24 @@ pub fn assess(c: &Connection, r: AdviceRequest) -> Result<AdviceReport> {
         .map(|id| baseline::get(c, id))
         .transpose()?;
     let mut findings = vec![];
+    let trial = r
+        .trial_id
+        .as_deref()
+        .map(|id| crate::trials::completed(c, id))
+        .transpose()?;
+    if let Some(trial) = &trial {
+        anyhow::ensure!(
+            trial
+                .request
+                .workload
+                .trim()
+                .eq_ignore_ascii_case(r.workload.trim()),
+            "Choose a task trial matching this workload"
+        );
+        findings.push(DiagnosticFinding { id: uuid::Uuid::new_v4().to_string(), title: if trial.elapsed_seconds.unwrap() <= trial.request.target_seconds { "Task met its declared target in this trial" } else { "Task exceeded its declared target in this trial" }.into(),
+            explanation: format!("'{}' took {:.3} seconds, with a declared target of {:.3} seconds. Completion was user-reported; repeat before judging routine suitability or replacement. The recorded target belongs to this trial, not a later expectation.", trial.request.task, trial.elapsed_seconds.unwrap(), trial.request.target_seconds),
+            severity: "info".into(), confidence: "Measured interval; user-reported completion; one trial".into(), kind: "taskOutcome".into(), evidence: crate::trials::evidence(trial) });
+    }
     if let Some(b) = b
         .as_ref()
         .filter(|b| b.status == "complete" && b.samples.len() >= 3)
@@ -90,7 +132,8 @@ pub fn assess(c: &Connection, r: AdviceRequest) -> Result<AdviceReport> {
     } else {
         scenarios.push(DiagnosticEvidence::unavailable("Upgrade cost","No current sourced quote supplied. Obtain a model-specific vendor/service quote; no price was invented."));
     }
-    let report=AdviceReport{id:uuid::Uuid::new_v4().to_string(),created_at:now(),workload:r.workload,assessment:if findings.is_empty(){"More representative measurements needed before an upgrade recommendation."}else{"Keep the current Mac if it meets your actual task expectations. Investigate repeatable delays before comparing a replacement."}.into(),findings,scenarios,sources:vec!["https://support.apple.com/en-us/101613".into(),"https://support.apple.com/en-ie/102328".into(),"https://support.apple.com/macos/upgrade".into(),"https://www.apple.com/mac/compare/".into()],qualification:format!("Based on saved scan {} ({}) and explicit user assumptions. Compatibility requires checking exact software, peripherals and model; workload sufficiency, wear and OS eligibility are separate questions. No upgrade can be the correct outcome.",session.started_at,session.snapshot.as_ref().map(|s|s.model.as_str()).unwrap_or("model unavailable"))};
+    let source_reviews = source_reviews();
+    let report=AdviceReport{id:uuid::Uuid::new_v4().to_string(),created_at:now(),workload:r.workload,assessment:if findings.is_empty(){"More representative measurements needed before an upgrade recommendation."}else{"Keep the current Mac if it meets your actual task expectations. Investigate repeatable delays before comparing a replacement."}.into(),findings,scenarios,sources:source_reviews.iter().map(|s|s.url.clone()).collect(),source_reviews,verification_limits:verification_limits(),qualification:format!("Based on saved scan {} ({}) and explicit user assumptions. Compatibility requires checking exact software, peripherals and model; workload sufficiency, wear and OS eligibility are separate questions. No upgrade can be the correct outcome.",session.started_at,session.snapshot.as_ref().map(|s|s.model.as_str()).unwrap_or("model unavailable"))};
     records::save(
         c,
         "advice",

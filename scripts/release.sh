@@ -13,4 +13,7 @@ app="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CoquiPCCleaner.a
 /usr/bin/codesign --force --options runtime --sign - "$app"
 /usr/bin/codesign --verify --deep --strict "$app"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" "$output/CoquiPCCleaner-$version-macOS-arm64.zip"
-/usr/bin/shasum -a 256 "$output/CoquiPCCleaner-$version-macOS-arm64.zip" > "$output/SHA256SUMS"
+(
+  cd "$output"
+  /usr/bin/shasum -a 256 "CoquiPCCleaner-$version-macOS-arm64.zip" > SHA256SUMS
+)

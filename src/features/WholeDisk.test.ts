@@ -281,6 +281,7 @@ describe('whole-disk and removal workflows', () => {
           root: '/fixture',
           path: '/fixture/private',
           reason: 'permissionDenied',
+          guidance: 'macOS system/service location; the exact protection is unconfirmed.',
         },
       ]),
     });
@@ -305,6 +306,10 @@ describe('whole-disk and removal workflows', () => {
     }));
     render(Coverage, { controller, id: session.id });
     expect(await screen.findByText('Permission denied')).toBeInTheDocument();
+    await fireEvent.click(screen.getByText('Access guidance'));
+    expect(screen.getByText(/exact protection is unconfirmed/)).toBeVisible();
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Coverage reason' }), { target: { value: 'permissionDenied' } });
+    await waitFor(() => expect(service.coverage).toHaveBeenLastCalledWith(session.id, 0, 'permissionDenied'));
     expect(
       screen.getByText(/Traversal complete with omissions/),
     ).toBeInTheDocument();

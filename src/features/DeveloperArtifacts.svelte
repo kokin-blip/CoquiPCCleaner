@@ -11,6 +11,7 @@
   import type { DeveloperReport } from '../bindings/DeveloperReport';
   import Dialog from '../components/Dialog.svelte';
   import Status from '../components/Status.svelte';
+  import DevelopmentIndicators from '../components/DevelopmentIndicators.svelte';
   import { bytes, date } from '../format';
   let {
     controller,
@@ -114,7 +115,7 @@
     </button>
   </div>
   <p>
-    Review project caches, dependencies and build outputs with their Git and
+    Review Git repositories, project caches, dependencies and build outputs with their Git and
     worktree context.
   </p>
   {#if $controller.session}<p class="path muted small">
@@ -145,7 +146,7 @@
 {#if $controller.developerRunning}<div class="scan-banner" role="status">
     <CodeXml size={18} /><span
       >Checking project boundaries and Git state · {report?.examined ?? 0} of {report?.candidateCount ??
-        0} indexed output-like directories examined</span
+        0} indexed development locations examined</span
     >
     <button
       onclick={() => controller.run(() => controller.service.cancelDeveloper())}
@@ -156,7 +157,7 @@
   <div class="inline-between">
     <p class="muted small">
       Git checked {date(report.checkedAt)} · {report.artifacts.length} artifacts ·
-      {report.examined} indexed directories examined
+      {report.examined} indexed locations examined
     </p>
     <Status
       value={report.status === 'running' && !$controller.developerRunning
@@ -211,7 +212,8 @@
           >{#each filtered.slice(page * 25, (page + 1) * 25) as artifact}<tr>
               <td class="cleanup-path"
                 ><strong>{artifact.kind}</strong>
-                <div class="path selectable small">{artifact.path}</div></td
+                <div class="path selectable small">{artifact.path}</div>
+                <DevelopmentIndicators indicators={artifact.development} /></td
               >
               <td>{artifact.technology}</td><td class="numeric nowrap"
                 >{bytes(artifact.indexedAllocatedBytes)}</td
@@ -296,6 +298,8 @@
       <dd>{date(detail.checkedAt)}</dd>
     </dl>
     <h3>Review findings</h3>
+    <DevelopmentIndicators indicators={detail.development} />
+    {#if !detail.development?.length}<p class="muted small">This older report has no development indicators. Recheck artifacts for current evidence.</p>{/if}
     {#each detail.reasons as reason}<p>{reason}</p>{/each}
     <h3>Technology consequences</h3>
     <p>{detail.consequences}</p>

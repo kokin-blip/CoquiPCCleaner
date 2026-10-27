@@ -63,6 +63,17 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     throw new Error('No phase 2 fixture configured');
   };
   return {
+    prepareAppUpdates: vi.fn(missing),
+    checkAppUpdates: vi.fn(missing),
+    latestAppUpdates: vi.fn(async () => null),
+    scanObservations: vi.fn(async () => null),
+    openAppUpdate: vi.fn(missing),
+    scanReview: vi.fn(async (sessionId) => ({
+      sessionId,
+      scanStatus: 'partial',
+      observedAt: null,
+      groups: [],
+    })),
     administratorLock: vi.fn(async () => {}),
     administratorStatus: vi.fn(async () => ({
       authorizationSeconds: 0,
@@ -108,13 +119,35 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     compareFirmware: vi.fn(missing),
     reference: vi.fn(async () => {}),
     analyzeDuplicates: vi.fn(missing),
+    analyzeDuplicateScope: vi.fn(missing),
     previewDuplicates: vi.fn(missing),
+    previewDuplicatePhoto: vi.fn(missing),
     captureBaseline: vi.fn(missing),
+    captureTrial: vi.fn(missing),
+    finishTrial: vi.fn(missing),
+    compareTrials: vi.fn(missing),
+    saveTrialComparison: vi.fn(missing),
     compareBaselines: vi.fn(missing),
     manualPlan: vi.fn(missing),
     verifyManualPlan: vi.fn(missing),
     ask: vi.fn(missing),
+    collectInvestigation: vi.fn(missing),
     assess: vi.fn(missing),
+    recommendationPlan: vi.fn(
+      async (sessionId, baselineId, trialId = null) => ({
+        id: 'fixture-plan',
+        createdAt: '',
+        sessionId,
+        baselineId,
+        trialId,
+        preference: 'Balanced',
+        actions: [],
+        workloads: [],
+        bottlenecks: [],
+        qualification: 'Illustrative test fixture, not machine evidence.',
+      }),
+    ),
+    saveRecommendationPlan: vi.fn(missing),
     resources: vi.fn(missing),
     records: vi.fn(async () => []),
     record: vi.fn(missing),
@@ -138,6 +171,8 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
       return report;
     }),
     cancelDeveloper: vi.fn(async () => {}),
+    cleanupCategories: vi.fn(async (sessionId) => ({sessionId,observedAt:null,sourceStatus:'partial',rulesReviewedAt:'2026-10-27',categories:[],qualification:'Illustrative test fixture; no measured category totals.'})),
+    cleanupCategoryEntries: vi.fn(async (query) => ({sessionId:query.sessionId,kind:query.kind,files:[],nextOffset:null,qualification:'Illustrative test fixture'})),
     cleanupFiles: vi.fn(async () => ({
       files: [],
       nextOffset: null,

@@ -60,3 +60,9 @@ Do not overwrite or publish the 0.8 artifacts. Build a versioned local ad hoc ap
 
 
 The installed 0.9.0 checkpoint passed a 515-file disposable real Tauri scan, exact small-file metrics and omissions, native keyboard/drill-down/metric/pagination behavior, public schema-7 migration and restart. This does not complete whole-disk finalization/import or elevated large-index validation. Actual results and verified preference restoration are recorded in [status.md](../status.md#090-installed-native-validation--2026-10-23).
+
+## Fresh full-scale installed checkpoint — 0.11.3, 2026-10-24
+
+The specifically approved helper FDA refresh and all-eight-root scan finished traversal/aggregation and complete public import for **3,224,312 files**. Public file-only logical/allocated sums and all root counts/metrics exactly match the summary. The three previously denied personal folders are indexed with no permission-denied gaps; total denials fell 652 →26. Administrator-off map/drill-down, 100-row file pagination, retained root coverage and restart passed. The real 76-child Documents folder preserves all totals with 60 bounded nodes and an exact 286,720-byte allocated /213,502-byte logical /24-file remainder.
+
+The installed folder-query correction uses the existing parent index before sorting, avoiding unrelated-row walks without schema/index or read-time housekeeping changes. No source changed after the 251-test/package checkpoint. See status and whole-disk-reliability.md for timestamps and evidence. The run remains partial because of remaining protected/unsupported/deliberately skipped or changing locations; readable-scope completion does not establish comprehensive physical-device access, unique APFS allocation or cleanup authority. Administrator mode is off, the specifically approved helper FDA grant remains enabled, and no inspected files were moved/removed.
