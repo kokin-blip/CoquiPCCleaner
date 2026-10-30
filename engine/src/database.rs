@@ -9,7 +9,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     c.execute_batch("PRAGMA foreign_keys=ON; PRAGMA cache_size=-8192; PRAGMA temp_store=FILE;")?;
     let version: u32 = c.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
-        version <= 7,
+        version <= 8,
         "This diagnostic database was created by a newer version of CoquiPCCleaner."
     );
     if version == 0 {
@@ -62,6 +62,14 @@ pub fn open(path: &Path) -> Result<Connection> {
         CREATE INDEX IF NOT EXISTS session_scope_retention ON sessions(scope,status,started_at DESC);
         CREATE INDEX IF NOT EXISTS scan_gap_export ON scan_gaps(session_id);
         PRAGMA user_version=7; COMMIT;")?;
+    }
+    if version < 8 {
+        c.execute_batch("BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS cache_batches(id TEXT PRIMARY KEY,session_id TEXT NOT NULL,policy TEXT NOT NULL,revision INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,reviewed_at TEXT,expires_at TEXT,approved_at TEXT,finished_at TEXT,detail TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS cache_batch_history ON cache_batches(created_at DESC,id);
+        CREATE TABLE IF NOT EXISTS cache_batch_items(batch_id TEXT NOT NULL REFERENCES cache_batches(id) ON DELETE CASCADE,path TEXT NOT NULL,namespace TEXT NOT NULL,logical REAL NOT NULL,allocated REAL NOT NULL,indexed_allocated REAL NOT NULL,modified TEXT NOT NULL,eligible INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL,detail TEXT NOT NULL,identity TEXT,trash_path TEXT,PRIMARY KEY(batch_id,path)) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS cache_batch_group ON cache_batch_items(batch_id,namespace);
+        PRAGMA user_version=8; COMMIT;")?;
     }
     // An already migrated reader must not execute DDL or acquire a write lock.
     // Reuse file_parent for child lookup; avoid duplicating millions of full paths
@@ -402,6 +410,7 @@ pub fn recover_interrupted(c: &Connection) -> Result<()> {
     }
     c.execute("UPDATE records SET status='interrupted',json=json_set(json,'$.status','interrupted') WHERE status='running'",[])?;
     crate::cleanup::recover_interrupted(c)?;
+    crate::cache_bulk::recover(c)?;
     crate::removal::recover(c)?;
     Ok(())
 }
@@ -441,6 +450,10 @@ fn retain_inner(
     }
     c.execute(
         "DELETE FROM sessions WHERE started_at < ?1 AND status != 'running'",
+        [&cutoff],
+    )?;
+    c.execute(
+        "DELETE FROM cache_batches WHERE created_at < ?1 AND status NOT IN ('running','preparing')",
         [&cutoff],
     )?;
     c.execute(
@@ -513,7 +526,7 @@ fn prune_index(
     Ok(true)
 }
 pub fn purge(c: &Connection) -> Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM application_observations; DELETE FROM removal_plans;DELETE FROM administrator_records; DELETE FROM scan_plans; DELETE FROM scan_gaps; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    c.execute_batch("BEGIN IMMEDIATE; DELETE FROM cache_batches; DELETE FROM application_observations; DELETE FROM removal_plans;DELETE FROM administrator_records; DELETE FROM scan_plans; DELETE FROM scan_gaps; DELETE FROM records; UPDATE firmware_preferences SET json=json_set(json,'$.dismissedReportId',NULL); DELETE FROM developer_reports; DELETE FROM files; DELETE FROM sessions; DELETE FROM cleanup_plans; COMMIT; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }
 

@@ -1,4 +1,5 @@
 pub mod api;
+pub mod cache_bulk;
 pub mod cleanup;
 pub mod cleanup_categories;
 pub mod database;

@@ -1,0 +1,41 @@
+# Guided cache cleanup — 2026-10-30 source continuation
+
+The user requested Select all in the newest release's cache tab and an easier CleanMyMac-style cleanup flow while retaining Coqui's features. They confirmed guided cleanup, selection across every page in a chosen cache group and one final approval for the frozen eligible selection. This source continuation adds that workflow; it does not install or publish a release.
+
+## User flow and scope
+
+Cleanup still opens Categories. App/Xcode cache details and Cache files share the same selection controller. Cache namespaces group indexed files without claiming verified application ownership. Namespace checkboxes and **Select all in this group** select a complete namespace across pages. The explicitly broader **Select all cache groups** selects every namespace in the current cache category, including group-list pages not currently displayed. **Select this page** affects only its displayed files. Individual exceptions, partial check states, clear, group/file pagination and returning focus remain available.
+
+Selections begin empty, persist while browsing groups/pages/tabs, and clear when the source scan or exclusions change. The sticky summary shows selected file count and indexed allocation. Selecting files grants no eligibility or execution authority. Stopped materialization discloses that only the displayed partial count was selected; no result is silently capped at 100 files.
+
+**Review selection** starts cancellable fresh checking. Eligible and refused counts advance from real work. Refusal of one unavailable/changed/protected file does not abort other checks. The final review summarizes the frozen namespaces, eligible allocation and refused counts. Exact paths, individual refusal reasons and results remain browsable in pages of at most 100 rows. Details initially collapse so the summary, two unchecked acknowledgements and final action stay readable at supported window sizes.
+
+The user confirms related applications are closed and accepts the selected groups/file scope, cache regeneration/download consequences and recovery limits. **Approve and move to Trash** is a separate single-use request for that frozen review. Results distinguish verified moves, skipped, failed, unverified and unattempted files. Moving to Trash is not reclaimed capacity; Coqui never empties Trash. Recovery guidance points to retained Trash locations and possible Finder Put Back, without guaranteeing recovery.
+
+All existing Cleanup destinations remain. Project output and duplicate-copy reviews retain their separate contracts and acknowledgements. Only currently supported individual user/Xcode cache files can enter bulk execution. Logs, archives, device/simulator data, backups, Trash and system/shared categories retain their manual/protected boundaries. DerivedData still opens protected Developer review. Local Ask, development/trial tools, More tools, manual maintenance, vendor updates and privacy grants are unchanged.
+
+## Engine and IPC
+
+`cache_bulk` owns pure grouped/indexed reads, explicit materialized selections, fresh preparation, immutable review, execution and retained outcomes. Generated Rust/TypeScript models cover `CacheQuery`, group/detail pages, selection changes, compact summaries, review approval and outcome-page queries. Tauri filesystem/database work runs off the UI thread under the existing operation guard. Cancellation uses the existing independent cleanup atomic and remains reachable through the app-wide banner across navigation.
+
+The source is fixed to the account's Library/Caches. Category kinds are limited to app/Xcode caches; namespace equality never grants a caller an arbitrary directory scope. Primary-key path ranges, published macOS Data aliases, friendly-path deduplication and literal exclusions precede grouping. At most 200 exclusions are supported, with an explicit error above that limit. A detail page returns at most 100 rows. Selection uses keyset chunks of at most 1,000 rows with cursor/limit pushed into each indexed alias range. It does not repeatedly rebuild a full category between chunks or serialize all selected files in progress events. Explicit displayed-path changes validate unique membership in the selected scope.
+
+Fresh checking retains private file/parent identity seals and individual refusal reasons. A fatal error, cancellation or failed final review delivery leaves no executable review. Review expiry begins ten minutes after preparation finishes. Approval matches the saved id, revision and review timestamp; changed policy, expiry, reuse and missing acknowledgements are refused.
+
+Legacy and bulk cache moves use the same individual-file primitive. It repeats ownership, canonical/no-follow ancestry, hard-link/cloud/project/exclusion and identity checks, opens the parent, persists intent, rechecks immediately before native Foundation Trash, and verifies original-path absence and destination identity. The previous pathname-race limitation remains; this is not an atomic descriptor-relative filesystem API. Project/copy executors retain their existing separate seals and checks. No folder removal authority is inferred from namespace selection.
+
+## Schema 8 and lifecycle
+
+Schema 8 adds `cache_batches` and `cache_batch_items`, with batch/path and batch/namespace indexes. Batch rows retain source/policy identity, revision, lifecycle dates and status. Item rows retain exact paths, indexed/fresh allocation, private seals, intent, outcome, refusal detail and Trash destination. Per-item updates replace repeated whole-plan JSON rewrites. Existing legacy JSON records and their defaulted fields remain readable; the old 100-file API remains available.
+
+The additive migration preserves prior data. **Older schema-7 binaries, including the published 0.13.0 binary, cannot reopen a database upgraded to schema 8.** This source work opened only disposable databases; the installed production database was not upgraded. No helper protocol or privilege expansion was added. Future installed matching-build acceptance and release packaging remain separate.
+
+Current-schema reads perform no housekeeping writes. Retention and diagnostic purge include the new tables without touching inspected files. Active preparation/execution are serialized with other work. Startup turns unfinished drafts/reviews/work into interrupted, non-executable records; moving items become unverified and remaining items unattempted. There is no automatic retry/resume. Visible active History records refresh through read-only summary queries; terminal transitions update open records. Read-only historical records never offer an executable approval.
+
+## Reference evidence and acceptance
+
+The current installed reference remained Mac App Store CleanMyMac 5.2.4. Live Computer Use observed its cleanup scan, grouped namespace/application presentation, expandable detail, selected count/allocation and separate execution control. No reference cleanup ran. REA confirmed the installed identity and packaged cleanup strings; its host lacked native capture permissions, which were not changed. See the refreshed section in [reference research](../research/cleanmymac-5.2.4.md).
+
+Validation includes selection/exception behavior beyond 250,000 indexed rows, bounded pages/events, fresh refusals, frozen membership, policy/revision/expiry/replay checks, cancellation/disconnection/interruption, aliases, project/link protections, migration, pure reads, retention/purge and legacy cleanup. A separate macOS fixture moved two newly created files to native Trash, verified both and immediately restored them. No existing user files were moved to test this feature.
+
+Native layout captures use an explicitly named isolated WKWebView harness with the actual Svelte components, labeled illustrative data and disabled execution. Light/dark picker layouts at 1440×850 and 1100×720, compact review, exact file details and the scrolled sticky summary were inspected. This is separate from installed Tauri/IPC/helper acceptance. Full VoiceOver, other Macs/macOS versions and large real-file native execution remain unverified. Exact final checks and finish-review disposition are in [status](../status.md) and the design handoff.

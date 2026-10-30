@@ -476,13 +476,13 @@
             >
           </div>
         </div>{/if}
-      {#if $controller.cleanupRunning || ($controller.cleanupPreparing && $controller.page !== 'Optimization')}<div
+      {#if $controller.cleanupRunning || $controller.cleanupPreparing}<div
           class="scan-banner"
           role="status"
         >
           <BrushCleaning size={18} /><span
             >{$controller.cleanupPreparing
-              ? 'Preparing a project-folder review…'
+              ? 'Preparing a cleanup selection or review…'
               : 'Moving approved items to Trash…'}</span
           ><button onclick={() => controller.navigate('Optimization')}
             >View progress</button

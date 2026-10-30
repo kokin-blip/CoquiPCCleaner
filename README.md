@@ -2,9 +2,9 @@
 
 A local macOS investigation and maintenance app with separately approved, verified cleanup. **Tauri 2 + Svelte 5 + Vite + Rust + SQLite.** Targets Apple Silicon and macOS 14+.
 
-## Latest release — 0.13.0
+## Latest release — 0.14.0
 
-Download the macOS arm64 ZIP or optional matching app/helper installer from [the latest release](https://github.com/kokin-blip/CoquiPCCleaner/releases/latest). This release includes the simpler scan-first interface, selected metadata checks, broader Cleanup category review, Downloads exact-copy filters, vendor-managed update discovery and development/task evidence. See [release notes and installation limits](docs/releases/0.13.0.md). Builds are ad hoc signed and unnotarized; no Windows or Intel artifact is included.
+Download the macOS arm64 ZIP or optional matching app/helper installer from [the latest release](https://github.com/kokin-blip/CoquiPCCleaner/releases/latest). This release adds guided cache cleanup with Select all across pages, shared namespace/file selection, cancellable fresh review and one final approval, while retaining all earlier tools. Schema 8 preserves history but older schema-7 binaries cannot reopen an upgraded database. See [release notes and installation limits](docs/releases/0.14.0.md). Builds are ad hoc signed and unnotarized; no Windows or Intel artifact is included.
 
 ## Run
 

@@ -267,7 +267,7 @@ fn newer_database_schema_is_not_silently_downgraded() {
     let d = tempfile::tempdir().unwrap();
     let path = d.path().join("newer.db");
     let c = database::open(&path).unwrap();
-    c.execute_batch("PRAGMA user_version=8").unwrap();
+    c.execute_batch("PRAGMA user_version=9").unwrap();
     drop(c);
     assert!(database::open(&path).is_err());
 }

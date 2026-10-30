@@ -18,7 +18,7 @@ pub struct Policy {
     pub exclusions: Vec<PathBuf>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-struct Identity {
+pub(crate) struct Identity {
     device: u64,
     inode: u64,
     size: u64,
@@ -146,7 +146,7 @@ pub(crate) fn cache_project_context_as(parent: &Path, home: &Path, uid: u32) -> 
     Ok(context)
 }
 
-fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
+pub(crate) fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
     anyhow::ensure!(path.is_absolute(), "An absolute file path is required");
     let home = policy.home.canonicalize()?;
     let base = home.join("Library/Caches");
@@ -206,6 +206,106 @@ fn inspect(path: &Path, policy: &Policy) -> Result<(CleanupFile, Identity)> {
     let file = CleanupFile {path: path.to_str().context("This filename cannot be represented")?.into(), allocated_bytes:(m.blocks() as f64)*512., logical_bytes:m.len() as f64, modified_at:m.modified().ok().map(|t|chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()).unwrap_or_default(), origin, consequences:"Close the related application first. Cached data may be useful; the app may need to download or regenerate it and can be slower next time. Moving to Trash does not free disk space until Trash is emptied. Coqui does not empty Trash.".into()};
     Ok((file, identity))
 }
+/// Shared cache-file executor used by legacy and disk-backed bulk reviews.
+/// The durable intent callback must succeed before the native operation starts.
+pub(crate) fn move_cache_file(
+    path: &Path,
+    expected: &Identity,
+    policy: &Policy,
+    cancel: &AtomicBool,
+    mut trash: impl FnMut(&Path) -> Result<PathBuf>,
+    mut intent: impl FnMut() -> Result<()>,
+) -> CleanupItem {
+    let fallback = CleanupFile {
+        path: path.to_string_lossy().into(),
+        logical_bytes: 0.,
+        allocated_bytes: 0.,
+        modified_at: String::new(),
+        origin: String::new(),
+        consequences: String::new(),
+    };
+    let mut item = CleanupItem {
+        file: fallback,
+        status: "skipped".into(),
+        detail: String::new(),
+        trash_path: None,
+    };
+    let mut native_started = false;
+    let result = (|| -> Result<PathBuf> {
+        anyhow::ensure!(
+            expected.project.is_none() && expected.duplicate.is_none(),
+            "Not an individual cache-file seal"
+        );
+        anyhow::ensure!(!cancel.load(Ordering::SeqCst), "Cancelled before move");
+        let (file, identity) = inspect(path, policy)?;
+        item.file = file;
+        anyhow::ensure!(
+            &identity == expected,
+            "The file or its parent changed since review"
+        );
+        let parent = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+            .open(path.parent().context("Missing parent")?)?;
+        let pm = parent.metadata()?;
+        anyhow::ensure!(
+            pm.dev() == expected.parent_device && pm.ino() == expected.parent_inode,
+            "The parent directory changed"
+        );
+        intent()?;
+        let (_, latest) = inspect(path, policy)?;
+        anyhow::ensure!(
+            &latest == expected,
+            "Target changed immediately before native Trash"
+        );
+        anyhow::ensure!(
+            !cancel.load(Ordering::SeqCst),
+            "Cancelled before native Trash"
+        );
+        native_started = true;
+        trash(path)
+    })();
+    match result {
+        Ok(destination) => {
+            item.trash_path = destination.to_str().map(String::from);
+            let verified = fs::symlink_metadata(path)
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+                && fs::symlink_metadata(&destination).is_ok_and(|m| {
+                    m.is_file()
+                        && m.dev() == expected.device
+                        && m.ino() == expected.inode
+                        && m.len() == expected.size
+                });
+            item.status = if verified {
+                "movedToTrash"
+            } else {
+                "unverified"
+            }
+            .into();
+            item.detail = if verified { "Verified: original path absent and the same file is present in Trash. Recovery depends on it remaining there." } else { "Native Trash returned but verification failed. Inspect source and Trash; do not retry automatically." }.into();
+        }
+        Err(e) => {
+            item.status = if native_started {
+                "failed"
+            } else if cancel.load(Ordering::SeqCst) {
+                "unattempted"
+            } else {
+                "skipped"
+            }
+            .into();
+            item.detail = format!(
+                "{}: {e:#}",
+                if native_started {
+                    "Native Trash failed; inspect source before retrying"
+                } else {
+                    "Not moved"
+                }
+            );
+        }
+    }
+    item
+}
+
 fn load(c: &Connection, id: &str) -> Result<Record> {
     let json: String = c
         .query_row("SELECT json FROM cleanup_plans WHERE id=?1", [id], |r| {
@@ -524,6 +624,26 @@ pub fn execute(
             break;
         }
         let path = PathBuf::from(&r.plan.items[i].file.path);
+        if !r.plan.project_cleanup && !r.plan.duplicate_cleanup {
+            let expected = r.identities[i].clone();
+            let original_file = r.plan.items[i].file.clone();
+            let mut item = move_cache_file(&path, &expected, policy, cancel, &mut trash, || {
+                r.plan.items[i].status = "moving".into();
+                r.plan.items[i].detail =
+                    "Approved; durable intent recorded before native Trash".into();
+                save(c, &r)
+            });
+            // Keep the reviewed measurement even if current inspection was refused.
+            item.file = original_file;
+            if item.status == "unattempted" {
+                item.status = "cancelled".into();
+            }
+            r.plan.items[i] = item;
+            save(c, &r)?;
+            connected = emit(r.plan.clone());
+            continue;
+        }
+
         let validation = (|| -> Result<fs::File> {
             let current = current_identity(
                 &path,

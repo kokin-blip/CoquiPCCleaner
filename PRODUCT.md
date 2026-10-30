@@ -83,3 +83,7 @@ Cleanup now opens a dated category view for app/Xcode caches, user logs, Derived
 ## 0.13.0 macOS release checkpoint
 
 The user authorized committing/pushing the accumulated work and publishing it as the latest macOS release. Version 0.13.0 packages the continuation above for Apple Silicon/macOS 14+, with a portable application ZIP and a separately optional matching app/helper installer. Both are ad hoc signed and unnotarized; package/signature checks and ordinary bundle startup are separate from installed privileged-operation acceptance. The development Mac's installed 0.12.0 pair and privacy grants remain unchanged. Source tests and release evidence are in docs/status.md; installation notes and retained limits are in docs/releases/0.13.0.md. No Windows/Intel binary or claim of full reference-product parity is added.
+
+## Guided cache cleanup — 2026-10-30 source continuation
+
+Cleanup Categories and Cache files now share explicit namespace selections, all-page Select all, individual exceptions and a persistent selected summary. Cancellable fresh checking separates indexed candidates from eligibility; one final approval covers a frozen exact-file set and retains per-file refusal/Trash outcomes. Other Cleanup tools remain available with their existing boundaries. Schema 8 preserves legacy data but prevents older schema-7 binaries reopening an upgraded database. This source continuation is not installed or published; see docs/phases/guided-cleanup.md and docs/status.md for actual checks, native fixture evidence and limits.

@@ -399,7 +399,7 @@ fn current_schema_reads_remain_responsive_while_another_writer_is_held() {
         writer
             .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
             .unwrap(),
-        7
+        8
     );
     writer
         .execute_batch("BEGIN IMMEDIATE;UPDATE sessions SET json=json WHERE id='scan';")

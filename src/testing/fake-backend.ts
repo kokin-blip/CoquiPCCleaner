@@ -173,6 +173,13 @@ export function fakeBackend(overrides: Partial<Backend> = {}): Backend {
     cancelDeveloper: vi.fn(async () => {}),
     cleanupCategories: vi.fn(async (sessionId) => ({sessionId,observedAt:null,sourceStatus:'partial',rulesReviewedAt:'2026-10-27',categories:[],qualification:'Illustrative test fixture; no measured category totals.'})),
     cleanupCategoryEntries: vi.fn(async (query) => ({sessionId:query.sessionId,kind:query.kind,files:[],nextOffset:null,qualification:'Illustrative test fixture'})),
+    cacheGroups: vi.fn(async () => ({groups: [], nextCursor: null})),
+    cacheEntries: vi.fn(async () => ({items: [], nextCursor: null})),
+    cacheSelect: vi.fn(missing), cachePrepare: vi.fn(missing), cacheExecute: vi.fn(missing),
+    cacheBatchPage: vi.fn(async () => ({items: [], nextCursor: null})),
+    cacheBatchSummary: vi.fn(missing),
+    cacheReviewedGroups: vi.fn(async () => ({groups: [], nextCursor: null})),
+    cacheHistory: vi.fn(async () => []), cacheDecline: vi.fn(missing),
     cleanupFiles: vi.fn(async () => ({
       files: [],
       nextOffset: null,

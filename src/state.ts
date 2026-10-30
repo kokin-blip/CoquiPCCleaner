@@ -1,3 +1,6 @@
+import type { CacheBulkSummary } from './bindings/CacheBulkSummary';
+import type { CacheQuery } from './bindings/CacheQuery';
+import type { CacheBulkApproval } from './bindings/CacheBulkApproval';
 import type { DiskScanPlan } from './bindings/DiskScanPlan';
 import type { ScanModules } from './bindings/ScanModules';
 import { get, writable } from 'svelte/store';
@@ -52,6 +55,8 @@ export interface AppState {
   cleanupRunning: boolean;
   cleanupPreparing: boolean;
   cleanupPlan: CleanupPlan | null;
+  cacheBatch: CacheBulkSummary | null;
+  cacheSourceKey: string;
   cancelling: boolean;
   error: string | null;
   notice: string | null;
@@ -84,10 +89,17 @@ export function createAppStore(service: Backend = nativeBackend) {
     cleanupRunning: false,
     cleanupPreparing: false,
     cleanupPlan: null,
+    cacheBatch: null,
+    cacheSourceKey: '',
     cancelling: false,
     error: null,
     notice: null,
     page: 'Dashboard',
+  });
+  // Selection belongs to its source even while Cleanup is not mounted.
+  const stopCacheSource = store.subscribe((s) => {
+    const key = `${s.session?.id ?? ''}:${JSON.stringify(s.settings?.excludedPaths ?? [])}`;
+    if (s.cacheSourceKey !== key) store.update((v) => ({ ...v, cacheSourceKey: key, cacheBatch: null }));
   });
   let monitoring: Promise<void> | null = null;
   let disposed = false;
@@ -296,6 +308,7 @@ export function createAppStore(service: Backend = nativeBackend) {
       ...s,
       session: null,
       history: [],
+      cacheBatch: null,
       cleanupPlan: null,
       firmwareCenter: null,
       firmwareReportId: null,
@@ -331,6 +344,40 @@ export function createAppStore(service: Backend = nativeBackend) {
       store.update((s) => ({ ...s, cleanupRunning: false }));
     }
   }
+  async function cacheOperation(executing: boolean, action: (on: (value: CacheBulkSummary) => void) => Promise<CacheBulkSummary>) {
+    const s = get(store);
+    if (s.workRunning || s.scanning || s.cleanupRunning || s.cleanupPreparing || s.developerRunning) throw new Error('Wait for the active operation to finish.');
+    const key = s.cacheSourceKey;
+    store.update((v) => ({...v,cleanupPreparing:!executing,cleanupRunning:executing,error:null}));
+    const on = (cacheBatch: CacheBulkSummary) => store.update((v) => v.cacheSourceKey === key ? {...v,cacheBatch} : v);
+    try { const result = await action(on); on(result); return result; }
+    catch (e) {
+      // An uncertain command can have persisted intent. Never retain an executable
+      // approval after transport failure; use the read-only history to inspect it.
+      store.update((v) => ({...v,cacheBatch:null})); throw executing ? new Error(`${String(e)} Open Action history and inspect the last cache record before retrying.`) : e;
+    } finally { store.update((v) => ({...v,cleanupPreparing:false,cleanupRunning:false})); }
+  }
+  async function changeCacheSelection(query: CacheQuery, paths: string[] | null, selected: boolean, clear = false) {
+    const batch = get(store).cacheBatch;
+    const draft = batch?.status === 'draft' ? batch : null;
+    return cacheOperation(false, (on) => service.cacheSelect({query:{...query,batchId:draft?.id ?? null},revision:draft?.revision ?? null,paths,selected,clear},on));
+  }
+  async function prepareCacheBulk() {
+    const batch = get(store).cacheBatch;
+    if (!batch || batch.status !== 'draft') return;
+    return cacheOperation(false,(on) => service.cachePrepare(batch.id,batch.revision,on));
+  }
+  async function executeCacheBulk(approval: CacheBulkApproval) {
+    // Clear the displayed approval immediately; execution events replace it.
+    return cacheOperation(true,(on) => service.cacheExecute(approval,on));
+  }
+  async function keepCacheBulk() {
+    const batch = get(store).cacheBatch;
+    if (!batch) return;
+    const result = await service.cacheDecline(batch.id);
+    store.update((v) => ({...v,cacheBatch:result}));
+  }
+  function newCacheSelection() { store.update((v) => ({...v,cacheBatch:null})); }
   async function previewProjectCleanup(request: CleanupRequest) {
     const s = get(store);
     if (
@@ -500,6 +547,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     captureTrial,
     finishTrial,
     executeCleanup,
+    changeCacheSelection, prepareCacheBulk, executeCacheBulk, keepCacheBulk, newCacheSelection,
     previewProjectCleanup,
     analyzeDeveloper,
     save,
@@ -535,6 +583,7 @@ export function createAppStore(service: Backend = nativeBackend) {
     dismiss: () => store.update((s) => ({ ...s, error: null, notice: null })),
     dispose: async () => {
       disposed = true;
+      stopCacheSource();
       if (maintenanceTimer) clearInterval(maintenanceTimer);
       await service.cancelWork();
       store.update((s) => ({

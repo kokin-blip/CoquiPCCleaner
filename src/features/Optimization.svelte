@@ -7,7 +7,9 @@
     ChevronLeft,
   } from '@lucide/svelte';
   import type { createAppStore } from '../state';
-  import type { CleanupFile } from '../bindings/CleanupFile';
+  import CacheBrowser from './CacheBrowser.svelte';
+  import CacheBulkFlow from './CacheBulkFlow.svelte';
+  import type { CacheBulkSummary } from '../bindings/CacheBulkSummary';
   import type { CleanupPlan } from '../bindings/CleanupPlan';
   import type { ProjectCleanupPage } from '../bindings/ProjectCleanupPage';
   import Duplicates from './Duplicates.svelte';
@@ -41,11 +43,6 @@
       controller.clearReviewTarget();
     }
   });
-  let rows = $state<CleanupFile[]>([]);
-  let selected = $state<string[]>([]);
-  let offset = $state(0);
-  let nextOffset = $state<number | null>(null);
-  let unavailable = $state(0);
   let loading = $state(false);
   let error = $state('');
   let revision = $state(0);
@@ -62,7 +59,6 @@
   let contentsLoading = $state(false);
   let contentsError = $state('');
   let contentsRevision = $state(0);
-  let lastSession = '';
   let session = $derived($controller.session);
   let currentPlan = $derived($controller.cleanupPlan);
   $effect(() => {
@@ -90,62 +86,34 @@
       alive = false;
     };
   });
-  $effect(() => {
-    const view = tab;
-    const id = session?.id;
-    const status = session?.status;
-    const page = offset;
-    const refresh = revision;
-    const settings = $controller.settings;
-    let alive = true;
-    void refresh;
-    void settings;
-    if (view !== 'Cache files') return;
-    if (!id || status === 'running') {
-      rows = [];
-      return;
-    }
-    if (lastSession !== id) {
-      lastSession = id;
-      selected = [];
-      offset = 0;
-    }
-    loading = true;
-    controller.service
-      .cleanupFiles(id, page)
-      .then((r) => {
-        if (alive) {
-          rows = r.files;
-          nextOffset = r.nextOffset;
-          unavailable = r.unavailableCount;
-        }
-      })
-      .catch((e) => {
-        if (alive) error = String(e);
-      })
-      .finally(() => {
-        if (alive) loading = false;
-      });
-    return () => {
-      alive = false;
-    };
-  });
+  let cacheRecords = $state<CacheBulkSummary[]>([]);
+  let cacheRecord = $state<CacheBulkSummary | null>(null);
+  const cacheHistoryVersion = $derived(
+    `${$controller.cacheBatch?.id ?? ''}:${$controller.cacheBatch?.status ?? ''}`,
+  );
   $effect(() => {
     const page = historyOffset;
     const view = tab;
     const plan = currentPlan;
     const refresh = revision;
+    void cacheHistoryVersion;
     let alive = true;
     if (view !== 'Action history') return;
     void plan;
     void refresh;
     loading = true;
-    controller.service
-      .cleanupHistory(page, 50)
-      .then((r) => {
+    Promise.all([
+      controller.service.cleanupHistory(page, 50),
+      controller.service.cacheHistory(page),
+    ])
+      .then(([r, bulk]) => {
         if (alive) {
           records = r;
-          moreHistory = r.length === 50;
+          cacheRecords = bulk;
+          if (cacheRecord)
+            cacheRecord =
+              bulk.find((row) => row.id === cacheRecord?.id) ?? cacheRecord;
+          moreHistory = r.length === 50 || bulk.length === 50;
         }
       })
       .catch((e) => {
@@ -158,32 +126,46 @@
       alive = false;
     };
   });
-  function toggle(path: string) {
-    selected = selected.includes(path)
-      ? selected.filter((p) => p !== path)
-      : [...selected, path];
-  }
-  async function preview() {
-    await previewPaths([...selected]);
-  }
-  async function previewPaths(paths: string[]) {
-    if (!session) return;
-    pending = true;
-    error = '';
-    try {
-      review = await controller.service.previewCleanup({
-        sessionId: session.id,
-        paths,
-      });
-      closed = false;
-      understood = false;
-    } catch (e) {
-      error = String(e);
-      revision++;
-    } finally {
-      pending = false;
-    }
-  }
+  const activeCacheHistoryIds = $derived(
+    cacheRecords
+      .filter((row) => ['preparing', 'running'].includes(row.status))
+      .map((row) => row.id)
+      .join(','),
+  );
+  $effect(() => {
+    const ids = activeCacheHistoryIds.split(',').filter(Boolean),
+      view = tab;
+    if (view !== 'Action history' || !ids.length) return;
+    let alive = true,
+      inFlight = false;
+    const timer = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const updates = await Promise.all(
+          ids.map((id) => controller.service.cacheBatchSummary(id)),
+        );
+        if (alive) {
+          cacheRecords = cacheRecords.map(
+            (row) => updates.find((value) => value.id === row.id) ?? row,
+          );
+          if (cacheRecord)
+            cacheRecord =
+              updates.find((value) => value.id === cacheRecord?.id) ??
+              cacheRecord;
+        }
+      } catch (reason) {
+        if (alive)
+          error = `Could not refresh active cache records: ${String(reason)}`;
+      } finally {
+        inFlight = false;
+      }
+    }, 1000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  });
   async function decline() {
     const plan = review;
     review = null;
@@ -216,7 +198,6 @@
     const plan = review;
     review = null;
     error = '';
-    selected = [];
     try {
       await controller.executeCleanup({
         planId: plan.id,
@@ -274,7 +255,7 @@
       }}>Retry loading</button
     >
   </div>{/if}
-{#if currentPlan && tab !== 'Action history'}
+{#if currentPlan && !$controller.cacheBatch && tab !== 'Action history'}
   <section class="panel cleanup-result" aria-live="polite">
     <div class="section-heading">
       <h2>
@@ -306,147 +287,39 @@
     </div>
   </section>
 {/if}
-{#if tab === 'Categories'}
-  <CleanupCategories {controller} {onScan} onPreview={previewPaths} {pending} />
+{#if tab !== 'Action history'}<CacheBulkFlow {controller} />{/if}
+{#if ['Categories', 'Cache files'].includes(tab) && ['preparing', 'review', 'running'].includes($controller.cacheBatch?.status ?? '')}
+  <!-- The shared flow above owns this stage. -->
+{:else if tab === 'Categories'}
+  <CleanupCategories {controller} {onScan} {pending} />
 {:else if tab === 'Cache files'}
   <section class="cleanup-intro">
-    <h2>Review individual cache files</h2>
+    <h2>Choose cache files</h2>
     <p>
-      Files listed here were indexed by your scan and are currently readable in
-      your Library/Caches. They are candidates, not confirmed junk. Close the
-      related apps before proceeding.
+      Choose a namespace or individual files, then review the selection before
+      moving anything.
     </p>
-    {#if session}<p class="path muted small">
-        Scan scope: {session.scope}
-      </p>{/if}
-    <p class="muted small">
-      Folders, links, cloud-only files, excluded locations and detected project
-      trees are omitted. A standalone home package.json does not exclude these
-      caches; declared workspaces remain protected. No files are selected
-      automatically. Keep everything is a valid choice.
-    </p>
+    {#if session}<p class="small muted">
+        Scan recorded {date(session.finishedAt)} · <Status
+          value={session.status}
+        />
+      </p>
+      <details>
+        <summary>Scope and eligibility</summary>
+        <p class="path small">{session.scope}</p>
+        <p class="small muted">
+          Only indexed individual user-cache files can qualify after fresh
+          checks. Links, cloud-only files, exclusions and detected project trees
+          remain protected. Indexed allocation is not removable space.
+        </p>
+      </details>{/if}
   </section>
   {#if !session}<div class="empty-state">
-      <BrushCleaning size={34} />
-      <h2>Start with a storage analysis.</h2>
-      <p>
-        Scan your home folder or select a folder inside your Library/Caches.
-        Then review individual files here.
-      </p>
+      <h2>Start with a storage scan.</h2>
       <button class="primary" onclick={onScan}>Analyze storage</button>
-    </div>
-  {:else if $controller.workRunning || $controller.scanning}<div
-      class="empty-inline"
-      role="status"
-    >
-      <h2>Analysis is in progress.</h2>
-      <p>Eligible files will be available when the scan finishes.</p>
-    </div>
-  {:else}
-    <section class="panel file-panel">
-      <div class="file-toolbar">
-        <div>
-          <strong>{selected.length} selected</strong><span class="muted small">
-            · up to 100 files per review</span
-          >
-        </div>
-        <div class="inline-wrap">
-          <button
-            disabled={!selected.length ||
-              pending ||
-              $controller.cleanupRunning ||
-              $controller.cleanupPreparing ||
-              $controller.developerRunning}
-            onclick={() => (selected = [])}>Clear selection</button
-          ><button
-            class="primary"
-            disabled={!selected.length ||
-              pending ||
-              $controller.cleanupRunning ||
-              $controller.cleanupPreparing ||
-              loading}
-            onclick={preview}
-            >{pending
-              ? 'Preparing review…'
-              : 'Review selected files'}<ChevronRight size={14} /></button
-          >
-        </div>
-      </div>
-      {#if loading}<p class="empty-inline" role="status">
-          Checking indexed files against the current cleanup rules…
-        </p>{/if}
-      <div class="table-scroll">
-        <table>
-          <thead
-            ><tr
-              ><th><span class="sr-only">Select</span></th><th>Exact path</th
-              ><th class="numeric">Allocated</th><th>Modified</th><th
-                ><span class="sr-only">Reveal</span></th
-              ></tr
-            ></thead
-          ><tbody>
-            {#each rows as file}<tr
-                ><td
-                  ><input
-                    type="checkbox"
-                    aria-label={`Select ${file.path}`}
-                    checked={selected.includes(file.path)}
-                    disabled={$controller.cleanupRunning ||
-                      $controller.cleanupPreparing ||
-                      (!selected.includes(file.path) && selected.length >= 100)}
-                    onchange={() => toggle(file.path)}
-                  /></td
-                ><td class="cleanup-path path selectable">{file.path}</td><td
-                  class="numeric nowrap">{bytes(file.allocatedBytes)}</td
-                ><td class="nowrap muted">{date(file.modifiedAt)}</td><td
-                  ><button
-                    class="icon-button"
-                    aria-label={`Reveal ${file.path}`}
-                    onclick={() =>
-                      controller.run(() =>
-                        controller.service.reveal(file.path),
-                      )}><ExternalLink size={15} /></button
-                  ></td
-                ></tr
-              >{/each}
-          </tbody>
-        </table>
-      </div>
-      {#if !rows.length && !loading}<div class="empty-inline">
-          <h3>No eligible cache files on this page.</h3>
-          <p>
-            The current scan may not include your Library/Caches, its index may
-            have been replaced, or the files may have changed. Review scan scope
-            or continue to the next page when available.
-          </p>
-          <button onclick={() => controller.navigate('Settings')}
-            >Review scan scope</button
-          >
-        </div>{/if}
-      {#if unavailable}<p class="muted small cleanup-qualification">
-          {unavailable} indexed {unavailable === 1
-            ? 'entry on this page was'
-            : 'entries on this page were'} omitted because they are unavailable or
-          outside the supported cleanup rules.
-        </p>{/if}
-      <div class="pagination">
-        <button
-          disabled={offset === 0 || loading || $controller.cleanupRunning}
-          onclick={() => (offset = Math.max(0, offset - 100))}
-          ><ChevronLeft size={14} />Previous</button
-        ><span class="muted small"
-          >Indexed page {Math.floor(offset / 100) + 1}</span
-        ><button
-          disabled={nextOffset === null ||
-            loading ||
-            $controller.cleanupRunning}
-          onclick={() => {
-            if (nextOffset !== null) offset = nextOffset;
-          }}>Next<ChevronRight size={14} /></button
-        >
-      </div>
-    </section>
-  {/if}
+    </div>{:else if session.status === 'running'}<p role="status">
+      Wait for the storage scan to finish.
+    </p>{:else}<CacheBrowser {controller} />{/if}
 {:else if tab === 'Recommended plan'}<Recommendations
     {controller}
   />{:else if tab === 'Duplicates'}<Duplicates
@@ -469,6 +342,25 @@
     Approved plans, declined reviews and per-item outcomes are retained locally.
     A completed move does not guarantee that Finder can still restore the item.
   </p>
+  <button disabled={loading} onclick={() => revision++}
+    >Refresh action records</button
+  >
+  {#if cacheRecord}<CacheBulkFlow
+      {controller}
+      record={cacheRecord.id === $controller.cacheBatch?.id
+        ? $controller.cacheBatch
+        : cacheRecord}
+      onClose={() => (cacheRecord = null)}
+    />{/if}
+  {#each cacheRecords as batch}<button
+      class="history-row"
+      onclick={() => (cacheRecord = batch)}
+      ><strong
+        >Cache group review · {batch.selectedCount.toLocaleString()} files</strong
+      ><span>{date(batch.createdAt)} · <Status value={batch.status} /></span
+      ></button
+    >{/each}
+
   {#if loading}<p role="status">Loading action records…</p>{/if}
   <section class="panel history-panel">
     {#each records as plan}<button
@@ -493,7 +385,7 @@
             >{date(plan.createdAt)} · {bytes(plan.allocatedBytes)} reviewed allocation</span
           ></span
         ><Status value={plan.status} /><ChevronRight size={15} /></button
-      >{:else}{#if !loading}<div class="empty-state">
+      >{:else}{#if !loading && !cacheRecords.length}<div class="empty-state">
           <BrushCleaning size={32} />
           <h2>No action records yet.</h2>
           <p>

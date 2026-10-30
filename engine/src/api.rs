@@ -1739,3 +1739,81 @@ fn failed_administrator_import_retains_unavailable_checks_without_collection() {
             && check.finished_at.is_none()
             && check.count.is_none()));
 }
+
+// Bulk cache operations use the ordinary user context, never the administrator helper.
+pub fn cache_groups(
+    query: crate::cache_bulk::CacheQuery,
+) -> Result<crate::cache_bulk::CacheGroupPage> {
+    let e = engine()?;
+    crate::cache_bulk::groups(&database::open(&e.path)?, query, &cleanup_policy(&e)?)
+}
+pub fn cache_entries(
+    query: crate::cache_bulk::CacheQuery,
+) -> Result<crate::cache_bulk::CacheBulkPage> {
+    let e = engine()?;
+    crate::cache_bulk::entries(&database::open(&e.path)?, query, &cleanup_policy(&e)?)
+}
+fn with_cache_work<T>(
+    run: impl FnOnce(&Engine, &rusqlite::Connection, &cleanup::Policy) -> Result<T>,
+) -> Result<T> {
+    let e = engine()?;
+    anyhow::ensure!(
+        e.active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok(),
+        "Wait for the active operation to finish"
+    );
+    let _guard = ActiveGuard(&e.active);
+    e.cancel_cleanup.store(false, Ordering::SeqCst);
+    run(&e, &database::open(&e.path)?, &cleanup_policy(&e)?)
+}
+pub fn cache_select(
+    request: crate::cache_bulk::CacheSelectionRequest,
+    send: impl FnMut(crate::cache_bulk::CacheBulkSummary) -> bool,
+) -> Result<crate::cache_bulk::CacheBulkSummary> {
+    with_cache_work(|e, c, p| crate::cache_bulk::select(c, request, p, &e.cancel_cleanup, send))
+}
+pub fn cache_prepare(
+    id: String,
+    revision: u32,
+    send: impl FnMut(crate::cache_bulk::CacheBulkSummary) -> bool,
+) -> Result<crate::cache_bulk::CacheBulkSummary> {
+    with_cache_work(|e, c, p| {
+        crate::cache_bulk::prepare(c, &id, revision, p, &e.cancel_cleanup, send)
+    })
+}
+pub fn cache_execute(
+    approval: crate::cache_bulk::CacheBulkApproval,
+    send: impl FnMut(crate::cache_bulk::CacheBulkSummary) -> bool,
+) -> Result<crate::cache_bulk::CacheBulkSummary> {
+    with_cache_work(|e, c, p| {
+        crate::cache_bulk::execute(
+            c,
+            approval,
+            p,
+            &e.cancel_cleanup,
+            cleanup::native_trash,
+            send,
+        )
+    })
+}
+pub fn cache_batch_page(
+    query: crate::cache_bulk::CacheBulkPageQuery,
+) -> Result<crate::cache_bulk::CacheBulkPage> {
+    crate::cache_bulk::page(&database::open(&engine()?.path)?, query)
+}
+pub fn cache_batch_summary(id: String) -> Result<crate::cache_bulk::CacheBulkSummary> {
+    crate::cache_bulk::summary(&database::open(&engine()?.path)?, &id)
+}
+pub fn cache_reviewed_groups(
+    id: String,
+    cursor: Option<String>,
+) -> Result<crate::cache_bulk::CacheGroupPage> {
+    crate::cache_bulk::reviewed_groups(&database::open(&engine()?.path)?, &id, cursor)
+}
+pub fn cache_history(offset: u32) -> Result<Vec<crate::cache_bulk::CacheBulkSummary>> {
+    crate::cache_bulk::history(&database::open(&engine()?.path)?, offset)
+}
+pub fn cache_decline(id: String) -> Result<crate::cache_bulk::CacheBulkSummary> {
+    with_cache_work(|_, c, _| crate::cache_bulk::decline(c, &id))
+}

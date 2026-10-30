@@ -236,16 +236,42 @@ async fn scan(request: ScanRequest, on_event: Channel<ScanEvent>) -> Response<()
 }
 
 #[tauri::command]
-async fn scan_with_modules(request: ScanRequest, modules: coqui_engine::scan_observations::ScanModules, on_event: Channel<ScanEvent>) -> Response<()> {
-    tauri::async_runtime::spawn_blocking(move || api::scan_with_modules(request, modules, |event| on_event.send(event).is_ok())).await.map_err(error)?.map_err(error)
+async fn scan_with_modules(
+    request: ScanRequest,
+    modules: coqui_engine::scan_observations::ScanModules,
+    on_event: Channel<ScanEvent>,
+) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::scan_with_modules(request, modules, |event| on_event.send(event).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
 }
 #[tauri::command]
-async fn administrator_scan_with_modules(request: ScanRequest, plan: DiskScanPlan, modules: coqui_engine::scan_observations::ScanModules, events: Channel<ScanEvent>) -> Response<()> {
-    tauri::async_runtime::spawn_blocking(move || api::administrator_scan_with_modules(request, plan, modules, |event| events.send(event).is_ok())).await.map_err(error)?.map_err(error)
+async fn administrator_scan_with_modules(
+    request: ScanRequest,
+    plan: DiskScanPlan,
+    modules: coqui_engine::scan_observations::ScanModules,
+    events: Channel<ScanEvent>,
+) -> Response<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::administrator_scan_with_modules(request, plan, modules, |event| {
+            events.send(event).is_ok()
+        })
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
 }
 #[tauri::command]
-async fn scan_observations(id: String) -> Response<Option<coqui_engine::scan_observations::ScanObservations>> {
-    tauri::async_runtime::spawn_blocking(move || api::scan_observations(id)).await.map_err(error)?.map_err(error)
+async fn scan_observations(
+    id: String,
+) -> Response<Option<coqui_engine::scan_observations::ScanObservations>> {
+    tauri::async_runtime::spawn_blocking(move || api::scan_observations(id))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 async fn monitor(on_event: Channel<LiveMetrics>) -> Response<()> {
@@ -292,16 +318,121 @@ fn open_system_settings(destination: String) -> Response<()> {
     }
 }
 #[tauri::command]
+async fn cache_groups(
+    query: coqui_engine::cache_bulk::CacheQuery,
+) -> Response<coqui_engine::cache_bulk::CacheGroupPage> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_groups(query))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn cache_entries(
+    query: coqui_engine::cache_bulk::CacheQuery,
+) -> Response<coqui_engine::cache_bulk::CacheBulkPage> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_entries(query))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn cache_select(
+    request: coqui_engine::cache_bulk::CacheSelectionRequest,
+    on_event: Channel<coqui_engine::cache_bulk::CacheBulkSummary>,
+) -> Response<coqui_engine::cache_bulk::CacheBulkSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::cache_select(request, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn cache_prepare(
+    id: String,
+    revision: u32,
+    on_event: Channel<coqui_engine::cache_bulk::CacheBulkSummary>,
+) -> Response<coqui_engine::cache_bulk::CacheBulkSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::cache_prepare(id, revision, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn cache_execute(
+    approval: coqui_engine::cache_bulk::CacheBulkApproval,
+    on_event: Channel<coqui_engine::cache_bulk::CacheBulkSummary>,
+) -> Response<coqui_engine::cache_bulk::CacheBulkSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        api::cache_execute(approval, |e| on_event.send(e).is_ok())
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+#[tauri::command]
+async fn cache_batch_page(
+    query: coqui_engine::cache_bulk::CacheBulkPageQuery,
+) -> Response<coqui_engine::cache_bulk::CacheBulkPage> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_batch_page(query))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn cache_batch_summary(id: String) -> Response<coqui_engine::cache_bulk::CacheBulkSummary> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_batch_summary(id))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn cache_reviewed_groups(
+    id: String,
+    cursor: Option<String>,
+) -> Response<coqui_engine::cache_bulk::CacheGroupPage> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_reviewed_groups(id, cursor))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn cache_history(offset: u32) -> Response<Vec<coqui_engine::cache_bulk::CacheBulkSummary>> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_history(offset))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
+async fn cache_decline(id: String) -> Response<coqui_engine::cache_bulk::CacheBulkSummary> {
+    tauri::async_runtime::spawn_blocking(move || api::cache_decline(id))
+        .await
+        .map_err(error)?
+        .map_err(error)
+}
+#[tauri::command]
 fn cleanup_files(session_id: String, offset: u32) -> Response<CleanupFilePage> {
     api::cleanup_files(session_id, offset).map_err(error)
 }
 #[tauri::command]
-async fn cleanup_categories(session_id: String) -> Response<coqui_engine::cleanup_categories::CleanupCategoryReport> {
-    tauri::async_runtime::spawn_blocking(move ||api::cleanup_categories(session_id)).await.map_err(error)?.map_err(error)
+async fn cleanup_categories(
+    session_id: String,
+) -> Response<coqui_engine::cleanup_categories::CleanupCategoryReport> {
+    tauri::async_runtime::spawn_blocking(move || api::cleanup_categories(session_id))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
-async fn cleanup_category_entries(query: coqui_engine::cleanup_categories::CleanupCategoryQuery) -> Response<coqui_engine::cleanup_categories::CleanupCategoryPage> {
-    tauri::async_runtime::spawn_blocking(move ||api::cleanup_category_entries(query)).await.map_err(error)?.map_err(error)
+async fn cleanup_category_entries(
+    query: coqui_engine::cleanup_categories::CleanupCategoryQuery,
+) -> Response<coqui_engine::cleanup_categories::CleanupCategoryPage> {
+    tauri::async_runtime::spawn_blocking(move || api::cleanup_category_entries(query))
+        .await
+        .map_err(error)?
+        .map_err(error)
 }
 #[tauri::command]
 fn preview_cleanup(request: CleanupRequest) -> Response<CleanupPlan> {
@@ -426,7 +557,10 @@ async fn analyze_duplicate_scope(
 ) -> Response<DuplicateReport> {
     tauri::async_runtime::spawn_blocking(move || {
         api::analyze_duplicate_scope(request, |e| on_event.send(e).is_ok())
-    }).await.map_err(error)?.map_err(error)
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
 }
 #[tauri::command]
 async fn preview_duplicate_cleanup(request: DuplicateCleanupRequest) -> Response<CleanupPlan> {
@@ -724,6 +858,16 @@ fn main() {
             developer_report,
             analyze_developer,
             cancel_developer,
+            cache_groups,
+            cache_entries,
+            cache_select,
+            cache_prepare,
+            cache_execute,
+            cache_batch_page,
+            cache_batch_summary,
+            cache_reviewed_groups,
+            cache_history,
+            cache_decline,
             cleanup_files,
             cleanup_categories,
             cleanup_category_entries,

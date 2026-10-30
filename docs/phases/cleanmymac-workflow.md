@@ -37,3 +37,7 @@ The source/native acceptance checkpoints and screenshots are recorded in ../stat
 6. Evaluate photo-quality grouping, modern managed login coverage and action verification separately. No manufactured healthy/optimized status or memory/performance improvement is permitted. Maintenance remains guided/manual by the user's explicit choice.
 
 The remaining gaps stay open. Scan/review navigation, honest summary measurements and the bounded update-discovery workflow do not establish whole-product functional parity.
+
+## Guided cache review continuation — 2026-10-30
+
+The user selected guided cleanup, Select all across pages and one approval for a frozen cache selection. The [guided cleanup implementation](guided-cleanup.md) now supplies grouped namespaces, shared explicit selections, a sticky summary, cancellable fresh checks, per-file refusals, bounded exact-path review and individual Trash outcomes. Cache-only bulk execution uses schema 8 and preserves existing cache safety checks. Combined execution across duplicates, projects, updates or maintenance remains outside this change; their current workflows remain available. This source continuation is separate from publication, installation and matching-helper acceptance.

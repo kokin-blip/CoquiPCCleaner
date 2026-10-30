@@ -23,6 +23,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     StorageMapQuery::export_all_to(&path)?;
     StorageMap::export_all_to(&path)?;
     FileEntry::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheQuery::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheGroupPage::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheSelectionRequest::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheBulkSummary::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheBulkApproval::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheBulkPageQuery::export_all_to(&path)?;
+    coqui_engine::cache_bulk::CacheBulkPage::export_all_to(&path)?;
     CleanupRequest::export_all_to(&path)?;
     CleanupApproval::export_all_to(&path)?;
     CleanupPlan::export_all_to(&path)?;

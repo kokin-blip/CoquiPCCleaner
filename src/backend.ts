@@ -1,3 +1,10 @@
+import type { CacheQuery } from './bindings/CacheQuery';
+import type { CacheGroupPage } from './bindings/CacheGroupPage';
+import type { CacheSelectionRequest } from './bindings/CacheSelectionRequest';
+import type { CacheBulkSummary } from './bindings/CacheBulkSummary';
+import type { CacheBulkApproval } from './bindings/CacheBulkApproval';
+import type { CacheBulkPageQuery } from './bindings/CacheBulkPageQuery';
+import type { CacheBulkPage } from './bindings/CacheBulkPage';
 import type { HelperStatus } from './bindings/HelperStatus';
 import type { DiskScanPlan } from './bindings/DiskScanPlan';
 import type { CoverageGap } from './bindings/CoverageGap';
@@ -178,6 +185,16 @@ export interface Backend {
     onEvent: (report: DeveloperReport) => void,
   ): Promise<DeveloperReport>;
   cancelDeveloper(): Promise<void>;
+  cacheGroups(query: CacheQuery): Promise<CacheGroupPage>;
+  cacheEntries(query: CacheQuery): Promise<CacheBulkPage>;
+  cacheSelect(request: CacheSelectionRequest, onEvent: (value: CacheBulkSummary) => void): Promise<CacheBulkSummary>;
+  cachePrepare(id: string, revision: number, onEvent: (value: CacheBulkSummary) => void): Promise<CacheBulkSummary>;
+  cacheExecute(approval: CacheBulkApproval, onEvent: (value: CacheBulkSummary) => void): Promise<CacheBulkSummary>;
+  cacheBatchPage(query: CacheBulkPageQuery): Promise<CacheBulkPage>;
+  cacheBatchSummary(id: string): Promise<CacheBulkSummary>;
+  cacheReviewedGroups(id: string, cursor: string | null): Promise<CacheGroupPage>;
+  cacheHistory(offset: number): Promise<CacheBulkSummary[]>;
+  cacheDecline(id: string): Promise<CacheBulkSummary>;
   cleanupFiles(sessionId: string, offset: number): Promise<CleanupFilePage>;
   cleanupCategories(sessionId: string): Promise<CleanupCategoryReport>;
   cleanupCategoryEntries(query: CleanupCategoryQuery): Promise<CleanupCategoryPage>;
@@ -349,6 +366,16 @@ export const backend: Backend = {
     return invoke('analyze_developer', { sessionId, onEvent: channel });
   },
   cancelDeveloper: () => invoke('cancel_developer'),
+  cacheGroups: (query) => invoke('cache_groups', { query }),
+  cacheEntries: (query) => invoke('cache_entries', { query }),
+  cacheSelect: (request, onEvent) => { const channel = new Channel<CacheBulkSummary>(); channel.onmessage = onEvent; return invoke('cache_select', { request, onEvent: channel }); },
+  cachePrepare: (id, revision, onEvent) => { const channel = new Channel<CacheBulkSummary>(); channel.onmessage = onEvent; return invoke('cache_prepare', { id, revision, onEvent: channel }); },
+  cacheExecute: (approval, onEvent) => { const channel = new Channel<CacheBulkSummary>(); channel.onmessage = onEvent; return invoke('cache_execute', { approval, onEvent: channel }); },
+  cacheBatchPage: (query) => invoke('cache_batch_page', { query }),
+  cacheBatchSummary: (id) => invoke('cache_batch_summary', { id }),
+  cacheReviewedGroups: (id, cursor) => invoke('cache_reviewed_groups', { id, cursor }),
+  cacheHistory: (offset) => invoke('cache_history', { offset }),
+  cacheDecline: (id) => invoke('cache_decline', { id }),
   cleanupFiles: (sessionId, offset) =>
     invoke('cleanup_files', { sessionId, offset }),
   cleanupCategories: (sessionId) => invoke('cleanup_categories', { sessionId }),

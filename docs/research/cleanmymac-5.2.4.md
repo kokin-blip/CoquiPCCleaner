@@ -56,3 +56,11 @@ This batch does **not** implement a combined execution queue, app-update discove
 Reproduce verified user-visible behavior with Coqui-owned code and its existing domain boundaries. Do not turn category names, timestamps, remote Git matches or stored review text into cleanup authority. Maintain per-run content/network choices, independently approved exact-path execution, fresh checks, cancellation, journals, verified recoverability and explicit partial coverage. New native behavior needs focused disposable validation; existing user files must never be removed merely to test parity.
 
 The existing installed 0.12.0 pair is unchanged. The interface draft is a separately named local **Coqui Design Preview** bundle, not a new installed paired release. Functional parity and comprehensive access are not claimed.
+
+## Current guided-cleanup inspection — 2026-10-29/30
+
+The user requested another live Cleanup comparison while adding Select all. REA reopened the same installed main-image SHA-256 listed above. Plist Evidence `ev_1958b5f94272458a11a3050e9613887248458e5aae7a42e73100066ae47e0a26` confirmed 5.2.4/build 50204.0.2509040908. Packaged JunkCleanupModule English strings were decoded with plist Evidence `ev_40e77aa8dfa6a256e770fd2942cda773ea149fd879f1d36918df50b6ebb9ac3e`; these corroborate named review/cache/result states, not execution or safe-deletion rules.
+
+Current Computer Use observed Cleanup's Scan/Stop, terminal grouped result tiles, Review All Junk, namespace/application rows with expandable contents, group checkboxes and a persistent selected count/allocation plus separate Clean Up action. One group checkbox was toggled to inspect feedback and then cleared; Clean Up was never pressed. These observations motivate Coqui's grouping, explicit scope labels and persistent summary, while its own eligibility/approval policy remains authoritative.
+
+REA's native screenshot capture was denied Screen Recording; the subsequent accessibility-only request was denied Accessibility for that host. No grant was added or changed. Native decompilation providers were unavailable in the connected session, so no new function-body analysis is claimed; prior retained static evidence remains separately dated. The REA target was closed after inspection. No proprietary implementation or knowledge-base rules were copied.

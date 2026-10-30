@@ -35,3 +35,7 @@ Other category purpose/consequence text is conservative path guidance, not a ven
 See [status](../status.md) and the design handoff for completed checks and native evidence. Disposable fixtures cover file-only/disjoint totals, unknown versus zero, current exclusions, bounded pages, legacy missing dates, manual-path refusal by the existing cache executor, no-write reads, known aliases and SQL work bounded against unrelated index rows. A separate disposable native export preserves its fixture files and supports an explicitly labeled component viewer.
 
 The installed 0.12.0 app/helper pair, manifest, administrator-off preference and existing helper FDA grant remain unchanged. The preview is not a new installed paired release. The retained 26 system/service denials and all prior readable-scope/VoiceOver/other-Mac limitations remain qualified. No real user file is moved or removed to test this feature.
+
+## Guided selection continuation — 2026-10-30
+
+The user-approved [guided cleanup flow](guided-cleanup.md) supersedes the cache category's page-local 100-file selection limit. Categories and Cache files now share namespace/group selection across all pages, explicit broader all-groups selection, individual exceptions and a disk-backed fresh review with one final approval. Schema 8 adds bounded item journals; legacy APIs/history remain. This does not expand cache eligibility or manual/protected category authority. See status for actual validation; the installed application and release assets were not changed by this source continuation.
